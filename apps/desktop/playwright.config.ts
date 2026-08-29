@@ -10,7 +10,9 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev:browser',
     url: 'http://localhost:5174/pet.html?test=1',
-    reuseExistingServer: true,
+    // Locally, reuse whatever `pnpm dev:browser` is already serving; on CI a stray listener on 5174
+    // would silently test something other than this checkout, so fail instead.
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
 });
