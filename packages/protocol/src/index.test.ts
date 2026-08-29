@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Channels, parseEvent } from './index';
+import { Channels, MAIN_TO_RENDERER, parseEvent } from './index';
 
 describe('protocol', () => {
   it('accepts a valid gaze:cursor event', () => {
@@ -15,5 +15,10 @@ describe('protocol', () => {
   it('rejects a malformed payload', () => {
     const r = parseEvent(Channels.avatarHover, { inside: 'yes' });
     expect(r.ok).toBe(false);
+  });
+
+  it('carries debug:toggle main→renderer with an empty payload', () => {
+    expect(MAIN_TO_RENDERER).toContain(Channels.debugToggle);
+    expect(parseEvent(Channels.debugToggle, {})).toEqual({ ok: true, data: {} });
   });
 });
