@@ -39,7 +39,7 @@
       "name": "ADV Band",
       "kind": "custom",
       "refersTo": "adv-band",
-      "description": "The character's message window. Click completes the reveal and opens the chat. The 8-degree cut lives on the .ds-band__surface fill layer, not on the band root: a clip-path on the root erases --shadow-bubble and clips away the plate, which hangs above the band's top edge. contracts.md 5.5's .bubble__rail (a 3px skewed --c-plate rail) is the sanctioned alternative.",
+      "description": "The character's message window. Click completes the reveal and opens the chat. SHIPPING FORM, normative: the 8-degree signature is contracts.md 5.5's .bubble__rail - a 3px --c-plate rail on the band's left edge, transform skewX(var(--adv-skew)), horizontal run var(--adv-cut) - which 5.5 pins as the ONE consumer of --adv-cut. Not a clip-path. The html/css below is the TOKEN SHEET's specimen, not a shipping recipe: it keeps a literal cut by moving the clip-path off the band root onto the .ds-band__surface fill layer, which is correct on a specimen board and is NOT sanctioned for bubble/, chat/ or key/. A bare clip-path on the band root is wrong everywhere - it erases --shadow-bubble and clips away the plate, which hangs above the band's top edge. The 460 below is likewise specimen-only: 460 x 320 is BUBBLE_MAX, the bubble WINDOW budget, and 24px of it is --shadow-bubble's room (contracts 5.2), so the shipping band element is inset from it.",
       "html": "<div class=\"ds-band\" data-emotion=\"curious\"><div class=\"ds-band__surface\"></div><div class=\"ds-plate\"><span>小春</span></div><p>你回来啦。</p><div class=\"ds-advance\">▼</div></div>",
       "css": ".ds-band { position: relative; width: 460px; box-sizing: border-box; color: var(--c-bubble-text); border-radius: var(--r-bubble); box-shadow: var(--shadow-bubble); padding: var(--sp-4) var(--sp-5) var(--sp-5); font-family: var(--font-sans); font-size: var(--fs-bubble); line-height: var(--lh-bubble); font-weight: var(--fw-line); } .ds-band__surface { position: absolute; inset: 0; z-index: 0; box-sizing: border-box; background: var(--c-bubble-surface); border-radius: var(--r-bubble); border-top: 1px solid var(--c-bubble-border); clip-path: polygon(var(--adv-cut) 0, 100% 0, 100% 100%, 0 100%); } .ds-band p { position: relative; z-index: 1; margin: 0; max-width: calc(24 * 1em); overflow-wrap: anywhere; line-break: strict; } .ds-plate { position: absolute; z-index: 2; top: -20px; left: var(--sp-5); transform: skewX(var(--adv-skew)); background: var(--c-plate); color: var(--c-accent-text); border: 1px solid var(--c-border-strong); padding: 3px var(--sp-3); font-size: 13px; line-height: 16px; font-weight: var(--fw-semibold); letter-spacing: .04em; } .ds-plate span { display: inline-block; transform: skewX(calc(-1 * var(--adv-skew))); } .ds-advance { position: absolute; z-index: 1; right: var(--sp-4); bottom: var(--sp-2); color: var(--c-advance); font-size: 12px; }"
     },
@@ -74,7 +74,7 @@
       { "name": "One Accent, One Owner", "body": "The single accent belongs to the character and appears only on the name plate. Status colours are not accents.", "section": "colors" },
       { "name": "The 26 Ruling", "body": "Her line is 16/26. Every surface that shares the screen with the band aligns to multiples of 26 or 22.", "section": "typography" },
       { "name": "One Angle", "body": "Minus eight degrees is the entire non-rectilinear vocabulary. A second angle breaks the device.", "section": "elevation" },
-      { "name": "Cut The Fill, Not The Box", "body": "The 8-degree cut goes on a dedicated fill layer inside the band. A clip-path on the band root erases --shadow-bubble and clips off the hanging name plate; contracts.md 5.5's skewed rail is the sanctioned alternative.", "section": "elevation" }
+      { "name": "The Rail Is The Cut", "body": "The 8-degree signature ships as contracts.md 5.5's .bubble__rail - a 3px skewed --c-plate rail, the one consumer of --adv-cut - and not as a clip-path. A clip-path on the band root erases --shadow-bubble and clips off the hanging name plate; the two-layer fill-layer cut that avoids that is the token sheet's specimen technique only. Rail (contracts 5.5) vs two-layer cut (craft floor) is an open ruling request to the controller; until it lands, 5.5 governs.", "section": "elevation" }
     ],
     "dos": [
       "Do read every colour, radius, duration and size from tokens.css.",
@@ -88,7 +88,9 @@
       "Don't use purple or indigo gradients, gradient text, or radial halos.",
       "Don't signal emotion with a badge, an emoji or a coloured dot.",
       "Don't invert the light palette to make dark.",
-      "Don't put the cut's clip-path on the band root, and don't lay the anchor notch on top of the band."
+      "Don't put the cut's clip-path on the band root, and don't lay the anchor notch on top of the band.",
+      "Don't ship the token sheet's two-layer fill-layer cut in bubble/, chat/ or key/ - contracts 5.5's .bubble__rail is the shipping form of the 8-degree signature.",
+      "Don't size the band element to 460 - that is the bubble window's budget and 24px of it is --shadow-bubble's room."
     ]
   }
 }
