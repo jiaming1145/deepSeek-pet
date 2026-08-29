@@ -4,8 +4,9 @@ import { Channels } from '@ds/protocol';
 import { registerAppScheme, serveRenderer } from './app-protocol';
 import { createPetWindow, moveBy, savePetPosition, setClickThrough } from './pet-window';
 import { onFromPet, sendToPet } from './ipc';
-import { startCursorPolling } from './cursor';
+import { startCursorPolling, type CursorPolling } from './cursor';
 import { startForegroundWatch } from './foreground';
+import { VisibilityState } from './visibility-state';
 import { createTray } from './tray';
 
 // userData must be %APPDATA%\ds, not %APPDATA%\@ds\desktop (the package name).
@@ -14,68 +15,72 @@ registerAppScheme(); // must happen before the app is ready
 
 let pet: BrowserWindow | null = null;
 let tray: Tray | null = null; // held so the icon is not garbage-collected
-let stopCursor: (() => void) | null = null;
+let cursorPolling: CursorPolling | null = null;
 let stopForeground: (() => void) | null = null;
 
-// Three independent reasons she can be off screen. They are tracked separately rather than as one
-// boolean so that, say, leaving fullscreen while the screen is still locked does not reveal her.
-let userHidden = false; // tray → 显示/隐藏
-let fullscreenHidden = false; // a foreign window covers a whole display
-let systemHidden = false; // session locked or machine suspended
+// Four independent reasons she can be off screen, OR-ed together by VisibilityState. `locked` and
+// `suspended` are tracked separately (not merged into one "system" flag): real Windows lock+sleep
+// is lock-screen -> suspend -> resume -> (lock screen still showing) -> unlock-screen, and a single
+// merged flag would clear at `resume` and reveal her behind the still-locked screen.
+const visibility = new VisibilityState();
 
 /**
- * The single owner of the pet window's visibility: any one reason hides her, and she only comes
- * back when all of them are clear. The renderer gets the same verdict on `shell:visibility` so it
- * can stop its render loop while hidden (spec §4.6).
+ * The single owner of the pet window's visibility: any one flag hides her, and she only comes back
+ * when all of them are clear. `reason` is derived from the flags (never passed in), so it can never
+ * disagree with `hidden` when two flags are live at once. The renderer gets the same verdict on
+ * `shell:visibility` so it can stop its render loop while hidden (spec §4.6); the cursor poll is
+ * paused/resumed in lockstep so main stops IPC-ing `gaze:cursor` into a hidden window.
  */
-function applyVisibility(reason: 'fullscreen' | 'locked' | 'suspended' | 'user' | 'none'): void {
+function applyVisibility(): void {
   if (!pet || pet.isDestroyed()) return;
-  const hidden = userHidden || fullscreenHidden || systemHidden;
-  console.log(`[shell] ${hidden ? 'hide' : 'show'} reason=${hidden ? reason : 'none'} user=${userHidden} fullscreen=${fullscreenHidden} system=${systemHidden}`);
+  const hidden = visibility.hidden;
+  const reason = visibility.reason;
+  console.log(`[shell] ${hidden ? 'hide' : 'show'} reason=${reason} ${visibility.describe()}`);
   // showInactive, never show: reappearing must not steal focus from the app the user is working in.
   if (hidden) pet.hide();
   else pet.showInactive();
-  sendToPet(pet, Channels.shellVisibility, { hidden, reason: hidden ? reason : 'none' });
+  cursorPolling?.setPaused(hidden);
+  sendToPet(pet, Channels.shellVisibility, { hidden, reason });
 }
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    userHidden = false;
-    applyVisibility('none');
+    visibility.set('user', false);
+    applyVisibility();
   });
 
   app.whenReady().then(() => {
     serveRenderer(join(__dirname, '../renderer'));
     pet = createPetWindow();
-    stopCursor = startCursorPolling(pet);
+    cursorPolling = startCursorPolling(pet);
     stopForeground = startForegroundWatch(pet, (hide) => {
-      fullscreenHidden = hide;
-      applyVisibility('fullscreen');
+      visibility.set('fullscreen', hide);
+      applyVisibility();
     });
 
     // The screen lock and sleep both leave the window on a surface nobody can see while the
     // renderer keeps drawing; stopping it is the whole point of forwarding these.
     powerMonitor.on('lock-screen', () => {
       console.log('[power] lock-screen');
-      systemHidden = true;
-      applyVisibility('locked');
+      visibility.set('locked', true);
+      applyVisibility();
     });
     powerMonitor.on('suspend', () => {
       console.log('[power] suspend');
-      systemHidden = true;
-      applyVisibility('suspended');
+      visibility.set('suspended', true);
+      applyVisibility();
     });
     powerMonitor.on('unlock-screen', () => {
       console.log('[power] unlock-screen');
-      systemHidden = false;
-      applyVisibility('none');
+      visibility.set('locked', false);
+      applyVisibility();
     });
     powerMonitor.on('resume', () => {
       console.log('[power] resume');
-      systemHidden = false;
-      applyVisibility('none');
+      visibility.set('suspended', false);
+      applyVisibility();
     });
 
     onFromPet(Channels.avatarHover, ({ inside }, win) => setClickThrough(win, !inside));
@@ -87,8 +92,8 @@ if (!app.requestSingleInstanceLock()) {
 
     tray = createTray({
       toggleVisible: () => {
-        userHidden = !userHidden;
-        applyVisibility('user');
+        visibility.set('user', !visibility.get('user'));
+        applyVisibility();
       },
       toggleDebug: () => {
         if (!pet) return;
@@ -111,7 +116,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
     if (pet) savePetPosition(pet);
-    stopCursor?.();
+    cursorPolling?.stop();
     stopForeground?.();
     tray?.destroy();
     tray = null;

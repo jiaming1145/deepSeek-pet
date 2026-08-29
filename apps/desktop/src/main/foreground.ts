@@ -88,7 +88,11 @@ export function startForegroundWatch(win: BrowserWindow, onChange: (hide: boolea
 
   let lastHide = false;
   const timer = setInterval(() => {
-    if (win.isDestroyed()) return;
+    if (win.isDestroyed()) {
+      // The window is gone; an armed interval holding a dead BrowserWindow forever is a leak.
+      clearInterval(timer);
+      return;
+    }
     try {
       const fgHwnd = toHwnd(api.GetForegroundWindow());
       const out: RectOut = { left: 0, top: 0, right: 0, bottom: 0 };
