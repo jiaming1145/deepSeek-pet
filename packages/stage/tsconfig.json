@@ -1,7 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // The vendored Cubism Framework src is compiled as part of this program (it is reached through
+    // the @framework/* alias, and skipLibCheck only covers .d.ts). These three relaxations mirror
+    // vendor/CubismWebFramework/tsconfig.json, which builds it with strict off and target es6:
+    //   strictNullChecks     - the Framework assigns null to non-nullable fields throughout.
+    //   useDefineForClassFields - CubismOffscreenRenderTarget_WebGL redeclares the base _gl field
+    //                          (TS2612); es6 assignment semantics are also what it expects at runtime.
+    //   strictFunctionTypes  - CubismRenderer_WebGL passes CubismClippingContext_WebGL's ctor where a
+    //                          contravariantly-wider ClippingContextConstructor is required (TS2345).
     "strictNullChecks": false,
+    "useDefineForClassFields": false,
+    "strictFunctionTypes": false,
     "experimentalDecorators": true,
     "lib": ["ES2022", "DOM"],
     "baseUrl": ".",
