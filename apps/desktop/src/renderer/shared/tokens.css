@@ -1,0 +1,224 @@
+/* ==========================================================================
+   ds · 小春 — design tokens.  Phase 2, Task 0.  Owner-locked visual world.
+
+   THESIS: Her words land in the box every ACG reader has read ten thousand
+   lines in — a translucent ink-navy band with a slanted name plate,
+   typewriter reveal and a blinking advance mark — and the box does what an
+   ADV box does: click to skip, flip to input mode when it is your line. It
+   refuses the glass chat bubble with a tail, the toast, and the card.
+
+   OWN-WORLD: ink-navy band rgba(20,27,46,.92) (light: rgba(250,248,244,.92)),
+   cool-white text #EEF1F7 (light: #1B2238), a slanted parallelogram name
+   plate in the character's own accent #E8A0B4, gold advance mark #FFD166,
+   a separate grey-blue system voice for hints. One family, weights 400/600;
+   sizes from the C5 ramp. Radii, shadows and durations are the fixed C5
+   tokens. The band's left edge is cut at the plate's 8 degrees — the one
+   signature device; everything else is quiet.
+
+   STORY: she is a character in a game you happen to be inside; you read her
+   line as it types, tap to skip when you're impatient, double-click her (or
+   click the box) when it's your turn, and the box turns into your line.
+   Hints from the app are never in her voice.
+
+   FIRST VIEWPORT: Haru bottom-right (420x720 pet window). The band (its own
+   transparent BrowserWindow, max 460 wide, up to 6 lines) sits over her lower
+   third, extending LEFT from her body so she stands in its right third (ma:
+   never centred on her); flips right when the work area has no room. Name
+   plate on the band's top-left corner, hanging above the band. Text types in
+   at the reveal cadence with mouth sync; the advance mark blinks at 1 Hz when
+   a sentence closes (static under reduced motion). A thin hint strip may
+   appear above the band. Composer: a focusable window skinned identically,
+   shown at the band's exact rect with plate 你 and a caret. Key window: the
+   same band, one field, a one-line PRC disclosure, a 测试 action.
+
+   FORM: ADV message window — grounded candidate 1 of 7; seed key 94ed1849;
+   raises kept from the declined hand: ruling-as-baseline (26 px line grid),
+   state-as-material (emotion changes the plate tint and text weight, never a
+   badge), ma (off-axis placement with a fixed gap), drawn edges (hairline
+   top rule, no glow beyond the C5 shadow), idle-dissolve (linger, then fade
+   and drift down 4 px; hover freezes).
+
+   FINISH: unreviewed and undocumented is unfinished; this build ends with
+   the finish review, the verdict, DESIGN.md, and every shipping raster
+   carrying its provenance.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   LIGHT — the default. Warm paper ground, ink-navy type, the same pink plate.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --c-bg: #EDEAE3;
+  --c-surface: #FAF8F4;
+  --c-surface-2: #F1EDE6;
+  --c-surface-hint: #E8E2D7;
+  --c-border: #DCD5C9;
+  --c-border-strong: #8C8474;
+
+  /* Type colours */
+  --c-text: #1B2238;
+  --c-text-2: #46506B;
+  --c-text-3: #5F6885;
+
+  /* Character accent — Haru's plate. See DESIGN.md "One accent, one owner". */
+  --c-accent: #E8A0B4;
+  --c-accent-text: #3A1420;
+  --c-accent-weak: #F7DDE4;
+
+  /* Status */
+  --c-ok: #2E7D5B;
+  --c-warn: #B4762A;
+  --c-warn-text: #6B4408;
+  --c-danger: #C2452F;
+  --c-danger-text: #7A1F13;
+
+  /* Overlay + focus */
+  --c-scrim: rgba(27, 34, 56, 0.32);
+  --c-focus-ring: #4A6FA5;
+
+  /* The ADV band */
+  --c-bubble-surface: rgba(250, 248, 244, 0.92);
+  --c-bubble-text: #1B2238;
+  --c-bubble-border: rgba(27, 34, 56, 0.14);
+  --c-bubble-tail: rgba(250, 248, 244, 0.92);
+  --c-plate: var(--c-accent);
+  --c-advance: #9A6A12;
+  --c-hint-text: #4A5570;
+
+  /* Elevation — --shadow-popover is the C5 literal and may not be changed. */
+  --shadow-popover: 0 8px 16px rgba(0, 0, 0, .14), 0 0 2px rgba(0, 0, 0, .12);
+  --shadow-bubble: 0 10px 24px rgba(0, 0, 0, .16), 0 0 2px rgba(0, 0, 0, .12);
+  --shadow-hint: 0 4px 10px rgba(0, 0, 0, .10), 0 0 2px rgba(0, 0, 0, .10);
+
+  /* Radii — C5, fixed */
+  --r-window: 8px;
+  --r-popover: 8px;
+  --r-bubble: 14px;
+  --r-control: 6px;
+  --r-tooltip: 4px;
+
+  /* Motion — C5, fixed; --dur-blink is the advance mark at 1 Hz */
+  --dur-feedback: 100ms;
+  --dur-state: 180ms;
+  --dur-overlay: 250ms;
+  --dur-exit: 160ms;
+  --dur-blink: 1000ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
+
+  /* Type — C5 ramp, fixed. "Segoe UI Variable Text" is R7's named fallback. */
+  --font-sans: "MiSans VF", "MiSans", "HarmonyOS Sans SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei UI", "Segoe UI Variable Text", system-ui, sans-serif;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-line: var(--fw-regular);
+  --fs-caption: 12px;
+  --lh-caption: 18px;
+  --fs-body: 14px;
+  --lh-body: 22px;
+  --fs-bubble: 16px;
+  --lh-bubble: 26px;
+  --fs-bubble-lg: 18px;
+  --lh-bubble-lg: 28px;
+  --fs-title: 20px;
+  --lh-title: 28px;
+
+  /* Spacing — C5, fixed */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* The signature device: tan(8deg) x 100px reference height = 14.05px */
+  --adv-skew: -8deg;
+  --adv-cut: 14px;
+}
+
+/* --------------------------------------------------------------------------
+   DARK — the world the direction contract describes first: an ink-navy band
+   on a near-black desktop. Only the theme tokens are redefined.
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #0E1220;
+    --c-surface: #141B2E;
+    --c-surface-2: #1C2439;
+    --c-surface-hint: #232C44;
+    --c-border: #2C3652;
+    --c-border-strong: #6B7590;
+
+    --c-text: #EEF1F7;
+    --c-text-2: #C2CADA;
+    --c-text-3: #8FA3BF;
+
+    --c-accent: #E8A0B4;
+    --c-accent-text: #2A0E17;
+    --c-accent-weak: #3A2430;
+
+    --c-ok: #5BC08D;
+    --c-warn: #E3A94B;
+    --c-warn-text: #F2C97E;
+    --c-danger: #E2705A;
+    --c-danger-text: #F0A392;
+
+    --c-scrim: rgba(0, 0, 0, 0.45);
+    --c-focus-ring: #7FA8DC;
+
+    --c-bubble-surface: rgba(20, 27, 46, 0.92);
+    --c-bubble-text: #EEF1F7;
+    --c-bubble-border: rgba(238, 241, 247, 0.12);
+    --c-bubble-tail: rgba(20, 27, 46, 0.92);
+    --c-plate: var(--c-accent);
+    --c-advance: #FFD166;
+    --c-hint-text: #8FA3BF;
+
+    --shadow-popover: 0 8px 16px rgba(0, 0, 0, .28), 0 0 2px rgba(0, 0, 0, .20);
+    --shadow-bubble: 0 10px 24px rgba(0, 0, 0, .30), 0 0 2px rgba(0, 0, 0, .20);
+    --shadow-hint: 0 4px 10px rgba(0, 0, 0, .24), 0 0 2px rgba(0, 0, 0, .18);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   STATE AS MATERIAL — emotion tints the plate and moves the line's weight.
+   Never a badge, never an emoji, never a label. The bubble renderer (T7) sets
+   data-emotion on the band root from SentenceEvent.emotion; the nine values are
+   @ds/protocol's EMOTIONS. The tints are theme-independent: the plate is the
+   character's colour, not the interface's.
+   -------------------------------------------------------------------------- */
+[data-emotion='neutral'] { --c-plate: #E8A0B4; --fw-line: var(--fw-regular); }
+[data-emotion='happy'] { --c-plate: #F2B3C2; --fw-line: var(--fw-medium); }
+[data-emotion='curious'] { --c-plate: #DDA8C6; --fw-line: var(--fw-regular); }
+[data-emotion='question'] { --c-plate: #D4A6CE; --fw-line: var(--fw-regular); }
+[data-emotion='surprised'] { --c-plate: #F3C08F; --fw-line: var(--fw-medium); }
+[data-emotion='think'] { --c-plate: #B9A8CE; --fw-line: var(--fw-regular); }
+[data-emotion='awkward'] { --c-plate: #D9B39C; --fw-line: var(--fw-regular); }
+[data-emotion='sad'] { --c-plate: #A9AEC8; --fw-line: var(--fw-regular); }
+[data-emotion='angry'] { --c-plate: #E08A8A; --fw-line: var(--fw-medium); }
+
+/* --------------------------------------------------------------------------
+   REDUCED MOTION — every transition collapses to an 80 ms crossfade and the
+   advance mark stops blinking. Only transform and opacity ever animate anyway.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-feedback: 80ms;
+    --dur-state: 80ms;
+    --dur-overlay: 80ms;
+    --dur-exit: 80ms;
+    --dur-blink: 0ms;
+    --ease-enter: linear;
+    --ease-exit: linear;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   CJK text rules — applied wherever Chinese renders (contracts.md 5.8).
+   -------------------------------------------------------------------------- */
+.ds-cjk {
+  font-family: var(--font-sans);
+  text-autospace: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}

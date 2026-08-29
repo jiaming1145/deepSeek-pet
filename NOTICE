@@ -18,3 +18,18 @@ The following components are NOT covered by that license:
    This content uses sample data owned and copyrighted by Live2D Inc. The sample data
    are utilized in accordance with terms and conditions set by Live2D Inc. This content
    itself is created at the author's sole discretion.
+
+4. Typefaces — none bundled.
+   No font file is distributed with this application. The UI font stack in
+   apps/desktop/src/renderer/shared/tokens.css (--font-sans) names MiSans first, then
+   HarmonyOS Sans SC, Noto Sans SC and Source Han Sans SC, and falls back to the fonts
+   Windows 11 already ships: Microsoft YaHei UI (Chinese) and Segoe UI Variable Text
+   (Latin). Those system faces are licensed to the user by their operating system, not
+   redistributed by this project.
+
+   MiSans (Xiaomi, https://hyperos.mi.com/font/) is used only when the user has already
+   installed it. It is NOT bundled: the MiSans licence agreement was reviewed on
+   2026-08-29 and its terms on producing and redistributing a subset (a modified font
+   file) could not be confirmed as permitting what bundling would require. Phase 2 ships
+   the fallback stack instead. Re-open this decision only with the licence text in hand;
+   the fetched text is kept at docs/evidence/phase2/misans-licence.txt.
