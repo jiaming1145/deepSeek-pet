@@ -83,6 +83,56 @@ export function clampToDisplays(pos: Placement | null, areas: Rect[], size: Size
   return clampInto(best, wanted);
 }
 
+/** Pixels of the window that must stay inside *some* work area while she is being dragged. */
+export const MIN_GRABBABLE = 48;
+
+/** True when at least `min` px of the window on both axes lie inside `area`. */
+function grabbableIn(area: Rect, pos: Placement, min: number): boolean {
+  const w = Math.min(area.x + area.width, pos.x + pos.w) - Math.max(area.x, pos.x);
+  const h = Math.min(area.y + area.height, pos.y + pos.h) - Math.max(area.y, pos.y);
+  return w >= min && h >= min;
+}
+
+/** Moves `pos` the shortest distance that leaves `min` px of it inside `area` on both axes. */
+function clampGrabbableInto(area: Rect, pos: Placement, min: number): Pos {
+  const minX = area.x - (pos.w - min);
+  const maxX = area.x + area.width - min;
+  const minY = area.y - (pos.h - min);
+  const maxY = area.y + area.height - min;
+  return {
+    x: Math.min(Math.max(pos.x, minX), maxX),
+    y: Math.min(Math.max(pos.y, minY), maxY),
+  };
+}
+
+/**
+ * Clamp for a *live drag*: the union of the work areas is the playground.
+ *
+ * {@link clampToDisplays} picks one area and forces the whole window inside it — right for a
+ * remembered position at startup, wrong per drag event, where it makes every monitor seam
+ * impassable (200 × +20 px drags on a 1920+1920 desktop never leave the first display). Here a
+ * placement is accepted unchanged while at least {@link MIN_GRABBABLE} px of the window sit inside
+ * *any* work area, so she crosses seams freely and can hang partly off an edge the way any
+ * window can; only when no area could still be grabbed is she pulled back to the nearest one.
+ */
+export function clampDrag(pos: Placement, areas: Rect[], min: number = MIN_GRABBABLE): Pos {
+  if (areas.length === 0) return { x: pos.x, y: pos.y };
+  if (areas.some((area) => grabbableIn(area, pos, min))) return { x: pos.x, y: pos.y };
+  let best = areas[0];
+  let bestOverlap = overlapArea(areas[0], pos);
+  let bestDistance = centreDistance(areas[0], pos);
+  for (const area of areas.slice(1)) {
+    const overlap = overlapArea(area, pos);
+    const distance = centreDistance(area, pos);
+    if (overlap > bestOverlap || (overlap === 0 && bestOverlap === 0 && distance < bestDistance)) {
+      best = area;
+      bestOverlap = overlap;
+      bestDistance = distance;
+    }
+  }
+  return clampGrabbableInto(best, pos, min);
+}
+
 export function loadWindowState(file: string): Pos | null {
   try {
     if (!existsSync(file)) return null;

@@ -46,10 +46,16 @@ export type PetIdentity = {
  * is the boundary that holds even if a navigation slips through.
  */
 export function isFromPet(event: SenderIdentity, pet: PetIdentity): boolean {
-  if (pet.isDestroyed() || pet.webContents.isDestroyed()) return false;
-  if (event.sender !== pet.webContents) return false;
-  if (event.senderFrame === null || event.senderFrame !== pet.webContents.mainFrame) return false;
-  return isAllowedPetUrl(event.senderFrame.url);
+  try {
+    if (pet.isDestroyed() || pet.webContents.isDestroyed()) return false;
+    if (event.sender !== pet.webContents) return false;
+    if (event.senderFrame === null || event.senderFrame !== pet.webContents.mainFrame) return false;
+    return isAllowedPetUrl(event.senderFrame.url);
+  } catch {
+    // `mainFrame` and `senderFrame.url` throw on a frame disposed mid-flight; an event from a
+    // frame that no longer exists is not one we can authenticate.
+    return false;
+  }
 }
 
 /** Subscribes to a renderer→main channel; untrusted senders and malformed payloads are dropped. */

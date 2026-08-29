@@ -59,7 +59,7 @@ export type Win32 = {
   GetShellWindow(): Handle;
   GetDesktopWindow(): Handle;
   GetWindowRect(hwnd: Handle, out: RectOut): boolean;
-  IsZoomed(hwnd: Handle): boolean;
+  IsZoomed(hwnd: Handle): number | boolean;
 };
 
 function toHwnd(value: Handle): bigint {
@@ -84,7 +84,9 @@ function loadWin32(): Win32 | null {
       GetShellWindow: user32.func('uintptr_t __stdcall GetShellWindow()'),
       GetDesktopWindow: user32.func('uintptr_t __stdcall GetDesktopWindow()'),
       GetWindowRect: user32.func('bool __stdcall GetWindowRect(uintptr_t hwnd, _Out_ DS_RECT* rect)'),
-      IsZoomed: user32.func('bool __stdcall IsZoomed(uintptr_t hwnd)'),
+      // Win32 BOOL is a 4-byte int; koffi's `bool` is one byte. user32 returns 0/1 so either
+      // reads correctly, but `int` is the exact width.
+      IsZoomed: user32.func('int __stdcall IsZoomed(uintptr_t hwnd)'),
     } as unknown as Win32;
   } catch (err) {
     console.warn('[foreground] koffi unavailable, fullscreen hiding disabled:', err);
@@ -168,7 +170,7 @@ export function startForegroundWatch(
         rect,
         displayBounds: display.bounds,
         workArea: display.workArea,
-        isZoomed: ok ? api.IsZoomed(fgHwnd) === true : false,
+        isZoomed: ok ? Number(api.IsZoomed(fgHwnd)) !== 0 : false,
         selfHwnd,
         fgHwnd,
         shellHwnds,

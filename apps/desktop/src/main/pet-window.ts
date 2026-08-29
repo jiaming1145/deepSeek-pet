@@ -1,7 +1,7 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import { isAllowedPetUrl, PET_URL } from './app-protocol';
-import { clampToDisplays, loadWindowState, saveWindowState, type Rect } from './window-state';
+import { clampDrag, clampToDisplays, loadWindowState, saveWindowState, type Rect } from './window-state';
 
 export const PET_SIZE = { w: 420, h: 720 };
 
@@ -76,7 +76,12 @@ export function createPetWindow(options: PetWindowOptions): BrowserWindow {
   // Never `void`: a rejected load (missing renderer build, dev server down, bad app:// authority)
   // is asynchronous, so it bypasses the startup catch and would leave an unhandled rejection plus
   // an invisible always-on-top window wired to a tray icon that controls nothing.
-  win.loadURL(`${base}${query}`).catch(options.onLoadFailure);
+  win.loadURL(`${base}${query}`).catch((err: unknown) => {
+    // ERR_ABORTED (errno -3) is a superseded or destroyed load — quitting during startup — not a
+    // broken renderer; running the fatal teardown for it would quit twice.
+    if (isAbortedLoad(err)) return;
+    options.onLoadFailure(err);
+  });
   return win;
 }
 
@@ -94,14 +99,23 @@ export function createPetWindow(options: PetWindowOptions): BrowserWindow {
  *    click-through on every main-frame navigation and on renderer death is the recovery; the cursor
  *    poll keeps running, so a genuine hover re-enables interaction within a frame.
  */
+export function isAbortedLoad(err: unknown): boolean {
+  const e = err as { errno?: unknown; code?: unknown } | null;
+  return !!e && (e.errno === -3 || e.code === 'ERR_ABORTED');
+}
+
 function guardPetWebContents(win: BrowserWindow): void {
   const wc = win.webContents;
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
-  wc.on('will-navigate', (details) => {
+  const denyForeign = (details: { url: string; preventDefault: () => void }) => {
     if (isAllowedPetUrl(details.url)) return;
     console.warn('[pet] blocked navigation to', details.url);
     details.preventDefault();
-  });
+  };
+  wc.on('will-navigate', denyForeign);
+  // will-navigate does not fire for server-side redirects; an allowed URL that 302s elsewhere
+  // arrives here instead (dev server only in practice — app://local is our own handler).
+  wc.on('will-redirect', denyForeign);
   wc.on('did-start-navigation', (details) => {
     if (details.isMainFrame) setClickThrough(win, true);
   });
@@ -159,6 +173,6 @@ export function moveBy(win: BrowserWindow, dx: number, dy: number): void {
   // @ds/protocol bounds a single delta; this bounds the accumulation. Without it a stream of
   // individually-valid deltas walks her off every display — or past the native coordinate range,
   // where setPosition throws.
-  const safe = clampToDisplays({ x: x + dx, y: y + dy, ...PET_SIZE }, workAreas(), PET_SIZE);
+  const safe = clampDrag({ x: x + dx, y: y + dy, ...PET_SIZE }, workAreas());
   win.setPosition(Math.round(safe.x), Math.round(safe.y), false);
 }
