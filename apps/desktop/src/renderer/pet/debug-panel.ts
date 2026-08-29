@@ -20,3 +20,38 @@ export function mountDebugPanel(root: HTMLElement, stage: Live2DStage): void {
   root.querySelector<HTMLButtonElement>('#dbg-talk')!.onclick = () => stage.mouth.start();
   root.querySelector<HTMLButtonElement>('#dbg-quiet')!.onclick = () => stage.mouth.stop();
 }
+
+/**
+ * Show/hide the panel, mounting it on first use. The mount is lazy because it enumerates the
+ * model's expressions and motions, which only exist once the stage has loaded — and because a
+ * non-debug session should never build the markup at all.
+ */
+export function createDebugToggle(root: HTMLElement, stage: Live2DStage): () => void {
+  let mounted = false;
+  return () => {
+    if (!mounted) {
+      mounted = true;
+      mountDebugPanel(root, stage); // adds `show`
+      return;
+    }
+    root.classList.toggle('show');
+  };
+}
+
+/**
+ * True when the panel is on screen and the point is over it (client px).
+ *
+ * The panel lives inside the click-through pet window, so the window only stops ignoring the mouse
+ * while the pointer is judged "inside". Without counting the panel as inside, its buttons would
+ * only be clickable where they happen to overlap the model's silhouette.
+ */
+export function overDebugPanel(root: HTMLElement, x: number, y: number): boolean {
+  if (!root.classList.contains('show')) return false;
+  const r = root.getBoundingClientRect();
+  return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+}
+
+/** True when an event target is the panel or lives inside it. */
+export function inDebugPanel(root: HTMLElement, target: EventTarget | null): boolean {
+  return target instanceof Node && root.contains(target);
+}

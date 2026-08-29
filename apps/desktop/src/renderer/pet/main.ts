@@ -2,7 +2,7 @@ import { Live2DStage } from '@ds/stage';
 import { Channels } from '@ds/protocol';
 import { bridge } from './bridge';
 import { HoverTracker } from './hover';
-import { mountDebugPanel } from './debug-panel';
+import { createDebugToggle, inDebugPanel, overDebugPanel } from './debug-panel';
 
 const params = new URLSearchParams(location.search);
 const TEST = params.get('test') === '1';
@@ -16,6 +16,11 @@ async function main(): Promise<void> {
   });
   stage.start();
   window.addEventListener('resize', () => stage.resize());
+
+  const debugRoot = document.getElementById('debug')!;
+  const toggleDebugPanel = createDebugToggle(debugRoot, stage);
+  /** The pointer counts as "on the pet" while it is over the debug panel, so the panel is clickable. */
+  const overPanel = (x: number, y: number): boolean => overDebugPanel(debugRoot, x, y);
 
   // hover → click-through toggle (main decides), tap → motion, drag → move window
   const hover = new HoverTracker((inside) => {
@@ -34,7 +39,7 @@ async function main(): Promise<void> {
       bridge?.send(Channels.avatarDragEnd, {});
     }
     const hit = stage.hitTestClient(e.clientX, e.clientY);
-    hover.sample(hit !== null, performance.now());
+    hover.sample(hit !== null || overPanel(e.clientX, e.clientY), performance.now());
     if (!bridge) stage.gazeClient(e.clientX, e.clientY); // browser mode: gaze from local mouse
     if (dragging) {
       const dx = e.screenX - dragging.x;
@@ -46,6 +51,9 @@ async function main(): Promise<void> {
   });
   window.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
+    // Pressing a debug-panel control must not grab the window: the panel would run away from the
+    // pointer and the click would never reach the button.
+    if (inDebugPanel(debugRoot, e.target)) return;
     if (stage.hitTestClient(e.clientX, e.clientY) === null) return;
     dragging = { x: e.screenX, y: e.screenY, moved: 0 };
   });
@@ -58,6 +66,9 @@ async function main(): Promise<void> {
     // A real drag ends there: letting go after moving the window must not also fire a tap. A press
     // that only jittered is still a tap, which is why the slop is compared instead of `moved > 0`.
     if (press && press.moved >= TAP_SLOP_PX) return;
+    // Released over the panel: the drag terminator above still had to be sent, but the click
+    // belongs to the button under it and must not also play a tap motion.
+    if (inDebugPanel(debugRoot, e.target)) return;
     const hit = stage.hitTestClient(e.clientX, e.clientY);
     if (hit) {
       bridge?.send(Channels.avatarTap, { hitArea: hit });
@@ -78,15 +89,18 @@ async function main(): Promise<void> {
     // Once main turns click-through on, DOM mousemove stops arriving and this forwarded stream is
     // the only cursor signal left - hover has to be sampled from it or it could leave and never
     // come back.
-    hover.sample(stage.hitTestClient(x, y) !== null, performance.now());
+    hover.sample(stage.hitTestClient(x, y) !== null || overPanel(x, y), performance.now());
     stage.gazeClient(x, y);
   });
   bridge?.on(Channels.stageSetFps, ({ fps }) => stage.setFps(fps));
   bridge?.on(Channels.debugExpression, ({ name }) => stage.model.setExpression(name));
   bridge?.on(Channels.debugMotion, ({ group, index }) => stage.playMotion([group, index]));
+  // Hidden means nobody can see her: stop the render loop entirely rather than idling at 30 fps
+  // (spec §4.6). The 30/60 split for idle/hovered is decided locally in the HoverTracker callback.
   bridge?.on(Channels.shellVisibility, ({ hidden }) => (hidden ? stage.stop() : stage.start()));
+  bridge?.on(Channels.debugToggle, () => toggleDebugPanel());
 
-  if (DEBUG) mountDebugPanel(document.getElementById('debug')!, stage);
+  if (DEBUG) toggleDebugPanel();
 
   bridge?.send(Channels.stageReady, {
     character, expressions: stage.model.expressionNames(), motionGroups: stage.model.motionGroups(), hitAreas: stage.model.hitAreaNames(),
