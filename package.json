@@ -1,0 +1,19 @@
+{
+  "name": "ds",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.34.5",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "fetch-sdk": "node scripts/fetch-sdk.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev": "pnpm --filter @ds/desktop dev",
+    "build": "pnpm --filter @ds/desktop build"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
