@@ -54,6 +54,9 @@ export class CompanionModel extends CubismUserModel {
   private readonly expressions = new Map<string, ACubismMotion>();
   private eyeBlinkIds: CubismIdHandle[] = [];
   private lipSyncIds: CubismIdHandle[] = [];
+  /** Kept so release() can delete them: CubismRenderer_WebGL borrows textures and only nulls its array. */
+  private readonly textures: WebGLTexture[] = [];
+  private gl: WebGL2RenderingContext = null;
   public idleGroup = 'Idle';
 
   static async load(opts: {
@@ -74,7 +77,14 @@ export class CompanionModel extends CubismUserModel {
     m.shaderPath = opts.shaderPath;
     const settingBuf = await fetchBuffer(m.baseUrl + modelFile);
     m.setting = new CubismModelSettingJson(settingBuf, settingBuf.byteLength);
-    await m.setup(opts.gl, opts.mouth, opts.checkMoc ?? true);
+    try {
+      await m.setup(opts.gl, opts.mouth, opts.checkMoc ?? true);
+    } catch (e) {
+      // A partial load (a 404 on a texture, a bad motion3.json) would otherwise strand the moc,
+      // model, renderer and any textures already uploaded.
+      m.release();
+      throw e;
+    }
     return m;
   }
 
@@ -84,6 +94,7 @@ export class CompanionModel extends CubismUserModel {
     checkMoc: boolean,
   ): Promise<void> {
     const s = this.setting;
+    this.gl = gl;
     const idm = CubismFramework.getIdManager();
     const id = (name: string) => idm.getId(name);
 
@@ -216,6 +227,7 @@ export class CompanionModel extends CubismUserModel {
       const name = s.getTextureFileName(i);
       if (name === '') continue;
       const tex = await loadTexture(gl, this.baseUrl + name, true);
+      this.textures.push(tex);
       this.getRenderer().bindTexture(i, tex);
     }
     this._updating = false;
@@ -256,10 +268,14 @@ export class CompanionModel extends CubismUserModel {
   }
 
   startMotion(group: string, index: number, priority: number, onFinished?: () => void): boolean {
-    if (priority === Priority.force) this._motionManager.setReservePriority(priority);
-    else if (!this._motionManager.reserveMotion(priority)) return false;
+    // Resolve the motion BEFORE touching the reservation. CubismMotionManager only clears
+    // _reservePriority inside startMotionPriority, so bailing out after reserving would leak the
+    // reservation: every later reserveMotion() would fail and tick()'s idle restart would never
+    // fire again.
     const motion = this.motions.get(`${group}_${index}`);
     if (!motion) return false;
+    if (priority === Priority.force) this._motionManager.setReservePriority(priority);
+    else if (!this._motionManager.reserveMotion(priority)) return false;
     motion.setFinishedMotionHandler(onFinished ? () => onFinished() : null);
     const h = this._motionManager.startMotionPriority(motion, false, priority);
     return h !== InvalidMotionQueueEntryHandleValue;
@@ -312,9 +328,18 @@ export class CompanionModel extends CubismUserModel {
     r.drawModel(this.shaderPath);
   }
 
-  /** Also releases the scheduler's updaters, which CubismUserModel.release() knows nothing about. */
+  /**
+   * Releases what CubismUserModel.release() knows nothing about — the update scheduler's updaters
+   * and the GL textures loadTexture() created (CubismRenderer_WebGL borrows them and only nulls its
+   * own array). Safe to call on a partially loaded model: every field it touches is either
+   * initialised at declaration or null-checked, and the Framework's own delete helpers are null-safe.
+   */
   override release(): void {
     this.scheduler.release();
+    if (this.gl) {
+      for (const tex of this.textures) this.gl.deleteTexture(tex);
+    }
+    this.textures.length = 0;
     super.release();
   }
 }
