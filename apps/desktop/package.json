@@ -22,6 +22,7 @@
     "@playwright/test": "1.62.1",
     "electron": "43.4.1",
     "electron-vite": "5.0.0",
+    "jsdom": "^30.0.1",
     "vite": "7.3.6"
   }
 }
