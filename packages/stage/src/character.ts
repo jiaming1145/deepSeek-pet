@@ -1,7 +1,8 @@
+import { EMOTIONS, type Emotion } from '@ds/protocol';
 import { z } from 'zod';
 
-export const EMOTIONS = ['happy', 'sad', 'angry', 'think', 'surprised', 'awkward', 'question', 'curious', 'neutral'] as const;
-export type Emotion = (typeof EMOTIONS)[number];
+export { EMOTIONS };
+export type { Emotion };
 
 const MotionRef = z.tuple([z.string(), z.number().int().nonnegative()]);
 export type MotionRef = z.infer<typeof MotionRef>;
