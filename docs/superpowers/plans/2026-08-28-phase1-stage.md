@@ -162,6 +162,8 @@ apps/desktop/public/characters/
 # playwright
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+# agent scratch (SDD ledger, briefs, review packages)
+.superpowers/
 ```
 
 `NOTICE`:
@@ -207,9 +209,12 @@ This content uses sample data owned and copyrighted by Live2D Inc. The sample da
 See NOTICE for third-party licenses.
 ```
 
-`vitest.workspace.ts`:
+`vitest.config.ts` (root — vitest 3 `projects`; `scripts/` gets its own tiny project in Task 2, `apps/desktop` its own in Task 6 so Playwright specs under `tests/` are never picked up by vitest):
 ```ts
-export default ['packages/*', 'apps/*'];
+import { defineConfig } from 'vitest/config';
+export default defineConfig({
+  test: { projects: ['packages/*', 'apps/*', 'scripts'] },
+});
 ```
 
 - [ ] **Step 3: Write the failing protocol test**
@@ -372,7 +377,13 @@ Verify: `git -C vendor/CubismWebFramework describe --tags` prints `5-r.5`; `ls v
 
 - [ ] **Step 2: Write the failing layout test**
 
-`scripts/sdk-layout.test.mjs` (vitest runs `.test.mjs` too — add `"include": ["packages/*/src/**/*.test.ts", "scripts/**/*.test.mjs", "apps/*/src/**/*.test.ts"]` to a root `vitest.config.ts` if the workspace file does not pick it up):
+`scripts/vitest.config.mjs` (makes `scripts/` a vitest project; the root config already lists it):
+```js
+import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { name: 'scripts', include: ['**/*.test.mjs'] } });
+```
+
+`scripts/sdk-layout.test.mjs`:
 ```js
 import { describe, expect, it } from 'vitest';
 import { destinationFor } from './sdk-layout.mjs';
@@ -902,9 +913,14 @@ export class CompanionModel extends CubismUserModel {
     mouth: MouthDriver; checkMoc?: boolean;
   }): Promise<CompanionModel> {
     const m = new CompanionModel();
-    m.baseUrl = opts.baseUrl.endsWith('/') ? opts.baseUrl : opts.baseUrl + '/';
+    // model3.json references its siblings (moc3, textures, expressions/, motions/) relative to ITS
+    // OWN directory, so every fetch is rooted at <characterUrl>/<dirname(modelJson)>/, not the character dir.
+    const charBase = opts.baseUrl.endsWith('/') ? opts.baseUrl : opts.baseUrl + '/';
+    const slash = opts.modelJson.lastIndexOf('/');
+    m.baseUrl = charBase + (slash >= 0 ? opts.modelJson.slice(0, slash + 1) : '');
+    const modelFile = slash >= 0 ? opts.modelJson.slice(slash + 1) : opts.modelJson;
     m.shaderPath = opts.shaderPath;
-    const settingBuf = await fetchBuffer(m.baseUrl + opts.modelJson);
+    const settingBuf = await fetchBuffer(m.baseUrl + modelFile);
     m.setting = new CubismModelSettingJson(settingBuf, settingBuf.byteLength);
     await m.setup(opts.gl, opts.mouth, opts.checkMoc ?? true);
     return m;
@@ -1487,6 +1503,12 @@ Run `pnpm install` then replace `"latest"` with the resolved electron-vite versi
 ```
 Add `"@types/node": "^24.0.0"` to root devDependencies.
 
+`apps/desktop/vitest.config.ts` (unit tests only — Playwright specs live in `tests/` and must not be collected by vitest):
+```ts
+import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { name: 'desktop', include: ['src/**/*.test.ts'] } });
+```
+
 `apps/desktop/vite.browser.config.ts`:
 ```ts
 import { defineConfig } from 'vite';
@@ -1856,9 +1878,14 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { resolve } from 'node:path';
 
 export default defineConfig({
-  main: { plugins: [externalizeDepsPlugin()], build: { rollupOptions: { external: ['koffi'] } } },
+  // Workspace packages (@ds/*) are TypeScript sources — they must be BUNDLED into main and preload,
+  // never externalized (a sandboxed preload cannot require() them, and main cannot load .ts).
+  // koffi is a native N-API module and stays external.
+  main: {
+    plugins: [externalizeDepsPlugin({ exclude: ['@ds/protocol', '@ds/stage', 'zod'] })],
+    build: { rollupOptions: { external: ['koffi'] } },
+  },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: { rollupOptions: { input: { pet: resolve(__dirname, 'src/preload/pet.ts') } } },
   },
   renderer: {
