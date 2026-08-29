@@ -1,24 +1,69 @@
 import type { Live2DStage } from '@ds/stage';
 import { EMOTIONS } from '@ds/stage';
 
+/** `<div>label…children</div>`, appended to the panel. The label is text, never markup. */
+function row(root: HTMLElement, label: string, ...children: Node[]): HTMLDivElement {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(label));
+  for (const child of children) div.appendChild(child);
+  root.appendChild(div);
+  return div;
+}
+
+function button(label: string, onclick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.textContent = label;
+  b.onclick = onclick;
+  return b;
+}
+
+/**
+ * Builds the debug HUD from DOM calls rather than an HTML string.
+ *
+ * Every label here is model-supplied — expression names, motion group names and hit-area names come
+ * out of `model3.json`, i.e. out of a character pack. Interpolating them into `innerHTML` made two
+ * of them a code path: a name containing `<` or a quote broke out of the attribute it was written
+ * into, and the `data-motion="group:index"` round-trip picked the wrong group (or `NaN`) for any
+ * group name containing `:`. Neither survives here: names are only ever assigned to `textContent`,
+ * and the group/index a button plays is captured in its closure instead of being re-parsed.
+ */
 export function mountDebugPanel(root: HTMLElement, stage: Live2DStage): void {
   root.classList.add('show');
-  const exprs = stage.model.expressionNames();
-  const groups = stage.model.motionGroups();
-  root.innerHTML = `
-    <div>expression: <select id="dbg-expr"><option value="">(none)</option>${exprs.map((e) => `<option>${e}</option>`).join('')}</select></div>
-    <div>emotion: ${EMOTIONS.map((e) => `<button data-emo="${e}">${e}</button>`).join('')}</div>
-    <div>motion: ${Object.entries(groups).map(([g, n]) => Array.from({ length: n }, (_, i) => `<button data-motion="${g}:${i}">${g}[${i}]</button>`).join('')).join('')}</div>
-    <div>mouth: <button id="dbg-talk">talk</button> <button id="dbg-quiet">quiet</button></div>
-    <div id="dbg-hit">hit: -</div>`;
-  root.querySelector<HTMLSelectElement>('#dbg-expr')!.onchange = (ev) => {
-    const v = (ev.target as HTMLSelectElement).value;
-    stage.model.setExpression(v === '' ? null : v);
-  };
-  root.querySelectorAll<HTMLButtonElement>('[data-emo]').forEach((b) => (b.onclick = () => stage.setEmotion(b.dataset.emo as (typeof EMOTIONS)[number])));
-  root.querySelectorAll<HTMLButtonElement>('[data-motion]').forEach((b) => (b.onclick = () => { const [g, i] = b.dataset.motion!.split(':'); stage.playMotion([g, Number(i)]); }));
-  root.querySelector<HTMLButtonElement>('#dbg-talk')!.onclick = () => stage.mouth.start();
-  root.querySelector<HTMLButtonElement>('#dbg-quiet')!.onclick = () => stage.mouth.stop();
+  root.replaceChildren();
+
+  // expression: the select carries names by *position*, so a name that happens to be '' cannot
+  // collide with the "(none)" entry and no name has to survive an attribute round-trip.
+  const select = document.createElement('select');
+  select.id = 'dbg-expr';
+  const values: (string | null)[] = [null, ...stage.model.expressionNames()];
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.textContent = value ?? '(none)';
+    select.appendChild(option);
+  }
+  select.onchange = () => stage.model.setExpression(values[select.selectedIndex] ?? null);
+  row(root, 'expression: ', select);
+
+  row(root, 'emotion: ', ...EMOTIONS.map((e) => button(e, () => stage.setEmotion(e))));
+
+  const motions: HTMLButtonElement[] = [];
+  for (const [group, count] of Object.entries(stage.model.motionGroups())) {
+    for (let index = 0; index < count; index++) {
+      motions.push(button(`${group}[${index}]`, () => stage.playMotion([group, index])));
+    }
+  }
+  row(root, 'motion: ', ...motions);
+
+  row(root, 'mouth: ',
+    Object.assign(button('talk', () => stage.mouth.start()), { id: 'dbg-talk' }),
+    document.createTextNode(' '),
+    Object.assign(button('quiet', () => stage.mouth.stop()), { id: 'dbg-quiet' }),
+  );
+
+  const hit = document.createElement('div');
+  hit.id = 'dbg-hit';
+  hit.textContent = 'hit: -';
+  root.appendChild(hit);
 }
 
 /**
