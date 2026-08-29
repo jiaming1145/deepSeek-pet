@@ -123,8 +123,10 @@ export function createVisibilityController(deps: VisibilityDeps): VisibilityCont
       } else {
         win.showInactive();
       }
-      deps.setCursorPaused?.(v.hidden);
       deps.send(v);
+      // After send: unpausing resamples the cursor immediately, and that sample must reach the
+      // renderer after shell:visibility (which resets its hover cache), not before.
+      deps.setCursorPaused?.(v.hidden);
       // After a show the renderer has reset its hover cache (on shell:visibility) and needs one
       // fresh sample to re-emit the true hit — the cursor may still be sitting on her.
       if (!v.hidden) deps.recheckCursor?.();
