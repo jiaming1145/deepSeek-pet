@@ -83,6 +83,9 @@ components:
     typography: "{typography.bubble}"
     rounded: "{rounded.bubble}"
     padding: "16px 20px 20px"
+    # 460 x 320 is BUBBLE_MAX, the bubble WINDOW budget (contracts 5.3), and 24 px of it is
+    # reserved for --shadow-bubble (5.2). The shipping band ELEMENT is inset from it; the token
+    # sheet draws a flat 460 because a specimen board has no window edge. See Layout.
     width: "460px"
   adv-plate:
     backgroundColor: "{colors.accent}"
@@ -177,11 +180,13 @@ duration/easing. Sentence advance: 80 ms crossfade of the ▼. Skip: reveal jump
 one frame. Dismiss: `opacity→0` + `translateY(4px)` over the C5 exit duration. Reduced motion:
 opacity only.
 
-**Where a later authority overrides the contract**, and it does in four places, each recorded at
+**Where a later authority overrides the contract**, and it does in five places, each recorded at
 the point of use below: the hint strip ships *below* the band (§5.5), the key window is 440 wide
 not 520 (§6.1), the plate hangs 20 px above the band rather than 6 (the plate is 24 px tall, so
-6 px would bury it in the band's padding), and `--c-accent` is authored in `tokens.css` rather
-than read from `character.json` (§5.8 — the file has no `accent` key in Phase 2).
+6 px would bury it in the band's padding), `--c-accent` is authored in `tokens.css` rather
+than read from `character.json` (§5.8 — the file has no `accent` key in Phase 2), and the
+contract's "left edge cut at 8°" ships as §5.5's skewed `.bubble__rail` rather than a literal
+`clip-path` cut (see Shapes — a `clip-path` would also clip `--shadow-bubble`).
 
 ## Overview
 
@@ -206,8 +211,9 @@ The build is **code-led** (`.impeccable/config.json` → `buildPath: "code"`): n
 was available, so there is no approved comp, and the ambition lives in the FIRST VIEWPORT block
 of the contract at the top of `tokens.css` plus the signature device below.
 
-**The signature device, and the only one:** the band's left edge is cut at the plate's 8°
-(`--adv-skew: -8deg`, `--adv-cut: 14px` = `tan(8°) × 100px`). Everything else is quiet.
+**The signature device, and the only one:** the band's left edge carries the plate's 8°
+(`--adv-skew: -8deg`, `--adv-cut: 14px` = `tan(8°) × 100px`), rendered as contracts §5.5's skewed
+`.bubble__rail` — see Shapes. Everything else is quiet.
 
 ## Colors
 
@@ -262,6 +268,17 @@ character's colour, not the interface's.
 | `sad` | `#A9AEC8` | 400 |
 | `angry` | `#E08A8A` | 500 |
 
+**T7 acceptance line — keep the nine tints tied to `@ds/protocol`'s `EMOTIONS` (D3).** The list
+above exists in three places: `EMOTIONS` in `@ds/protocol` (contracts §2.1, "Emotions — one
+definition"), the nine `[data-emotion='<e>']` rules in `tokens.css`, and the `EMOTIONS` literal in
+`tokens.test.ts`. §2.1 pins identity tests for `@ds/stage` and `@ds/brain` only, so the CSS is a
+fourth, uncovered copy. Task 0 could not import the definition — `@ds/protocol.EMOTIONS` lands in
+T1, in a parallel worktree — so the literal list here and in the token test is deliberate, not
+drift. **T7 closes it:** in its jsdom lane, import `EMOTIONS` from `@ds/protocol` and assert that
+`tokens.css` carries a `[data-emotion='<e>']` rule for every member and none for a non-member.
+Without that assertion, a tenth emotion added in Phase 3 ships with no plate tint while every
+token test stays green.
+
 **One accent, one owner.** `--c-accent` is Haru's. It is authored in `tokens.css` rather than
 read from `characters/haru/character.json`, because Phase 2 ships one character; a per-character
 `accent` key is a Phase 3 change, at which point the bubble renderer sets `--c-accent` inline on
@@ -310,6 +327,15 @@ There is no responsive grid: every surface is a fixed-size Electron window.
 | Chat window | 360 × 48, growing 22 px per row to 158 | 12 px above the pet's top edge, left-aligned |
 | Key window | 440 × 360 | Centred, mica |
 
+**460 × 320 is a window budget, not an element size.** `BUBBLE_MAX = { width: 460, height: 320 }`
+(contracts §5.3) sizes the transparent bubble **window**; §5.2 then derives the 24-hanzi line cap
+from `460 − 24 (shadow room) − 12 − 32 (padding) − 2 (border) = 390 px`, so 24 px of that 460 is
+reserved for `--shadow-bubble` to paint into. The band **element** must therefore be inset from
+the window's 460, never sized to it: a 460-wide band inside a 460-wide transparent window has its
+shadow clipped flat at the window edge — the same class of failure the clip-path caused on the
+sheet. The token sheet and `.impeccable/design.json` draw the band at a flat 460 only because a
+specimen board has no window edge.
+
 **Ma.** The band's preferred side is the roomier half of the pet's own display's work area, so
 Haru stands in the band's right third rather than behind its centre. The 12 px gap is constant;
 the band never touches her and never crosses the work-area edge.
@@ -344,25 +370,42 @@ a 300 % crop with no colour fringing.
 All five radii are C5 literals: `--r-window 8px`, `--r-popover 8px`, `--r-bubble 14px`,
 `--r-control 6px`, `--r-tooltip 4px`.
 
-**The cut.** The band's left edge is cut at the plate's angle:
-`clip-path: polygon(var(--adv-cut) 0, 100% 0, 100% 100%, 0 100%)` with `--adv-cut: 14px`, which
-is `tan(8°) × 100px` — 8° at the band's 100 px reference height. The plate is
-`transform: skewX(-8deg)` with its text counter-skewed. These are the only two non-rectilinear
-angles in the product; adding a third breaks the device.
+**The cut.** The band's left edge carries the plate's angle. Two custom properties describe it:
+`--adv-skew: -8deg` (the plate's own skew, its text counter-skewed) and `--adv-cut: 14px`, the
+edge's horizontal run — `tan(8°) × 100px`, i.e. 8° at the band's 100 px reference height. These
+are the only two non-rectilinear angles in the product; adding a third breaks the device.
 
-**Where the cut is applied, and why it matters.** Put that `clip-path` on the band element itself
-and it silently destroys two things: `--shadow-bubble` (an outset box-shadow is painted outside
-the border box, so the polygon clips all of it away) and the name plate, which hangs 20 px *above*
-the band's top edge and is therefore entirely outside the polygon. The token sheet proved both
-failures on the first render. The cut therefore goes on a **dedicated fill layer** —
-`.band__surface`, `position: absolute; inset: 0`, carrying the background, the `--r-bubble`
-radius, the `--c-bubble-border` top rule and the `clip-path` — while the band element keeps
-`box-shadow: var(--shadow-bubble)` and parents the plate, the notch and the line. T7 must do the
-same, or take `contracts.md` §5.5's alternative: a `.bubble__rail`, a 3 px `--c-plate` rail skewed
-by `var(--adv-skew)` with horizontal run `var(--adv-cut)`, which reaches the same 8° signature
-without clipping anything. §5.5 named the rail precisely because a naïve clip-path clips the
-shadow; the two-layer form above is the way to keep the literal cut and the shadow together.
-**Either is compliant. A bare `clip-path` on the band root is not.**
+**The shipping form of the cut is the rail. This is normative.** `contracts.md` §5.5, and §5.8's
+comment on the token itself, rule on this and are unambiguous: `--adv-cut` has **one** consumer,
+**`.bubble__rail`** — a 3 px `--c-plate` rail on the band's left edge,
+`transform: skewX(var(--adv-skew))`, horizontal run `var(--adv-cut)` — **not a `clip-path`**. It
+is the same technique §6.4 deviation 3 uses for the composer (`.composer__rail`), and for the same
+reason. **T7 ships the rail.** This document licences no alternative: where DESIGN.md and
+`contracts.md` disagree, the contract wins.
+
+**Why the contract chose the rail — proven here, keep this.** Put a `clip-path` on the band
+element itself and it silently destroys two things: `--shadow-bubble` (an outset box-shadow is
+painted outside the border box, so the polygon clips all of it away) and the name plate, which
+hangs 20 px *above* the band's top edge and is therefore entirely outside the polygon. The token
+sheet proved both failures on its first render. **A bare `clip-path` on the band root is wrong
+everywhere** — specimen and shipping alike.
+
+**The two-layer fill-layer cut is the token sheet's technique, and only the sheet's.** To keep a
+*literal* cut on a specimen board, `tokens-sheet.html` moves the `clip-path` off the band root and
+onto a dedicated fill layer — `.band__surface`, `position: absolute; inset: 0`, carrying the
+background, the `--r-bubble` radius and the `--c-bubble-border` top rule — while `.band` keeps
+`box-shadow: var(--shadow-bubble)` and parents the plate, the notch and the line. That is correct
+on a token sheet, which has no window edge and no `bubble:size` report to distort, and
+`.impeccable/design.json`'s ADV Band recipe carries it with the same specimen-only label. It is
+**not** a sanctioned form for `bubble/`, `chat/` or `key/`.
+
+> **Open ruling request — raised to the controller before T7 starts.** Two authorities genuinely
+> conflict here: `contracts.md` §5.5 pins `.bubble__rail` as the single consumer of `--adv-cut`,
+> while impeccable's craft floor lists a 3 px coloured left stripe on its Refuse list. Task 0 has
+> no standing to settle that, and reconciling it locally would be reopening a controller ruling.
+> The conflict is recorded here and written up as a ruling request in
+> `.superpowers/sdd/2026-08-29-phase2-brain/task-0-report.md` § Fix round 1. **Until the
+> controller rules, §5.5 governs and T7 ships the rail.**
 
 **There is no tail.** `--c-bubble-tail` exists because `placeBubble` returns an `arrowOffset` and
 contracts §5.8 requires the name, but the ADV form refuses a triangle. The token colours a 3 px
@@ -377,10 +420,16 @@ than as part of the silhouette — visible on the token sheet's first render, fi
 
 ## Components
 
-- **adv-band** — 460 wide, `--r-bubble`, `--shadow-bubble`, 1 px `--c-bubble-border` top rule,
-  the 14 px left cut, padding `16px 20px 20px`. `data-emotion` on the root drives `--c-plate` and
-  `--fw-line`. Text accumulates within a turn; the oldest sentence is dropped when 6 lines are
-  exceeded. Click anywhere completes the reveal *and* opens the chat.
+- **adv-band** — `--r-bubble`, `--shadow-bubble`, 1 px `--c-bubble-border` top rule, the 8° left
+  rail (`.bubble__rail`, contracts §5.5 — see Shapes), padding `16px 20px 20px`. **The 460 in the
+  frontmatter and on the token sheet is `BUBBLE_MAX.width`, the bubble *window*'s budget, not the
+  band element's width** (see Layout): the shipping band is inset from it so `--shadow-bubble`
+  keeps the ~24 px §5.2's arithmetic reserves. §5.2 derives the 24-hanzi cap assuming 32 px of
+  horizontal padding; this band's `16px 20px 20px` is 40 px horizontally, which makes the text box
+  *narrower*, never wider, so the cap holds a fortiori and `max-width: calc(24 * 1em)` remains the
+  governing line cap. `data-emotion` on the root drives `--c-plate` and `--fw-line`. Text
+  accumulates within a turn; the oldest sentence is dropped when 6 lines are exceeded. Click
+  anywhere completes the reveal *and* opens the chat.
 - **adv-plate** — hangs 20 px above the band's top edge, `--sp-5` from its left, skewed −8°,
   `--c-plate` fill, 1 px `--c-border-strong` outline so the shape reads on any tint, 13/16 at
   600 with `.04em` tracking. Content: the character's name; `你` in the composer; `API Key` in
@@ -423,3 +472,7 @@ duration collapses to 80 ms, easings become `linear`, and the advance mark stops
 - **Don't** invert the light palette to make dark. Light is warm paper; dark is ink navy.
 - **Don't** put the cut's `clip-path` on the band root, and don't lay the anchor notch on top of
   the band. Both were tried on the token sheet's first render and both broke (see Shapes).
+- **Don't** ship the sheet's two-layer fill-layer cut in `bubble/`, `chat/` or `key/`. It is a
+  specimen technique; contracts §5.5's `.bubble__rail` is the shipping form of the 8° signature.
+- **Don't** size the band element to 460. That is the bubble *window*'s budget and 24 px of it is
+  `--shadow-bubble`'s room (see Layout).
