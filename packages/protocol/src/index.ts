@@ -1,5 +1,79 @@
 import { z } from 'zod';
 
+// ---------------------------------------------------------------------------
+// Emotion vocabulary — the ONE definition (rulings D3). @ds/stage and @ds/brain
+// import it from here and re-export it; each asserts identity in its own test.
+// ---------------------------------------------------------------------------
+
+export const EMOTIONS = [
+  'happy', 'sad', 'angry', 'think', 'surprised', 'awkward', 'question', 'curious', 'neutral',
+] as const;
+export type Emotion = (typeof EMOTIONS)[number];
+export const EmotionSchema = z.enum(EMOTIONS);
+export const isEmotion = (s: string): s is Emotion => (EMOTIONS as readonly string[]).includes(s);
+
+// ---------------------------------------------------------------------------
+// contracts.md §2.2 — the shapes shared by @ds/brain, @ds/memory and the
+// brain:*/history:* IPC channels. They live here so the IPC schema and the
+// package-level type can never drift. Task 6 adds the channel maps that use
+// them (§2.3-§2.5) and the ERROR_HINTS table (§2.8); it adds nothing here.
+// ---------------------------------------------------------------------------
+
+export const TurnStateSchema = z.enum(['idle', 'thinking', 'speaking']);
+export type TurnState = z.infer<typeof TurnStateSchema>;
+
+export const SentenceEventSchema = z.object({
+  turnId: z.string().min(1),
+  seq: z.number().int().nonnegative(),
+  text: z.string(),
+  emotion: EmotionSchema,
+  motion: z.string().optional(),
+  pause: z.number().nonnegative().optional(),
+});
+export type SentenceEvent = z.infer<typeof SentenceEventSchema>;
+
+export const UsageSchema = z.object({
+  promptTokens: z.number().int().nonnegative(),
+  cacheHit: z.number().int().nonnegative(),
+  cacheMiss: z.number().int().nonnegative(),
+  completionTokens: z.number().int().nonnegative(),
+});
+export type Usage = z.infer<typeof UsageSchema>;
+
+export const ErrorCodeSchema = z.enum(['auth', 'balance', 'rate', 'server', 'network', 'timeout', 'empty', 'no-key']);
+export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
+
+export const LintRuleSchema = z.enum([
+  'assistant-leak', 'narrates-user', 'closing-moral', 'repetition', 'webnovel', 'opener-repeat',
+  'rhetorical', 'question-streak', 'ellipsis', 'ellipsis-rate', 'affect-rate', 'markdown',
+  'emoji', 'emoji-rate', 'emoji-sensitive',
+]);
+export const LintSeveritySchema = z.enum(['none', 'strip', 'regenerate']);
+export const LintResultSchema = z.object({
+  violations: z.array(z.object({ rule: LintRuleSchema, detail: z.string() })),
+  severity: LintSeveritySchema,
+});
+export type LintRule = z.infer<typeof LintRuleSchema>;
+export type LintSeverity = z.infer<typeof LintSeveritySchema>;
+export type LintResult = z.infer<typeof LintResultSchema>;
+
+export const MessageKindSchema = z.enum(['chat', 'proactive', 'system']);   // R10.3
+export const RoleSchema = z.enum(['user', 'assistant']);
+
+export const HistoryRowSchema = z.object({
+  id: z.number().int().positive(),
+  ts: z.number().int().nonnegative(),          // epoch ms
+  role: RoleSchema,
+  content: z.string(),
+  turnId: z.string().nullable(),
+  kind: MessageKindSchema,
+  interrupted: z.boolean(),
+});
+export type HistoryRow = z.infer<typeof HistoryRowSchema>;
+
+export const SideSchema = z.enum(['top', 'right', 'bottom', 'left']);
+export type Side = z.infer<typeof SideSchema>;
+
 /** Channel names. main→renderer channels are prefixed with the emitter's domain. */
 export const Channels = {
   // main → pet renderer
