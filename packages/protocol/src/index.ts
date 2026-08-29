@@ -20,8 +20,24 @@ export const Channels = {
 
 export type Channel = (typeof Channels)[keyof typeof Channels];
 
+/**
+ * Largest single `avatar:drag` step accepted, in DIP. Far above any plausible one-frame pointer
+ * move, and small enough that one message can never push the window past Electron's native
+ * coordinate range (where `setPosition` throws). It is deliberately *not* the whole defence: a
+ * stream of in-bounds deltas would still walk her off every display, so main clamps the resulting
+ * position against the current work areas as well.
+ */
+const DRAG_LIMIT = 4096;
+
+/**
+ * `z.number()` in zod 4 already rejects `NaN`, `Infinity` and `-Infinity`; `.finite()` states the
+ * requirement in the schema so a future zod change cannot silently loosen it.
+ */
+const finite = (): z.ZodNumber => z.number().finite();
+
 export const Schemas = {
-  [Channels.gazeCursor]: z.object({ x: z.number(), y: z.number() }), // window-local px, may be outside the window
+  // window-local px, may legitimately be far outside the window — bounded only by finiteness.
+  [Channels.gazeCursor]: z.object({ x: finite(), y: finite() }),
   [Channels.shellVisibility]: z.object({
     hidden: z.boolean(),
     reason: z.enum(['fullscreen', 'locked', 'suspended', 'user', 'none']),
@@ -33,7 +49,11 @@ export const Schemas = {
 
   [Channels.avatarHover]: z.object({ inside: z.boolean() }),
   [Channels.avatarTap]: z.object({ hitArea: z.string() }),
-  [Channels.avatarDrag]: z.object({ dx: z.number(), dy: z.number() }), // screen px since last event
+  // screen px since the last event; finite and bounded (see DRAG_LIMIT).
+  [Channels.avatarDrag]: z.object({
+    dx: finite().min(-DRAG_LIMIT).max(DRAG_LIMIT),
+    dy: finite().min(-DRAG_LIMIT).max(DRAG_LIMIT),
+  }),
   [Channels.avatarDragEnd]: z.object({}),
   [Channels.stageReady]: z.object({
     character: z.string(),

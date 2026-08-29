@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { VisibilityState } from './visibility-state';
+import { describe, expect, it, vi } from 'vitest';
+import { createVisibilityController, VisibilityState, type VisibilityVerdict } from './visibility-state';
 
 describe('VisibilityState', () => {
   it('lock -> suspend -> resume -> unlock keeps hidden true until unlock', () => {
@@ -63,5 +63,87 @@ describe('VisibilityState', () => {
     expect(v.reason).toBe('suspended');
     v.set('suspended', false);
     expect(v.reason).toBe('fullscreen');
+  });
+});
+
+/**
+ * The startup reconciliation (final-review F1): every show goes through one owner, so a hide that
+ * lands during the ~1 s of renderer startup is not undone by the window's first paint, and the
+ * renderer — whose `shell:visibility` listener only exists after the model loads — can ask for the
+ * verdict again.
+ */
+describe('createVisibilityController', () => {
+  function harness(destroyed = false) {
+    const calls: string[] = [];
+    const sent: VisibilityVerdict[] = [];
+    const paused: boolean[] = [];
+    const window = {
+      isDestroyed: () => destroyed,
+      hide: () => calls.push('hide'),
+      showInactive: () => calls.push('showInactive'),
+    };
+    const controller = createVisibilityController({
+      window: () => window,
+      send: (verdict) => sent.push(verdict),
+      setCursorPaused: (p) => paused.push(p),
+      log: () => { /* quiet */ },
+    });
+    // Exactly how index.ts wires `createPetWindow({ onReadyToShow })`.
+    const readyToShow = (): void => controller.apply();
+    return { calls, sent, paused, controller, readyToShow };
+  }
+
+  it('hide-before-paint: ready-to-show never shows her when a flag is already set', () => {
+    const h = harness();
+    h.controller.set('user', true);
+    h.controller.apply();
+    h.readyToShow();
+    expect(h.calls).toEqual(['hide', 'hide']);
+    expect(h.calls).not.toContain('showInactive');
+    expect(h.sent.at(-1)).toEqual({ hidden: true, reason: 'user' });
+    expect(h.paused).toEqual([true, true]);
+  });
+
+  it('normal path: ready-to-show with no flags set shows her exactly once', () => {
+    const h = harness();
+    h.readyToShow();
+    expect(h.calls).toEqual(['showInactive']);
+    expect(h.sent).toEqual([{ hidden: false, reason: 'none' }]);
+    expect(h.paused).toEqual([false]);
+  });
+
+  it('stage-ready resync: resend() re-sends the verdict without touching the window', () => {
+    const h = harness();
+    h.controller.set('fullscreen', true);
+    h.controller.resend();
+    expect(h.sent).toEqual([{ hidden: true, reason: 'fullscreen' }]);
+    expect(h.calls).toEqual([]);
+  });
+
+  it('sends on every apply(), not only when the verdict changes', () => {
+    const h = harness();
+    h.controller.apply();
+    h.controller.apply();
+    expect(h.sent).toEqual([{ hidden: false, reason: 'none' }, { hidden: false, reason: 'none' }]);
+  });
+
+  it('is inert while the window does not exist yet or is destroyed', () => {
+    const send = vi.fn();
+    const before = createVisibilityController({ window: () => null, send, log: () => {} });
+    before.apply();
+    expect(send).not.toHaveBeenCalled();
+
+    const after = harness(true);
+    after.controller.apply();
+    expect(after.calls).toEqual([]);
+    expect(after.sent).toEqual([]);
+  });
+
+  it('exposes the verdict the flags currently imply', () => {
+    const h = harness();
+    expect(h.controller.verdict).toEqual({ hidden: false, reason: 'none' });
+    h.controller.set('locked', true);
+    expect(h.controller.verdict).toEqual({ hidden: true, reason: 'locked' });
+    expect(h.controller.get('locked')).toBe(true);
   });
 });
