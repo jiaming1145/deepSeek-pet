@@ -4,6 +4,6 @@ export * from './sentences.ts';
 export * from './stream-parser.ts';
 export * from './sanitize.ts';
 export * from './slop-lint.ts';
-export * from './ports.ts';
 export * from './persona.ts';
 export * from './prompt.ts';
+export * from './ports.ts';
