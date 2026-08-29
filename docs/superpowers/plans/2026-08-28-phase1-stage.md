@@ -23,6 +23,7 @@
 - Required credit line (spec §11) must appear in `README.md`: *This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion.*
 - Commit after every task on `main`; commit messages end with the Co-Authored-By / Claude-Session trailers used in this repo (see `git log -1`).
 - Every visual claim needs a screenshot of the real running window saved under `docs/evidence/phase1/` and committed.
+- Evidence screenshots are crops of the region carrying the claim, never full-desktop captures.
 
 ---
 
