@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest';
+import { StreamParser } from './stream-parser.ts';
+
+const run = (chunks: string[]) => {
+  const p = new StreamParser('t1');
+  const ev = chunks.flatMap((c) => p.push(c));
+  return { events: [...ev, ...p.flush()], miss: p.complianceMiss };
+};
+
+describe('StreamParser', () => {
+  it('emits sentences carrying the current ACT and increasing seq', () => {
+    const { events, miss } = run(['<|ACT emotion=happy motion=nod|>你回来啦！', '<|ACT emotion=curious|>今天做了什么？']);
+    expect(miss).toBe(false);
+    expect(events).toEqual([
+      { turnId: 't1', seq: 0, text: '你回来啦！', emotion: 'happy', motion: 'nod' },
+      { turnId: 't1', seq: 1, text: '今天做了什么？', emotion: 'curious' },
+    ]);
+  });
+
+  it('defaults to neutral and flags a compliance miss when the reply has no leading ACT', () => {
+    const { events, miss } = run(['嗯。']);
+    expect(miss).toBe(true);
+    expect(events[0]).toMatchObject({ emotion: 'neutral', text: '嗯。' });
+  });
+
+  it('attaches PAUSE to the following sentence', () => {
+    const { events } = run(['<|ACT emotion=think|>让我想想。<|PAUSE 1|>好吧。']);
+    expect(events[1]).toMatchObject({ text: '好吧。', pause: 1 });
+  });
+
+  it('ignores badtags and keeps text flowing', () => {
+    const { events } = run(['<|ACT emotion=joy|>你好。']);
+    expect(events).toHaveLength(1);
+    expect(events[0].text).toBe('你好。');
+    expect(events[0].emotion).toBe('neutral');
+  });
+
+  it('reassembles a control token split across chunks', () => {
+    const { events, miss } = run(['<|ACT emo', 'tion=happy|>你回', '来啦！']);
+    expect(miss).toBe(false);
+    expect(events).toEqual([{ turnId: 't1', seq: 0, text: '你回来啦！', emotion: 'happy' }]);
+  });
+
+  it('attaches a motion to exactly one sentence and keeps the emotion', () => {
+    const { events } = run(['<|ACT emotion=happy motion=nod|>你回来啦！今天怎么样？']);
+    expect(events).toEqual([
+      { turnId: 't1', seq: 0, text: '你回来啦！', emotion: 'happy', motion: 'nod' },
+      { turnId: 't1', seq: 1, text: '今天怎么样？', emotion: 'happy' },
+    ]);
+  });
+
+  it('leaves the sentence text raw so the linter sees what the model wrote', () => {
+    const { events } = run(['<|ACT emotion=neutral|>**加粗**。']);
+    expect(events[0].text).toBe('**加粗**。');
+  });
+
+  it('flushes a trailing sentence that never closed', () => {
+    const { events } = run(['<|ACT emotion=neutral|>好']);
+    expect(events).toEqual([{ turnId: 't1', seq: 0, text: '好', emotion: 'neutral' }]);
+  });
+
+  it('carries a PAUSE that arrives in its own chunk', () => {
+    const { events } = run(['<|ACT emotion=sad|>不知道。', '<|PAUSE 0.5|>', '算了。']);
+    expect(events[1]).toEqual({ turnId: 't1', seq: 1, text: '算了。', emotion: 'sad', pause: 0.5 });
+  });
+});
