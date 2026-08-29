@@ -1,0 +1,13 @@
+
+> ds@0.1.0 typecheck D:\ds\.claude\worktrees\wf_4a01842b-9f1-1
+> pnpm -r --if-present typecheck
+
+Scope: 4 of 5 workspace projects
+packages/protocol typecheck$ tsc -p tsconfig.json
+packages/protocol typecheck: Done
+packages/brain typecheck$ tsc -p tsconfig.json
+packages/stage typecheck$ tsc -p tsconfig.json
+packages/brain typecheck: Done
+packages/stage typecheck: Done
+apps/desktop typecheck$ tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.ui.json
+apps/desktop typecheck: Done
