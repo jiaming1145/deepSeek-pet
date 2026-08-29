@@ -1,0 +1,6 @@
+cardTokens 673
+CARD_TOKEN_BUDGET 700
+staticSystemTokens 994
+STATIC_SYSTEM_TOKEN_BUDGET 1100
+plainTokens 184
+motionKeys nod/shake/think/wave
