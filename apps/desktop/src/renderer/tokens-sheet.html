@@ -1,0 +1,292 @@
+<!doctype html>
+<!--
+  ds · 小春 — Phase 2 Task 0 direction contract, VERBATIM.
+  Source: .superpowers/sdd/2026-08-29-phase2-brain/task-0-direction.md
+  Seed key 94ed1849 (scope direction, mode experience). Owner-locked 2026-08-29.
+
+  THESIS: Her words land in the box every ACG reader has read ten thousand lines in — a translucent ink-navy band with a slanted name plate, typewriter reveal and a blinking ▼ — and the box does what an ADV box does: click to skip, flips to input mode when it is your line. It refuses the glass chat bubble with a tail, the toast, and the card.
+
+  OWN-WORLD: ink-navy band `rgba(20,27,46,.92)` (light theme: `rgba(250,248,244,.92)`), cool-white text `#EEF1F7` (light: `#1B2238`), a slanted parallelogram name plate in the character's own accent (`haru: #E8A0B4`, from character.json), gold advance mark `#FFD166`, a separate grey-blue system voice `#8FA3BF` for hints. One family (MiSans if licence verified, else Microsoft YaHei UI / Segoe UI Variable), weights 400/600; sizes from the C5 ramp: body 16/26, plate 13/16 tracked .04em, hint 13/18, composer 16/24, key window 14/20. Radii, shadows and durations are the fixed C5 tokens. The band's left edge is cut at the plate's 8° — the one signature device; everything else is quiet.
+
+  STORY: she is a character in a game you happen to be inside; you read her line as it types, tap to skip when you're impatient, double-click her (or click the box) when it's your turn, and the box turns into your line. Hints from the app are never in her voice.
+
+  FIRST VIEWPORT: Haru bottom-right (420×720 pet window). The band (its own transparent BrowserWindow, max 460 wide, up to 6 lines) sits over her lower third, extending LEFT from her body so she stands in its right third (ma: never centred on her); flips to the right when the work area has no room. Name plate on the band's top-left corner, hanging 6 px above the band. Text types in at the reveal cadence with mouth sync; ▼ blinks at 1 Hz when a sentence closes (static under reduced-motion). A thin hint strip may appear above the band. Composer: a focusable window skinned identically, shown at the band's exact rect with plate "你" and a caret; Enter sends, Shift+Enter newlines, IME-safe. Key window: the same band, 520 wide, plate "API Key", one field, a one-line PRC disclosure, a 测试 action.
+
+  FORM: ADV message window — grounded candidate 1 of 7; seed key 94ed1849; raises kept from the declined hand: ruling-as-baseline (26 px line grid), state-as-material (emotion changes the plate tint and text weight, never a badge), ma (off-axis placement with a fixed gap), drawn edges (hairline top rule, no glow beyond the C5 shadow), idle-dissolve (linger → fade + drift down 4 px; hover freezes).
+
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>ds · design tokens</title>
+  <link rel="stylesheet" href="./shared/tokens.css" />
+  <style>
+    html { background: var(--c-bg); }
+    body {
+      margin: 0; padding: var(--sp-6);
+      background: var(--c-bg); color: var(--c-text);
+      font-family: var(--font-sans); font-size: var(--fs-body); line-height: var(--lh-body);
+      text-autospace: normal; line-break: strict; overflow-wrap: anywhere;
+      width: 1120px;
+    }
+    h1 { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: var(--fw-semibold); margin: 0 0 var(--sp-2); }
+    h2 { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: var(--fw-semibold);
+         text-transform: uppercase; letter-spacing: .08em; color: var(--c-text-3);
+         margin: var(--sp-6) 0 var(--sp-3); border-top: 1px solid var(--c-border); padding-top: var(--sp-3); }
+    .sub { color: var(--c-text-2); font-size: var(--fs-caption); line-height: var(--lh-caption); margin: 0; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); }
+    .sw { border: 1px solid var(--c-border); border-radius: var(--r-control); overflow: hidden; background: var(--c-surface); }
+    .sw .chip { height: 44px; }
+    .sw .meta { padding: var(--sp-2); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+    .sw .name { color: var(--c-text); }
+    .sw .val { color: var(--c-text-3); font-variant-numeric: tabular-nums; }
+    .row { display: flex; flex-wrap: wrap; gap: var(--sp-4); align-items: flex-end; }
+    .spec .lbl { display: block; color: var(--c-text-3); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+    .box { width: 120px; height: 64px; background: var(--c-surface); border: 1px solid var(--c-border); }
+    .stage { position: relative; background: var(--c-surface-2); border-radius: var(--r-window);
+             padding: var(--sp-6); display: flex; justify-content: flex-end; }
+
+    /* ---- the ADV band, at shipping geometry: 460 wide, 24 hanzi/line, 26px line grid ----
+       The cut lives on its own fill layer, .band__surface, NOT on .band. contracts.md §5.5
+       is right that "a clip-path on the band would also clip --shadow-bubble" — it clips the
+       hanging name plate too, which is worse. Clipping only the fill keeps the shadow, the
+       plate and the advance mark intact while the left edge is still genuinely cut at −8°. */
+    .band {
+      position: relative; width: 460px; box-sizing: border-box;
+      color: var(--c-bubble-text);
+      border-radius: var(--r-bubble); box-shadow: var(--shadow-bubble);
+      /* room for the plate, which hangs 20px above the band's top edge */
+      margin-top: var(--sp-4);
+      padding: var(--sp-4) var(--sp-5) var(--sp-5);
+      font-size: var(--fs-bubble); line-height: var(--lh-bubble); font-weight: var(--fw-line);
+    }
+    .band__surface {
+      position: absolute; inset: 0; z-index: 0; box-sizing: border-box;
+      background: var(--c-bubble-surface);
+      border-radius: var(--r-bubble);
+      border-top: 1px solid var(--c-bubble-border);
+      clip-path: polygon(var(--adv-cut) 0, 100% 0, 100% 100%, 0 100%);
+    }
+    /* The anchor notch PROTRUDES from the edge (top: -3px) instead of lying on top of the
+       band. --c-bubble-tail is the same 0.92-alpha colour as the surface, so an overlapping
+       notch composites twice and reads as a blemish rather than as part of the silhouette. */
+    .band .notch { position: absolute; z-index: 1; top: -3px; left: 220px; width: 36px; height: 3px; background: var(--c-bubble-tail); }
+    .band p { position: relative; z-index: 1; margin: 0; max-width: calc(24 * 1em); }
+    .plate {
+      position: absolute; z-index: 2; top: -20px; left: var(--sp-5);
+      transform: skewX(var(--adv-skew));
+      background: var(--c-plate); color: var(--c-accent-text);
+      border: 1px solid var(--c-border-strong);
+      padding: 3px var(--sp-3);
+      font-size: 13px; line-height: 16px; font-weight: var(--fw-semibold); letter-spacing: .04em;
+    }
+    .plate span { display: inline-block; transform: skewX(calc(-1 * var(--adv-skew))); }
+    .adv { position: absolute; z-index: 1; right: var(--sp-4); bottom: var(--sp-2); color: var(--c-advance); font-size: 12px;
+           animation: blink var(--dur-blink) steps(2, jump-none) infinite; }
+    @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .15; } }
+    .hint {
+      width: 460px; box-sizing: border-box; margin-bottom: var(--sp-2);
+      background: var(--c-surface-hint); color: var(--c-hint-text);
+      border-radius: var(--r-tooltip); box-shadow: var(--shadow-hint);
+      padding: var(--sp-2) var(--sp-3);
+      font-size: var(--fs-caption); line-height: var(--lh-caption);
+    }
+    .hint.err { color: var(--c-danger-text); }
+    .composer {
+      width: 360px; box-sizing: border-box; margin-top: var(--sp-4);
+      background: var(--c-surface); color: var(--c-text);
+      border: 1px solid var(--c-border); border-radius: var(--r-popover); box-shadow: var(--shadow-popover);
+      padding: var(--sp-3); min-height: 48px;
+      font-size: var(--fs-body); line-height: var(--lh-body);
+      outline: 2px solid var(--c-focus-ring); outline-offset: 2px;
+    }
+    /* Each tile proves BOTH halves of state-as-material: the plate's tint and the line's
+       weight. A tile that showed only the tint would photograph half the rule. */
+    .plates { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4) var(--sp-5); }
+    .plates .plate { position: static; display: inline-block; transform: skewX(var(--adv-skew)); }
+    .plates .eline {
+      margin: var(--sp-2) 0 0; color: var(--c-bubble-text);
+      font-size: var(--fs-bubble); line-height: var(--lh-bubble); font-weight: var(--fw-line);
+    }
+
+    /* ---- the key window, at shipping geometry: 440 x 360 (contracts §6.1 KEY_SIZE) ---- */
+    .key {
+      position: relative; width: 440px; height: 360px; box-sizing: border-box;
+      margin-top: var(--sp-4);
+      background: var(--c-surface); color: var(--c-text);
+      border: 1px solid var(--c-border); border-radius: var(--r-window); box-shadow: var(--shadow-popover);
+      padding: var(--sp-6) var(--sp-5) var(--sp-5);
+    }
+    .key h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-title); line-height: var(--lh-title); font-weight: var(--fw-semibold); }
+    .key .status { margin: 0 0 var(--sp-5); color: var(--c-ok); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+    .key .field {
+      width: 392px; box-sizing: border-box;
+      background: var(--c-surface-2); color: var(--c-text);
+      border: 1px solid var(--c-border); border-radius: var(--r-control);
+      padding: var(--sp-2) var(--sp-3);
+      font-size: var(--fs-body); line-height: var(--lh-body);
+      font-variant-numeric: tabular-nums;
+    }
+    .key .disclosure { margin: var(--sp-3) 0 0; color: var(--c-text-3); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+    .key .actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-5); }
+    .key .btn {
+      border: 1px solid var(--c-border-strong); border-radius: var(--r-control);
+      background: var(--c-surface); color: var(--c-text);
+      padding: var(--sp-2) var(--sp-4);
+      font-family: inherit; font-size: var(--fs-body); line-height: var(--lh-body);
+    }
+    .key .btn--primary { background: var(--c-accent); color: var(--c-accent-text); border-color: var(--c-border-strong); }
+    .key .scrim { position: absolute; right: var(--sp-5); bottom: var(--sp-5); width: 96px; height: 40px;
+                  border-radius: var(--r-tooltip); background: var(--c-scrim); }
+    .key .scrim-lbl { position: absolute; right: var(--sp-5); bottom: calc(var(--sp-5) + 44px);
+                      color: var(--c-text-3); font-size: var(--fs-caption); line-height: var(--lh-caption); }
+  </style>
+</head>
+<body>
+  <h1>ds · 小春 — design tokens</h1>
+  <p class="sub" id="mode">ADV 对话框 · seed 94ed1849</p>
+
+  <h2>Colour roles</h2>
+  <div class="grid" id="colours"></div>
+
+  <h2>Type ramp</h2>
+  <div id="ramp"></div>
+
+  <h2>Radii · elevation · spacing</h2>
+  <div class="row" id="shapes"></div>
+
+  <h2>The ADV band, at shipping geometry (460 wide, 24 hanzi per line, 26 px line grid)</h2>
+  <div class="stage">
+    <div>
+      <div class="hint err">API Key 无效，重新填一下</div>
+      <div class="band" data-emotion="curious">
+        <div class="band__surface"></div>
+        <div class="notch"></div>
+        <div class="plate"><span>小春</span></div>
+        <p>你回来啦。刚才我数了数窗外的车，一共十七辆，然后就数不下去了。</p>
+        <div class="adv">▼</div>
+      </div>
+      <div class="composer">我刚开完会。</div>
+    </div>
+  </div>
+
+  <h2>The key window, at shipping geometry (440 × 360)</h2>
+  <div class="stage">
+    <div class="key">
+      <div class="plate"><span>API Key</span></div>
+      <h3>小春 · API Key</h3>
+      <p class="status">已保存</p>
+      <div class="field">sk-0123456789abcdef0123456789abcdef</div>
+      <p class="disclosure">对话内容会发送到 DeepSeek（服务器在中国境内）处理，回复由 AI 生成。</p>
+      <div class="actions">
+        <button class="btn" type="button">测试连接</button>
+        <button class="btn btn--primary" type="button">保存</button>
+      </div>
+      <span class="scrim-lbl">--c-scrim</span>
+      <div class="scrim"></div>
+    </div>
+  </div>
+
+  <h2>State as material — nine emotions tint the plate and move the line's weight</h2>
+  <div class="plates" id="emotions"></div>
+
+  <script type="module">
+    const COLOURS = [
+      '--c-bg', '--c-surface', '--c-surface-2', '--c-surface-hint', '--c-border', '--c-border-strong',
+      '--c-text', '--c-text-2', '--c-text-3',
+      '--c-accent', '--c-accent-text', '--c-accent-weak',
+      '--c-ok', '--c-warn', '--c-warn-text', '--c-danger', '--c-danger-text',
+      '--c-scrim', '--c-focus-ring',
+      '--c-bubble-surface', '--c-bubble-text', '--c-bubble-border', '--c-bubble-tail',
+      '--c-plate', '--c-advance', '--c-hint-text',
+    ];
+    const RAMP = [
+      ['--fs-title', '--lh-title', '--fw-semibold', '标题 20/28 — Title'],
+      ['--fs-bubble-lg', '--lh-bubble-lg', '--fw-regular', '大台词 18/28 — Bubble large'],
+      ['--fs-bubble', '--lh-bubble', '--fw-regular', '台词 16/26 — Bubble, the 26 px ruling'],
+      ['--fs-body', '--lh-body', '--fw-regular', '正文 14/22 — Body, composer and history'],
+      ['--fs-caption', '--lh-caption', '--fw-regular', '注释 12/18 — Caption and system hints'],
+    ];
+    const SHAPES = [
+      ['--r-window', 'radius'], ['--r-popover', 'radius'], ['--r-bubble', 'radius'],
+      ['--r-control', 'radius'], ['--r-tooltip', 'radius'],
+      ['--shadow-popover', 'shadow'], ['--shadow-bubble', 'shadow'], ['--shadow-hint', 'shadow'],
+      ['--sp-1', 'space'], ['--sp-2', 'space'], ['--sp-3', 'space'],
+      ['--sp-4', 'space'], ['--sp-5', 'space'], ['--sp-6', 'space'],
+    ];
+    const EMOTIONS = ['neutral', 'happy', 'curious', 'question', 'surprised', 'think', 'awkward', 'sad', 'angry'];
+
+    const cs = getComputedStyle(document.documentElement);
+    const read = (n) => cs.getPropertyValue(n).trim();
+    const scheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+
+    document.getElementById('mode').textContent = `ADV 对话框 · seed 94ed1849 · ${scheme}`;
+
+    const colours = document.getElementById('colours');
+    for (const name of COLOURS) {
+      const el = document.createElement('div');
+      el.className = 'sw';
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.style.background = `var(${name})`;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const n = document.createElement('div'); n.className = 'name'; n.textContent = name;
+      const v = document.createElement('div'); v.className = 'val'; v.textContent = read(name);
+      meta.append(n, v); el.append(chip, meta); colours.append(el);
+    }
+
+    const ramp = document.getElementById('ramp');
+    for (const [fs, lh, fw, label] of RAMP) {
+      const el = document.createElement('div');
+      el.style.fontSize = `var(${fs})`;
+      el.style.lineHeight = `var(${lh})`;
+      el.style.fontWeight = `var(${fw})`;
+      el.style.marginBottom = 'var(--sp-2)';
+      el.textContent = `${label} — ${read(fs)}/${read(lh)}`;
+      ramp.append(el);
+    }
+
+    const shapes = document.getElementById('shapes');
+    for (const [name, kind] of SHAPES) {
+      const wrap = document.createElement('div');
+      wrap.className = 'spec';
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = `${name} · ${read(name)}`;
+      const box = document.createElement('div');
+      box.className = 'box';
+      if (kind === 'radius') box.style.borderRadius = `var(${name})`;
+      if (kind === 'shadow') { box.style.boxShadow = `var(${name})`; box.style.borderRadius = 'var(--r-popover)'; }
+      if (kind === 'space') { box.style.width = `var(${name})`; box.style.height = '32px'; box.style.background = 'var(--c-accent)'; }
+      wrap.append(lbl, box);
+      shapes.append(wrap);
+    }
+
+    const LINES = {
+      neutral: '窗外的风停了。', happy: '你回来啦！', curious: '这个是什么呀？',
+      question: '你今天还好吗？', surprised: '欸——真的假的。', think: '让我想想……',
+      awkward: '那个……我刚才说错了。', sad: '有点没精神。', angry: '别闹了。',
+    };
+    const emotions = document.getElementById('emotions');
+    for (const e of EMOTIONS) {
+      const tile = document.createElement('div');
+      tile.className = 'etile';
+      tile.setAttribute('data-emotion', e);
+      const el = document.createElement('div');
+      el.className = 'plate';
+      const s = document.createElement('span');
+      s.textContent = e;
+      el.append(s);
+      const line = document.createElement('p');
+      line.className = 'eline';
+      line.textContent = LINES[e];
+      tile.append(el, line);
+      emotions.append(tile);
+    }
+
+    document.documentElement.dataset.sheetReady = 'true';
+  </script>
+</body>
+</html>

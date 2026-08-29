@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-29T00:00:00.000Z",
+  "title": "Design System: ds · 小春",
+  "extensions": {
+    "colorMeta": {
+      "bg": { "role": "neutral", "displayName": "Paper / Night", "canonical": "#EDEAE3", "tonalRamp": ["#EDEAE3", "#0E1220"] },
+      "surface": { "role": "neutral", "displayName": "Panel", "canonical": "#FAF8F4", "tonalRamp": ["#FAF8F4", "#141B2E"] },
+      "surface-2": { "role": "neutral", "displayName": "Well", "canonical": "#F1EDE6", "tonalRamp": ["#F1EDE6", "#1C2439"] },
+      "surface-hint": { "role": "neutral", "displayName": "System Voice", "canonical": "#E8E2D7", "tonalRamp": ["#E8E2D7", "#232C44"] },
+      "text": { "role": "neutral", "displayName": "Ink Navy", "canonical": "#1B2238", "tonalRamp": ["#1B2238", "#EEF1F7"] },
+      "accent": { "role": "primary", "displayName": "Haru Plate", "canonical": "#E8A0B4", "tonalRamp": ["#E8A0B4", "#E8A0B4"] },
+      "bubble-surface": { "role": "primary", "displayName": "The Band", "canonical": "rgba(250, 248, 244, 0.92)", "tonalRamp": ["rgba(250, 248, 244, 0.92)", "rgba(20, 27, 46, 0.92)"] },
+      "advance": { "role": "tertiary", "displayName": "Advance Gold", "canonical": "#9A6A12", "tonalRamp": ["#9A6A12", "#FFD166"] }
+    },
+    "typographyMeta": {
+      "bubble": { "displayName": "Her Line", "purpose": "The ADV band only. 16/26 is the ruling every other surface aligns to." },
+      "plate": { "displayName": "Name Plate", "purpose": "The slanted parallelogram. Never used for running text." },
+      "caption": { "displayName": "System Voice", "purpose": "Hint strip and timestamps. Never the character." }
+    },
+    "shadows": [
+      { "name": "shadow-popover", "value": "0 8px 16px rgba(0, 0, 0, .14), 0 0 2px rgba(0, 0, 0, .12)", "purpose": "Chat and key windows. Fixed by addendum C5; dark uses .28/.20." },
+      { "name": "shadow-bubble", "value": "0 10px 24px rgba(0, 0, 0, .16), 0 0 2px rgba(0, 0, 0, .12)", "purpose": "The ADV band. Dark uses .30/.20. Lives on the band element, never on the clipped fill layer - a clip-path would erase it." },
+      { "name": "shadow-hint", "value": "0 4px 10px rgba(0, 0, 0, .10), 0 0 2px rgba(0, 0, 0, .10)", "purpose": "The hint strip, lighter than the band so it reads as a different layer. Dark uses .24/.18." }
+    ],
+    "motion": [
+      { "name": "dur-feedback", "value": "100ms", "purpose": "Press and hover feedback." },
+      { "name": "dur-state", "value": "180ms", "purpose": "In-place state change: plate tint, line weight." },
+      { "name": "dur-overlay", "value": "250ms", "purpose": "Band and window appear." },
+      { "name": "dur-exit", "value": "160ms", "purpose": "Band and window dismiss." },
+      { "name": "dur-blink", "value": "1000ms", "purpose": "The advance mark at 1 Hz. 0ms under reduced motion." },
+      { "name": "ease-enter", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Everything entering." },
+      { "name": "ease-exit", "value": "cubic-bezier(0.3, 0, 1, 1)", "purpose": "Everything leaving." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "ADV Band",
+      "kind": "custom",
+      "refersTo": "adv-band",
+      "description": "The character's message window. Click completes the reveal and opens the chat. SHIPPING FORM, normative: the 8-degree signature is contracts.md 5.5's .bubble__rail - a 3px --c-plate rail on the band's left edge, transform skewX(var(--adv-skew)), horizontal run var(--adv-cut) - which 5.5 pins as the ONE consumer of --adv-cut. Not a clip-path. The html/css below is the TOKEN SHEET's specimen, not a shipping recipe: it keeps a literal cut by moving the clip-path off the band root onto the .ds-band__surface fill layer, which is correct on a specimen board and is NOT sanctioned for bubble/, chat/ or key/. A bare clip-path on the band root is wrong everywhere - it erases --shadow-bubble and clips away the plate, which hangs above the band's top edge. The 460 below is likewise specimen-only: 460 x 320 is BUBBLE_MAX, the bubble WINDOW budget, and 24px of it is --shadow-bubble's room (contracts 5.2), so the shipping band element is inset from it.",
+      "html": "<div class=\"ds-band\" data-emotion=\"curious\"><div class=\"ds-band__surface\"></div><div class=\"ds-plate\"><span>小春</span></div><p>你回来啦。</p><div class=\"ds-advance\">▼</div></div>",
+      "css": ".ds-band { position: relative; width: 460px; box-sizing: border-box; color: var(--c-bubble-text); border-radius: var(--r-bubble); box-shadow: var(--shadow-bubble); padding: var(--sp-4) var(--sp-5) var(--sp-5); font-family: var(--font-sans); font-size: var(--fs-bubble); line-height: var(--lh-bubble); font-weight: var(--fw-line); } .ds-band__surface { position: absolute; inset: 0; z-index: 0; box-sizing: border-box; background: var(--c-bubble-surface); border-radius: var(--r-bubble); border-top: 1px solid var(--c-bubble-border); clip-path: polygon(var(--adv-cut) 0, 100% 0, 100% 100%, 0 100%); } .ds-band p { position: relative; z-index: 1; margin: 0; max-width: calc(24 * 1em); overflow-wrap: anywhere; line-break: strict; } .ds-plate { position: absolute; z-index: 2; top: -20px; left: var(--sp-5); transform: skewX(var(--adv-skew)); background: var(--c-plate); color: var(--c-accent-text); border: 1px solid var(--c-border-strong); padding: 3px var(--sp-3); font-size: 13px; line-height: 16px; font-weight: var(--fw-semibold); letter-spacing: .04em; } .ds-plate span { display: inline-block; transform: skewX(calc(-1 * var(--adv-skew))); } .ds-advance { position: absolute; z-index: 1; right: var(--sp-4); bottom: var(--sp-2); color: var(--c-advance); font-size: 12px; }"
+    },
+    {
+      "name": "Hint Strip",
+      "kind": "custom",
+      "refersTo": "hint-strip",
+      "description": "The system voice. In the shipping bubble it sits BELOW the band, separated by HINT_GAP (8px) - contracts 5.5; the token sheet draws it above only because the sheet is a specimen board. Never styled with the band's tokens; at most one visible, up to 3 queued.",
+      "html": "<div class=\"ds-hint ds-hint--error\">API Key 无效，重新填一下</div>",
+      "css": ".ds-hint { width: 460px; box-sizing: border-box; background: var(--c-surface-hint); color: var(--c-hint-text); border-radius: var(--r-tooltip); box-shadow: var(--shadow-hint); padding: var(--sp-2) var(--sp-3); font-family: var(--font-sans); font-size: var(--fs-caption); line-height: var(--lh-caption); } .ds-hint--warn { color: var(--c-warn-text); } .ds-hint--error { color: var(--c-danger-text); }"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "composer-field",
+      "description": "The user's line, skinned as the same window with the plate reading 你.",
+      "html": "<div class=\"ds-composer\" contenteditable=\"true\">我刚开完会。</div>",
+      "css": ".ds-composer { width: 360px; min-height: 48px; box-sizing: border-box; background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-border); border-radius: var(--r-popover); box-shadow: var(--shadow-popover); padding: var(--sp-3); font-family: var(--font-sans); font-size: var(--fs-body); line-height: var(--lh-body); } .ds-composer:focus-visible { outline: 2px solid var(--c-focus-ring); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The ADV Message Window",
+    "overview": "Her words land in the box every ACG reader has read ten thousand lines in: a translucent band with a slanted name plate, typewriter reveal and a blinking advance mark. The box behaves like an ADV box — click to skip, flip to input mode when it is your line. It refuses the glass chat bubble with a tail, the toast, and the card. Light is warm paper; dark is ink navy. One accent, the character's own, carried entirely by the name plate.",
+    "keyCharacteristics": [
+      "A 26 px line ruling for her voice, 22 px for yours.",
+      "One signature angle: the band's left edge cut at the plate's 8 degrees.",
+      "Emotion is material — the plate's tint and the line's weight — never a badge.",
+      "The band is placed off-axis so the character stands in its right third.",
+      "The system never speaks in her voice; it speaks on a separate hint strip."
+    ],
+    "rules": [
+      { "name": "One Accent, One Owner", "body": "The single accent belongs to the character and appears only on the name plate. Status colours are not accents.", "section": "colors" },
+      { "name": "The 26 Ruling", "body": "Her line is 16/26. Every surface that shares the screen with the band aligns to multiples of 26 or 22.", "section": "typography" },
+      { "name": "One Angle", "body": "Minus eight degrees is the entire non-rectilinear vocabulary. A second angle breaks the device.", "section": "elevation" },
+      { "name": "The Rail Is The Cut", "body": "The 8-degree signature ships as contracts.md 5.5's .bubble__rail - a 3px skewed --c-plate rail, the one consumer of --adv-cut - and not as a clip-path. A clip-path on the band root erases --shadow-bubble and clips off the hanging name plate; the two-layer fill-layer cut that avoids that is the token sheet's specimen technique only. Rail (contracts 5.5) vs two-layer cut (craft floor) is an open ruling request to the controller; until it lands, 5.5 governs.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do read every colour, radius, duration and size from tokens.css.",
+      "Do put system messages on the hint strip.",
+      "Do keep the band off-axis, extending away from the character's body.",
+      "Do animate only transform and opacity."
+    ],
+    "donts": [
+      "Don't add a tail, a pointer triangle, or a rounded speech balloon.",
+      "Don't add a second angle.",
+      "Don't use purple or indigo gradients, gradient text, or radial halos.",
+      "Don't signal emotion with a badge, an emoji or a coloured dot.",
+      "Don't invert the light palette to make dark.",
+      "Don't put the cut's clip-path on the band root, and don't lay the anchor notch on top of the band.",
+      "Don't ship the token sheet's two-layer fill-layer cut in bubble/, chat/ or key/ - contracts 5.5's .bubble__rail is the shipping form of the 8-degree signature.",
+      "Don't size the band element to 460 - that is the bubble window's budget and 24px of it is --shadow-bubble's room."
+    ]
+  }
+}
