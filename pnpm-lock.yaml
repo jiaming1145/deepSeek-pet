@@ -52,6 +52,15 @@ importers:
         specifier: 7.3.6
         version: 7.3.6(@types/node@24.13.3)
 
+  packages/brain:
+    dependencies:
+      '@ds/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.5.2
+
   packages/protocol:
     dependencies:
       zod:

@@ -1,0 +1,2 @@
+sentences=2 emotions=9 scanner=happy
+ports=0
