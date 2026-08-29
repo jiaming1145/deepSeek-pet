@@ -57,3 +57,15 @@ describe('HoverTracker', () => {
     expect(events).toEqual([true]);
   });
 });
+
+describe('HoverTracker.reset', () => {
+  it('re-emits enter from the next stable sample after a hide/show cycle', () => {
+    const events: boolean[] = [];
+    const h = new HoverTracker((v) => events.push(v), 50);
+    h.sample(true, 0); h.sample(true, 60);
+    expect(events).toEqual([true]);
+    h.reset(); // window hidden then shown; main forced click-through meanwhile
+    h.sample(true, 100); h.sample(true, 160);
+    expect(events).toEqual([true, true]);
+  });
+});

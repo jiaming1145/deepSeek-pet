@@ -225,3 +225,15 @@ describe('CompanionModel.release', () => {
     expect(internals.motions.size).toBe(0);
   });
 });
+
+describe('CompanionModel after release()', () => {
+  it('answers hit tests, expression and motion calls without touching released managers', () => {
+    const { model } = bareModel();
+    model.release();
+    expect(() => model.hitTest('Head', 0, 0)).not.toThrow();
+    expect(model.hitTest('Head', 0, 0)).toBe(false);
+    expect(model.hitAny(0, 0)).toBeNull();
+    expect(() => model.setExpression(null)).not.toThrow();
+    expect(model.startMotion('Idle', 0, 1)).toBe(false);
+  });
+});

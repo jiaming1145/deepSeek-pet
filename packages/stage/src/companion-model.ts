@@ -291,6 +291,8 @@ export class CompanionModel extends CubismUserModel {
   }
 
   setExpression(name: string | null): void {
+    // Public API can be reached from a late callback after release(); the managers are null then.
+    if (this.released) return;
     if (name === null) {
       this._expressionManager.stopAllMotions();
       return;
@@ -305,6 +307,7 @@ export class CompanionModel extends CubismUserModel {
     // _reservePriority inside startMotionPriority, so bailing out after reserving would leak the
     // reservation: every later reserveMotion() would fail and tick()'s idle restart would never
     // fire again.
+    if (this.released) return false;
     const motion = this.motions.get(`${group}_${index}`);
     if (!motion) return false;
     if (priority === Priority.force) this._motionManager.setReservePriority(priority);
@@ -318,6 +321,7 @@ export class CompanionModel extends CubismUserModel {
   }
 
   hitTest(areaName: string, viewX: number, viewY: number): boolean {
+    if (!this._initialized) return false;
     if (this._opacity < 1) return false;
     for (let i = 0; i < this.setting.getHitAreasCount(); i++) {
       if (this.setting.getHitAreaName(i) === areaName) {
@@ -328,6 +332,7 @@ export class CompanionModel extends CubismUserModel {
   }
 
   hitAny(viewX: number, viewY: number): string | null {
+    if (!this._initialized) return null;
     for (const name of this.hitAreaNames()) {
       if (this.hitTest(name, viewX, viewY)) return name;
     }
@@ -396,6 +401,8 @@ export class CompanionModel extends CubismUserModel {
       for (const tex of this.textures) this.gl.deleteTexture(tex);
     }
     this.textures.length = 0;
+    // A retained, released model must not keep the context (and its canvas) alive.
+    this.gl = null;
     this.layoutMatrix = null;
     super.release();
     // After the managers are down, so nothing can be mid-playback on a released motion.

@@ -40,6 +40,16 @@ export class HoverTracker {
     this.settle(nowMs);
   }
 
+  /**
+   * Forget the emitted state (window was hidden and shown again): main forced click-through on
+   * hide, so `inside` must be re-emitted from the next sample even if the cursor never moved.
+   */
+  reset(): void {
+    this.cancel();
+    this.emitted = false;
+    this.candidate = false;
+  }
+
   /** Drop any armed timer (e.g. when the page is torn down). */
   cancel(): void {
     if (this.timer !== undefined) {
