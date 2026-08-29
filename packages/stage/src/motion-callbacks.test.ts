@@ -91,11 +91,33 @@ describe('MotionFinishTracker', () => {
     const handle = manager.startMotionPriority(new StubMotion(), false, 2);
     tracker.track(handle, () => fired.push('kept'));
     expect(tracker.pending).toBe(1);
+    // A handle the manager never saw reads as finished (cubismmotionqueuemanager.ts:129).
+    expect(manager.isFinishedByHandle({} as never)).toBe(true);
 
     tracker.clear();
     expect(tracker.pending).toBe(0);
     finish(manager, handle);
     tracker.flush(manager);
     expect(fired).toEqual([]);
+  });
+});
+
+describe('MotionFinishTracker — clear() during flush', () => {
+  it('stops the rest of the batch once a callback clears the tracker', () => {
+    const manager = new CubismMotionManager();
+    const tracker = new MotionFinishTracker();
+    const fired: string[] = [];
+    const a = manager.startMotionPriority(new StubMotion(), false, 2);
+    const b = manager.startMotionPriority(new StubMotion(), false, 2);
+    tracker.track(a, () => {
+      fired.push('a');
+      tracker.clear();
+    });
+    tracker.track(b, () => fired.push('b'));
+    finish(manager, a);
+    finish(manager, b);
+    tracker.flush(manager);
+    expect(fired).toEqual(['a']);
+    expect(tracker.pending).toBe(0);
   });
 });

@@ -155,6 +155,16 @@ export class CompanionModel extends CubismUserModel {
     // eye blink
     if (s.getEyeBlinkParameterCount() > 0) {
       this._eyeBlink = CubismEyeBlink.create(s);
+      // CubismEyeBlink draws its next blink time from Math.random (`effect/cubismeyeblink.ts:191`);
+      // route it through the injected rng so a seeded stage is deterministic end to end.
+      const eyeBlink = this._eyeBlink as unknown as {
+        _userTimeSeconds: number;
+        _blinkingIntervalSeconds: number;
+        determinNextBlinkingTiming: () => number;
+      };
+      const rng = this.rng;
+      eyeBlink.determinNextBlinkingTiming = () =>
+        eyeBlink._userTimeSeconds + rng() * (2.0 * eyeBlink._blinkingIntervalSeconds - 1.0);
       this.scheduler.addUpdatableList(
         new CubismEyeBlinkUpdater(() => this.motionUpdated, this._eyeBlink),
       );
@@ -376,6 +386,10 @@ export class CompanionModel extends CubismUserModel {
   override release(): void {
     if (this.released) return;
     this.released = true;
+    // CubismUserModel.release() never clears _initialized (`model/cubismusermodel.ts:461`), so
+    // tick()/draw()/hitTest guards would keep passing on a released model and dereference the
+    // nulled managers. Clear it first: a finished-callback that disposes the stage must be safe.
+    this._initialized = false;
     this.finishedCallbacks.clear();
     this.scheduler.release();
     if (this.gl) {
