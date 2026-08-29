@@ -19,3 +19,5 @@ apps/desktop/playwright-report/
 .superpowers/
 # agent worktrees
 .claude/worktrees/
+# gpt-collab MCP session state (agent scratch, like .superpowers/)
+.gptmcp/
