@@ -647,9 +647,10 @@ describe('ViewTransform', () => {
     expect(p.x).toBeCloseTo(-0.5);
     expect(p.y).toBeCloseTo(1);
   });
-  it('maps left edge to x=-1 for a landscape canvas', () => {
+  it('maps left edge to x=-ratio (-2) for a landscape canvas', () => {
     const v = new ViewTransform(800, 400);
-    expect(v.toView(0, 200).x).toBeCloseTo(-1);
+    expect(v.toView(0, 200).x).toBeCloseTo(-2);
+    expect(v.toView(0, 0).y).toBeCloseTo(1);
   });
   it('clamps gaze to [-1,1] for points outside the canvas', () => {
     const v = new ViewTransform(400, 800);
@@ -735,8 +736,9 @@ export class ViewTransform {
   }
   /** device (canvas) pixels → Cubism view space: x in [-ratio, ratio] (or [-1,1] for landscape), y up. */
   toView(deviceX: number, deviceY: number): { x: number; y: number } {
-    // _deviceToScreen: scale by 2/max(w,h) in x, -2/max(w,h) in y, then translate by -w/2,-h/2
-    const s = 2 / (this.w > this.h ? this.w : this.h);
+    // _deviceToScreen: the sample scales by screenW/width (landscape) or screenH/height (portrait);
+    // with screenW = 2·ratio and screenH = 2 both reduce to 2/height, then translate by -w/2,-h/2.
+    const s = 2 / this.h;
     const sx = (deviceX - this.w * 0.5) * s;
     const sy = (deviceY - this.h * 0.5) * -s;
     // _viewMatrix with ViewScale=1 and screen rect (-ratio..ratio, -1..1) is identity in this setup
