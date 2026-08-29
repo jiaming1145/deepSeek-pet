@@ -22,38 +22,65 @@ async function main(): Promise<void> {
     bridge?.send(Channels.avatarHover, { inside });
     stage.setFps(inside ? 60 : 30);
   });
-  let dragging: { x: number; y: number } | null = null;
+  /** Accumulated pointer travel a press may have and still count as a tap rather than a drag. */
+  const TAP_SLOP_PX = 4;
+  let dragging: { x: number; y: number; moved: number } | null = null;
   window.addEventListener('mousemove', (e) => {
+    // The button can be released where we never see the mouseup (outside the window, or over
+    // another window once main has moved us). Without this the drag would stick and every later
+    // move would keep dragging the window around.
+    if (dragging && e.buttons === 0) {
+      dragging = null;
+      bridge?.send(Channels.avatarDragEnd, {});
+    }
     const hit = stage.hitTestClient(e.clientX, e.clientY);
     hover.sample(hit !== null, performance.now());
     if (!bridge) stage.gazeClient(e.clientX, e.clientY); // browser mode: gaze from local mouse
     if (dragging) {
-      bridge?.send(Channels.avatarDrag, { dx: e.screenX - dragging.x, dy: e.screenY - dragging.y });
-      dragging = { x: e.screenX, y: e.screenY };
+      const dx = e.screenX - dragging.x;
+      const dy = e.screenY - dragging.y;
+      dragging = { x: e.screenX, y: e.screenY, moved: dragging.moved + Math.abs(dx) + Math.abs(dy) };
+      bridge?.send(Channels.avatarDrag, { dx, dy });
     }
     const el = document.getElementById('dbg-hit'); if (el) el.textContent = `hit: ${hit ?? '-'}`;
   });
   window.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     if (stage.hitTestClient(e.clientX, e.clientY) === null) return;
-    dragging = { x: e.screenX, y: e.screenY };
+    dragging = { x: e.screenX, y: e.screenY, moved: 0 };
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button !== 0) return;
-    const wasDragging = dragging !== null; dragging = null;
-    if (wasDragging) bridge?.send(Channels.avatarDragEnd, {});
+    const press = dragging;
+    dragging = null;
+    // Anything that moved already sent avatar:drag deltas, so main always gets its terminator.
+    if (press && press.moved > 0) bridge?.send(Channels.avatarDragEnd, {});
+    // A real drag ends there: letting go after moving the window must not also fire a tap. A press
+    // that only jittered is still a tap, which is why the slop is compared instead of `moved > 0`.
+    if (press && press.moved >= TAP_SLOP_PX) return;
     const hit = stage.hitTestClient(e.clientX, e.clientY);
     if (hit) {
       bridge?.send(Channels.avatarTap, { hitArea: hit });
-      const options = stage.config.tapMotions[hit];
-      if (options) {
-        const [group, idxs] = Object.entries(options)[0];
-        stage.playMotion([group, idxs[Math.floor(Math.random() * idxs.length)]]);
+      // Flatten every group rather than only Object.entries(...)[0]: a hit area mapped to
+      // { TapBody: [0, 1], TapHead: [2] } must be able to pick all three, and {} must do nothing
+      // instead of destructuring undefined.
+      const candidates: [string, number][] = [];
+      for (const [group, idxs] of Object.entries(stage.config.tapMotions[hit] ?? {})) {
+        for (const index of idxs) candidates.push([group, index]);
+      }
+      if (candidates.length > 0) {
+        stage.playMotion(candidates[Math.floor(Math.random() * candidates.length)]);
       }
     }
   });
 
-  bridge?.on(Channels.gazeCursor, ({ x, y }) => stage.gazeClient(x, y));
+  bridge?.on(Channels.gazeCursor, ({ x, y }) => {
+    // Once main turns click-through on, DOM mousemove stops arriving and this forwarded stream is
+    // the only cursor signal left - hover has to be sampled from it or it could leave and never
+    // come back.
+    hover.sample(stage.hitTestClient(x, y) !== null, performance.now());
+    stage.gazeClient(x, y);
+  });
   bridge?.on(Channels.stageSetFps, ({ fps }) => stage.setFps(fps));
   bridge?.on(Channels.debugExpression, ({ name }) => stage.model.setExpression(name));
   bridge?.on(Channels.debugMotion, ({ group, index }) => stage.playMotion([group, index]));
