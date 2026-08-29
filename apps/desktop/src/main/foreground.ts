@@ -2,35 +2,64 @@ import { BrowserWindow, screen } from 'electron';
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
+/** Everything `shouldHideForForeground` needs — every OS-dependent value supplied by the caller. */
+export type ForegroundInput = {
+  /** Foreground window rect in DIP, or `null` when it could not be read. */
+  rect: Rect | null;
+  /** `Display.bounds` of the display the foreground window sits on. */
+  displayBounds: Rect;
+  /** `Display.workArea` of the same display — bounds minus the taskbar, when one is reserved. */
+  workArea: Rect;
+  /** Win32 `IsZoomed(hwnd)`: the foreground window is *maximized*, which is not fullscreen. */
+  isZoomed: boolean;
+  selfHwnd: bigint;
+  fgHwnd: bigint;
+  shellHwnds: bigint[];
+};
+
+/** DIP slack for rounding between the physical-pixel Win32 rect and Electron's DIP bounds. */
+const TOLERANCE = 2;
+
 /**
  * Decides whether the pet should hide because a *foreign* window covers a whole display.
  *
- * Pure so the policy is testable without Windows: every OS-dependent value (the foreground rect,
- * the display it sits on, and the three window handles) is supplied by the caller. All rects must
- * already be in the same coordinate space — `startForegroundWatch` converts the physical-pixel rect
- * Win32 hands back into Electron's DIP space before calling this.
+ * Pure so the policy is testable without Windows: `startForegroundWatch` converts the
+ * physical-pixel rect Win32 hands back into Electron's DIP space before calling this.
  *
- * The tolerance is deliberately tight: a real fullscreen window matches the display bounds exactly,
- * while a *maximized* window overhangs by the invisible resize border (±8 px at 100% scaling) and
- * stops short of the taskbar, so it stays outside the ±1/±2 window and does not hide her.
+ * Two things the previous equality test got wrong:
+ *  - *Containment, not equality.* A borderless fullscreen window may overhang the display slightly
+ *    (multi-monitor spanning, or a game that sizes to the virtual desktop). Requiring exact width
+ *    and height missed those, so the pet floated over them.
+ *  - *Maximized is not fullscreen.* With an auto-hidden taskbar (`workArea === bounds`) a
+ *    custom-framed maximized window's rect equals the display exactly and no geometry can tell the
+ *    two apart — `IsZoomed` is the only signal, so it vetoes there. When the taskbar *does* reserve
+ *    space, a maximized window physically cannot cover the display, so containment already excludes
+ *    it and a zoomed flag must not veto a genuine fullscreen window.
  */
-export function shouldHideForForeground(fg: Rect | null, display: Rect, selfHwnd: bigint, fgHwnd: bigint, shellHwnds: bigint[]): boolean {
-  if (!fg || fgHwnd === 0n) return false;
+export function shouldHideForForeground(input: ForegroundInput): boolean {
+  const { rect, displayBounds, workArea, isZoomed, selfHwnd, fgHwnd, shellHwnds } = input;
+  if (!rect || fgHwnd === 0n) return false;
   if (fgHwnd === selfHwnd || shellHwnds.includes(fgHwnd)) return false;
-  const covers = Math.abs(fg.x - display.x) <= 1 && Math.abs(fg.y - display.y) <= 1
-    && Math.abs(fg.width - display.width) <= 2 && Math.abs(fg.height - display.height) <= 2;
-  return covers;
+
+  const taskbarReserved = workArea.width < displayBounds.width || workArea.height < displayBounds.height;
+  if (isZoomed && !taskbarReserved) return false;
+
+  return rect.x <= displayBounds.x + TOLERANCE
+    && rect.y <= displayBounds.y + TOLERANCE
+    && rect.x + rect.width >= displayBounds.x + displayBounds.width - TOLERANCE
+    && rect.y + rect.height >= displayBounds.y + displayBounds.height - TOLERANCE;
 }
 
 /** koffi returns `uintptr_t` as a Number while it fits in a double, and as a BigInt beyond that. */
 type Handle = number | bigint;
 type RectOut = { left: number; top: number; right: number; bottom: number };
 
-type Win32 = {
+export type Win32 = {
   GetForegroundWindow(): Handle;
   GetShellWindow(): Handle;
   GetDesktopWindow(): Handle;
   GetWindowRect(hwnd: Handle, out: RectOut): boolean;
+  IsZoomed(hwnd: Handle): boolean;
 };
 
 function toHwnd(value: Handle): bigint {
@@ -55,6 +84,7 @@ function loadWin32(): Win32 | null {
       GetShellWindow: user32.func('uintptr_t __stdcall GetShellWindow()'),
       GetDesktopWindow: user32.func('uintptr_t __stdcall GetDesktopWindow()'),
       GetWindowRect: user32.func('bool __stdcall GetWindowRect(uintptr_t hwnd, _Out_ DS_RECT* rect)'),
+      IsZoomed: user32.func('bool __stdcall IsZoomed(uintptr_t hwnd)'),
     } as unknown as Win32;
   } catch (err) {
     console.warn('[foreground] koffi unavailable, fullscreen hiding disabled:', err);
@@ -74,37 +104,75 @@ function toDip(rect: Rect): Rect {
   return typeof screen.screenToDipRect === 'function' ? screen.screenToDipRect(null, rect) : rect;
 }
 
+export type ForegroundWatch = {
+  stop(): void;
+  /** Polls now instead of waiting out the interval — for `resume` and `unlock-screen`. */
+  recheck(): void;
+};
+
 /**
  * Polls the foreground window and reports transitions of "should the pet be hidden".
- * Returns a stop function; a missing/failing koffi makes this a no-op that never hides her.
+ * A missing/failing koffi makes this a no-op that never hides her.
+ *
+ * `api` exists for tests only: everything below the pure policy is Win32, and the immediate-first-
+ * poll behaviour is exactly what cannot be proved by launching the real thing in CI.
  */
-export function startForegroundWatch(win: BrowserWindow, onChange: (hide: boolean) => void, intervalMs = 2000): () => void {
-  const api = loadWin32();
-  if (!api) return () => { /* hiding disabled */ };
+export function startForegroundWatch(
+  win: BrowserWindow,
+  onChange: (hide: boolean) => void,
+  options: { intervalMs?: number; api?: Win32 | null } = {},
+): ForegroundWatch {
+  const { intervalMs = 2000 } = options;
+  const api = options.api === undefined ? loadWin32() : options.api;
+  if (!api) return { stop: () => { /* hiding disabled */ }, recheck: () => { /* hiding disabled */ } };
 
   const handle = win.getNativeWindowHandle();
   // 8 bytes on x64/arm64, 4 on ia32.
   const selfHwnd = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
 
   let lastHide = false;
-  const timer = setInterval(() => {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  // Cleared by `stop()` — whether that came from shutdown, a destroyed window or a failed poll.
+  // Nothing re-arms afterwards, so a hard failure cannot come back as a 0.5 Hz error stream.
+  let armed = true;
+  const stop = (): void => {
+    armed = false;
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  };
+
+  /**
+   * One poll. Run immediately at start (and on resume/unlock) rather than only after `intervalMs`:
+   * otherwise every transition is stale for up to 2 s — the pet floats over a game for two seconds
+   * after it goes fullscreen, and a stale `fullscreen: true` keeps her hidden for two seconds after
+   * the machine wakes.
+   */
+  const pollOnce = (): void => {
     if (win.isDestroyed()) {
       // The window is gone; an armed interval holding a dead BrowserWindow forever is a leak.
-      clearInterval(timer);
+      stop();
       return;
     }
     try {
       const fgHwnd = toHwnd(api.GetForegroundWindow());
       const out: RectOut = { left: 0, top: 0, right: 0, bottom: 0 };
       const ok = fgHwnd !== 0n && api.GetWindowRect(fgHwnd, out);
-      const fg: Rect | null = ok
+      const rect: Rect | null = ok
         ? toDip({ x: out.left, y: out.top, width: out.right - out.left, height: out.bottom - out.top })
         : null;
-      const display = fg ? screen.getDisplayMatching(fg).bounds : screen.getPrimaryDisplay().bounds;
+      const display = rect ? screen.getDisplayMatching(rect) : screen.getPrimaryDisplay();
       // Re-read rather than cache: Progman's handle changes when Explorer restarts, and a stale one
       // would make a click on the desktop (whose window does cover the display) look like fullscreen.
       const shellHwnds = [toHwnd(api.GetShellWindow()), toHwnd(api.GetDesktopWindow())];
-      const hide = shouldHideForForeground(fg, display, selfHwnd, fgHwnd, shellHwnds);
+      const hide = shouldHideForForeground({
+        rect,
+        displayBounds: display.bounds,
+        workArea: display.workArea,
+        isZoomed: ok ? api.IsZoomed(fgHwnd) === true : false,
+        selfHwnd,
+        fgHwnd,
+        shellHwnds,
+      });
       if (hide !== lastHide) {
         lastHide = hide;
         onChange(hide);
@@ -112,13 +180,16 @@ export function startForegroundWatch(win: BrowserWindow, onChange: (hide: boolea
     } catch (err) {
       // One bad poll must not turn into a 0.5 Hz error stream, and it must not leave her hidden.
       console.warn('[foreground] poll failed, fullscreen hiding disabled:', err);
-      clearInterval(timer);
+      stop();
       if (lastHide) {
         lastHide = false;
         onChange(false);
       }
     }
-  }, intervalMs);
+  };
 
-  return () => clearInterval(timer);
+  pollOnce();
+  // A poll that failed hard (or a window already gone) called stop(); do not arm the interval.
+  if (armed) timer = setInterval(pollOnce, intervalMs);
+  return { stop, recheck: () => { if (armed) pollOnce(); } };
 }
