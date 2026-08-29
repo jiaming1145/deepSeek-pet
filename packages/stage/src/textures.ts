@@ -29,8 +29,12 @@ export function loadTexture(
         // Settle first: cleanup on a lost context can throw too, and a pending promise is the one
         // failure the caller cannot recover from.
         reject(new Error(`texture upload failed: ${url}`, { cause: e }));
-        gl.bindTexture(gl.TEXTURE_2D, null);
-        if (tex) gl.deleteTexture(tex);
+        try {
+          gl.bindTexture(gl.TEXTURE_2D, null);
+          if (tex) gl.deleteTexture(tex);
+        } catch {
+          // Lost context: nothing left to free, and an exception here would escape the DOM handler.
+        }
       } finally {
         // UNPACK_PREMULTIPLY_ALPHA_WEBGL is global to the context and defaults to 0; leaving it set
         // would silently change every later upload, including the failure path's.

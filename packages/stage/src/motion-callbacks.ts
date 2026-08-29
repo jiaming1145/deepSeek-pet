@@ -27,6 +27,8 @@ export interface MotionCompletionSource {
  */
 export class MotionFinishTracker {
   private entries: { handle: MotionHandle; onFinished: () => void }[] = [];
+  /** Bumped by clear(); a flush in progress stops invoking callbacks once it changes. */
+  private generation = 0;
 
   /** Remembers `onFinished` for one playback. Callers with no callback simply do not call this. */
   track(handle: MotionHandle, onFinished: () => void): void {
@@ -54,11 +56,17 @@ export class MotionFinishTracker {
     }
     if (finished.length === 0) return;
     this.entries = still;
-    for (const onFinished of finished) onFinished();
+    const generation = this.generation;
+    for (const onFinished of finished) {
+      // A callback that releases the model calls clear(); the rest of this batch must not fire.
+      if (this.generation !== generation) break;
+      onFinished();
+    }
   }
 
   /** Drops every pending callback without running it (disposal: nothing should fire after release). */
   clear(): void {
+    this.generation++;
     this.entries = [];
   }
 }

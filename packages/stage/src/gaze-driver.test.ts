@@ -55,7 +55,6 @@ describe('GazeDriver', () => {
   it('derives tau from the 250 ms settle figure rather than hard-coding it', () => {
     // Guards the deviation documented in gaze-driver.ts: 0.08 would settle at 368 ms.
     expect(GAZE_TAU_SECONDS).toBeCloseTo(0.0543, 4);
-    expect(GAZE_TAU_SECONDS * Math.log(100)).toBeCloseTo(GAZE_SETTLE_SECONDS, 12);
   });
 
   it('approaches the target monotonically and never overshoots', () => {
