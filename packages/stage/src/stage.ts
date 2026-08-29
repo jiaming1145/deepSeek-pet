@@ -9,7 +9,9 @@ import {
   type MotionRef,
 } from './character';
 import { CompanionModel, Priority } from './companion-model';
+import { ViewportFit, withOffscreenFrame } from './frame';
 import { TextMouthDriver, type MouthDriver } from './mouth';
+import type { Rng } from './rng';
 import { Ticker } from './ticker';
 import { ViewTransform } from './view';
 
@@ -44,6 +46,7 @@ export class Live2DStage {
   private view = new ViewTransform(1, 1);
   private readonly viewMatrix = new CubismViewMatrix();
   private readonly ticker: Ticker;
+  private readonly fit = new ViewportFit();
   private disposed = false;
 
   private constructor(
@@ -69,6 +72,8 @@ export class Live2DStage {
     shaderPath: string;
     mouth?: MouthDriver;
     preserveDrawingBuffer?: boolean;
+    /** Seeded under `?test=1` so idle-motion picks are deterministic (spec §9). */
+    rng?: Rng;
   }): Promise<Live2DStage> {
     if (typeof Live2DCubismCore === 'undefined') {
       throw new Error('live2dcubismcore.min.js must be loaded via <script> before the stage');
@@ -103,6 +108,7 @@ export class Live2DStage {
         gl,
         shaderPath: opts.shaderPath,
         mouth,
+        rng: opts.rng,
       });
     } catch (e) {
       // The manager holds contexts in a strong Map keyed by the GL context, so a failed load (404,
@@ -131,8 +137,22 @@ export class Live2DStage {
     this.viewMatrix.setMinScale(0.8);
     this.viewMatrix.setMaxScreenRect(-2, 2, -2, 2);
     // Same call frame() makes, so a hit test before the first frame sees the same model matrix.
-    if (this.fitByWidth(w, h)) this.model.getModelMatrix().setWidth(2);
+    this.applyFit(w, h);
     this.model.setRenderTargetSize(w, h);
+  }
+
+  /**
+   * Re-derives the model matrix from the model3.json Layout baseline whenever the fit state flips.
+   *
+   * The old code called `setWidth(2)` on every portrait frame and never restored anything, so a
+   * wider-than-tall model with no Layout Width, resized portrait -> landscape, stayed at portrait
+   * scale for the rest of the session.
+   */
+  private applyFit(w: number, h: number): void {
+    const baseline = this.model.getLayoutMatrix();
+    const matrix = this.model.getModelMatrix();
+    if (!baseline || !matrix) return; // pre-setup or post-release: nothing to fit
+    this.fit.apply(matrix, baseline, this.fitByWidth(w, h));
   }
 
   setFps(fps: 30 | 60): void {
@@ -182,15 +202,14 @@ export class Live2DStage {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    const offscreen = CubismWebGLOffscreenManager.getInstance();
-    offscreen.beginFrameProcess(gl);
-    if (this.fitByWidth(w, h)) this.model.getModelMatrix().setWidth(2);
-    const projection = this.projection(w, h);
-
-    this.model.tick(dt);
-    this.model.draw(projection, null, [0, 0, w, h]);
-    offscreen.endFrameProcess(gl);
-    offscreen.releaseStaleRenderTextures(gl);
+    // try/finally inside: a throw from tick() or draw() must not leave the offscreen manager
+    // mid-frame with its stale render textures unreleased.
+    withOffscreenFrame(CubismWebGLOffscreenManager.getInstance(), gl, () => {
+      this.applyFit(w, h);
+      const projection = this.projection(w, h);
+      this.model.tick(dt);
+      this.model.draw(projection, null, [0, 0, w, h]);
+    });
   }
 
   private toDevice(clientX: number, clientY: number): { x: number; y: number } {
