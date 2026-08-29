@@ -11,5 +11,8 @@
     "baseUrl": ".",
     "paths": { "@framework/*": ["../../vendor/CubismWebFramework/src/*"] }
   },
-  "include": ["src/renderer", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"]
+  // "tests" lives in THIS program, not the main one: stage.spec.ts imports the ?test=1 hook type
+  // from src/renderer/pet/main.ts, which drags in @ds/stage and the vendored Framework - only this
+  // config has the @framework path mapping, the DOM lib and the three relaxations they need.
+  "include": ["src/renderer", "tests", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"]
 }
