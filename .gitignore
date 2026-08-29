@@ -1,0 +1,19 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+# Proprietary Live2D Core — never commit (Proprietary Software License §5.3.2)
+vendor/core/
+# Live2D sample models — Free Material License forbids redistribution
+characters/*/model/
+# generated copies for the renderer
+apps/desktop/public/live2d/
+apps/desktop/public/characters/
+# downloaded SDK archive cache
+.cache/
+# playwright
+apps/desktop/test-results/
+apps/desktop/playwright-report/
+# agent scratch (SDD ledger, briefs, review packages)
+.superpowers/
