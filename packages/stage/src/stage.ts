@@ -95,13 +95,23 @@ export class Live2DStage {
     // call is only about starting from a known size rather than the 0x0 default.
     CubismWebGLOffscreenManager.getInstance().initialize(gl, opts.canvas.width, opts.canvas.height);
 
-    const model = await CompanionModel.load({
-      baseUrl: base,
-      modelJson: config.model,
-      gl,
-      shaderPath: opts.shaderPath,
-      mouth,
-    });
+    let model: CompanionModel;
+    try {
+      model = await CompanionModel.load({
+        baseUrl: base,
+        modelJson: config.model,
+        gl,
+        shaderPath: opts.shaderPath,
+        mouth,
+      });
+    } catch (e) {
+      // The manager holds contexts in a strong Map keyed by the GL context, so a failed load (404,
+      // moc-version guard) would otherwise pin this WebGL2 context - and its framebuffers/textures
+      // if the renderer already registered lazily - for the process lifetime. Browsers cap live
+      // contexts at ~16, so a retry loop would run the app out of contexts.
+      CubismWebGLOffscreenManager.getInstance().removeContext(gl);
+      throw e;
+    }
     model.idleGroup = config.idleGroup;
     return new Live2DStage(opts.canvas, gl, config, model, mouth);
   }
@@ -130,6 +140,7 @@ export class Live2DStage {
   }
 
   start(): void {
+    if (this.disposed) return; // frame() would run against a released model
     this.ticker.start();
   }
 
@@ -166,8 +177,8 @@ export class Live2DStage {
     gl.clearColor(0, 0, 0, 0); // transparent background (the sample clears to opaque black)
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.clearDepth(1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -184,6 +195,7 @@ export class Live2DStage {
 
   private toDevice(clientX: number, clientY: number): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return { x: 0, y: 0 }; // detached/hidden canvas -> no NaN
     // Normalise against the rendered box rather than multiplying by devicePixelRatio: the two agree
     // once resize() has run, but the ratio form stays correct while the backing store is still stale
     // (CSS box already resized, resize() not called yet) and if the canvas is CSS-scaled.
