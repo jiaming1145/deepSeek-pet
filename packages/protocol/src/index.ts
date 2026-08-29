@@ -8,6 +8,7 @@ export const Channels = {
   stageSetFps: 'stage:setFps',
   debugExpression: 'debug:expression',
   debugMotion: 'debug:motion',
+  debugToggle: 'debug:toggle',
   // pet renderer → main
   avatarHover: 'avatar:hover',
   avatarTap: 'avatar:tap',
@@ -28,6 +29,8 @@ export const Schemas = {
   [Channels.stageSetFps]: z.object({ fps: z.union([z.literal(30), z.literal(60)]) }),
   [Channels.debugExpression]: z.object({ name: z.string().nullable() }),
   [Channels.debugMotion]: z.object({ group: z.string(), index: z.number().int().nonnegative() }),
+  [Channels.debugToggle]: z.object({}), // show/hide the renderer's debug panel
+
   [Channels.avatarHover]: z.object({ inside: z.boolean() }),
   [Channels.avatarTap]: z.object({ hitArea: z.string() }),
   [Channels.avatarDrag]: z.object({ dx: z.number(), dy: z.number() }), // screen px since last event
@@ -58,5 +61,5 @@ export const RENDERER_TO_MAIN: readonly Channel[] = [
 ];
 export const MAIN_TO_RENDERER: readonly Channel[] = [
   Channels.gazeCursor, Channels.shellVisibility, Channels.stageSetFps,
-  Channels.debugExpression, Channels.debugMotion,
+  Channels.debugExpression, Channels.debugMotion, Channels.debugToggle,
 ];
