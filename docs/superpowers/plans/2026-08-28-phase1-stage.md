@@ -1767,6 +1767,15 @@ git commit -m "feat(desktop): pet renderer page, debug panel, hover tracker, Pla
   - `cursor.ts`: `startCursorPolling(win, hz = 30): () => void` — emits `gaze:cursor` in window-local CSS px.
   - `tray.ts`: `createTray(actions: { toggleVisible(): void; toggleDebug(): void; quit(): void }): Tray`.
 
+- [ ] **Step 0: Let pnpm run Electron's postinstall** (pnpm 10 blocks build scripts by default, so `node_modules/electron/dist` is missing after Task 6)
+
+Add to `pnpm-workspace.yaml`:
+```yaml
+onlyBuiltDependencies:
+  - electron
+```
+then run `pnpm install` and verify `node_modules/.pnpm/electron@43.4.1/node_modules/electron/dist/electron.exe` exists (`pnpm exec electron --version` prints `v43.4.1`).
+
 - [ ] **Step 1: Failing window-state test**
 
 `apps/desktop/src/main/window-state.test.ts`:
