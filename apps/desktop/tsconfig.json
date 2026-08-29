@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["node"], "lib": ["ES2022"] },
+  "include": ["src/main", "src/preload", "electron.vite.config.ts", "vite.browser.config.ts", "playwright.config.ts"]
+}
