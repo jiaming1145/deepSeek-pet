@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    // Mirrors packages/stage/tsconfig.json: the vendored Cubism Framework src is compiled as part of
+    // this program (reached through @framework/*), and it needs these three relaxations to build.
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "useDefineForClassFields": false,
+    "experimentalDecorators": true,
+    "baseUrl": ".",
+    "paths": { "@framework/*": ["../../vendor/CubismWebFramework/src/*"] }
+  },
+  "include": ["src/renderer", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"]
+}
