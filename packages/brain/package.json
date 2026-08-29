@@ -1,0 +1,16 @@
+{
+  "name": "@ds/brain",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ds/protocol": "workspace:*",
+    "zod": "^4.0.0"
+  }
+}
