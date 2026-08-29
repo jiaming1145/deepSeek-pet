@@ -6,4 +6,6 @@ export * from './sanitize.ts';
 export * from './slop-lint.ts';
 export * from './persona.ts';
 export * from './prompt.ts';
+export * from './deepseek.ts';
+export * from './turn.ts';
 export * from './ports.ts';
