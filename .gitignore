@@ -17,3 +17,5 @@ apps/desktop/test-results/
 apps/desktop/playwright-report/
 # agent scratch (SDD ledger, briefs, review packages)
 .superpowers/
+# agent worktrees
+.claude/worktrees/
