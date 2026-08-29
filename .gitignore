@@ -21,3 +21,16 @@ apps/desktop/playwright-report/
 .claude/worktrees/
 # gpt-collab MCP session state (agent scratch, like .superpowers/)
 .gptmcp/
+# secrets and key material — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+# MCP / tool scratch. Only the generated subdirectories: apps/desktop/.impeccable/config.json is
+# checked in on purpose, so `.impeccable/` as a whole must NOT be ignored.
+.playwright-mcp/
+**/.impeccable/mocks/
+**/.impeccable/review/
