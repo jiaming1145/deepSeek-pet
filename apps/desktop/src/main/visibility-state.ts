@@ -51,3 +51,73 @@ export class VisibilityState {
     return FLAGS.map((flag) => `${flag}=${this.flags[flag]}`).join(' ');
   }
 }
+
+/** What `shell:visibility` carries — the pair the renderer needs to stop or restart its loop. */
+export type VisibilityVerdict = { hidden: boolean; reason: VisibilityReason };
+
+/**
+ * The slice of `BrowserWindow` the reconciler touches. Narrow on purpose: the reconciliation is the
+ * one place that decides whether the pet is on screen, so it has to be provable with a fake window
+ * rather than only observable by launching Electron.
+ */
+export type VisibilityWindow = {
+  isDestroyed(): boolean;
+  hide(): void;
+  showInactive(): void;
+};
+
+export type VisibilityDeps = {
+  /** Late-bound: the controller exists before the window does, and outlives a destroyed one. */
+  window: () => VisibilityWindow | null;
+  send: (verdict: VisibilityVerdict) => void;
+  setCursorPaused?: (paused: boolean) => void;
+  log?: (line: string) => void;
+};
+
+export type VisibilityController = {
+  set(flag: VisibilityFlag, value: boolean): void;
+  get(flag: VisibilityFlag): boolean;
+  readonly verdict: VisibilityVerdict;
+  /** Drives the window, the cursor poll and the renderer to the current verdict. */
+  apply(): void;
+  /** Re-sends the current verdict without touching the window (renderer-side resync). */
+  resend(): void;
+};
+
+/**
+ * The single owner of whether the pet is on screen.
+ *
+ * Every path that can hide or show her — the tray toggle, the power monitor, the foreground watch,
+ * and the window's own first paint — goes through `apply()`, so no path can show her while another
+ * reason to be hidden is still live. `ready-to-show` in particular must *not* call `showInactive()`
+ * itself: a hide that lands during the ~1 s of renderer startup would be silently undone.
+ *
+ * `apply()` sends `shell:visibility` on every invocation, not only on a change, because the
+ * renderer installs its listener late (after the Live2D model loads) and needs the latest verdict
+ * whenever it asks for it — see `resend()`, which the `stage:ready` handler calls.
+ */
+export function createVisibilityController(deps: VisibilityDeps): VisibilityController {
+  const state = new VisibilityState();
+  const verdict = (): VisibilityVerdict => ({ hidden: state.hidden, reason: state.reason });
+  return {
+    set: (flag, value) => state.set(flag, value),
+    get: (flag) => state.get(flag),
+    get verdict(): VisibilityVerdict {
+      return verdict();
+    },
+    apply(): void {
+      const win = deps.window();
+      if (!win || win.isDestroyed()) return;
+      const v = verdict();
+      (deps.log ?? console.log)(`[shell] ${v.hidden ? 'hide' : 'show'} reason=${v.reason} ${state.describe()}`);
+      // showInactive, never show: reappearing must not steal focus from the app the user is in.
+      if (v.hidden) win.hide();
+      else win.showInactive();
+      deps.setCursorPaused?.(v.hidden);
+      deps.send(v);
+    },
+    resend(): void {
+      deps.send(verdict());
+    },
+  };
+}
