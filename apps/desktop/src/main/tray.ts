@@ -1,4 +1,4 @@
-import { app, Menu, Tray, nativeImage } from 'electron';
+import { app, Menu, Tray, nativeImage, type NativeImage } from 'electron';
 import { join } from 'node:path';
 
 // Stable tray GUID for the *packaged* app only (spec §7). Generated once with
@@ -7,15 +7,30 @@ import { join } from 'node:path';
 // user's "always show" preference in the systray overflow). Never regenerate at runtime.
 const TRAY_GUID = '204bbcbc-4990-403d-83b2-577785f13b41';
 
+/**
+ * A 16x16 white disc, PNG, base64. Embedded rather than read from disk because it exists precisely
+ * for the case where the on-disk icon is missing or unreadable: `new Tray(emptyImage)` produces a
+ * tray entry with no clickable target at all, and with `skipTaskbar` and the pet hidden, that
+ * leaves the process with no show or quit control whatsoever.
+ */
+const FALLBACK_ICON_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANklEQVR42mP4//8/AyUYlwQuQJQBhABeA4gFWA0gFaAY'
+  + 'QC4YNYCaBlAcjVRJSFRJylTJTCRhAJIsmJISbBmQAAAAAElFTkSuQmCC';
+
+/** Never returns an empty image: an invisible tray icon is an unusable app, not a cosmetic bug. */
+function loadTrayIcon(iconPath: string): NativeImage {
+  // createFromPath() returns an *empty* image (not a thrown error) when the file is missing.
+  const icon = nativeImage.createFromPath(iconPath);
+  if (!icon.isEmpty()) return icon;
+  console.warn('[tray] icon missing or undecodable at', iconPath, '— using the built-in fallback');
+  return nativeImage.createFromDataURL(`data:image/png;base64,${FALLBACK_ICON_PNG}`);
+}
+
 export function createTray(actions: { toggleVisible(): void; toggleDebug(): void; quit(): void }): Tray {
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, 'tray.png')
     : join(__dirname, '../../resources/tray.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  // createFromPath() returns an empty image (not a thrown error) when the file is missing, and
-  // `new Tray(empty)` silently produces an invisible tray icon. Still construct the tray so the
-  // menu/quit action stays reachable — just flag the missing asset loudly.
-  if (icon.isEmpty()) console.error('[tray] icon missing at', iconPath);
+  const icon = loadTrayIcon(iconPath);
   // GUID only when packaged: Windows binds a tray GUID to the *executable path* that first
   // registered it and refuses the icon for any other path (Shell_NotifyIcon fails, no icon at
   // all). Dev runs node_modules/.../electron.exe while a packaged build runs ds.exe, so passing
