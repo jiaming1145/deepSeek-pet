@@ -1,12 +1,9 @@
 export class ViewTransform {
-  private readonly ratio: number;
-  constructor(private readonly w: number, private readonly h: number) {
-    this.ratio = w / h;
-  }
-  /** device (canvas) pixels → Cubism view space: x in [-ratio, ratio] (or [-1,1] for landscape), y up. */
+  constructor(private readonly w: number, private readonly h: number) {}
+  /** device (canvas) pixels → Cubism view space: x in [-ratio, ratio] (or ±2 for landscape), y up. */
   toView(deviceX: number, deviceY: number): { x: number; y: number } {
-    // _deviceToScreen: scale by 2/max(w,h) in x, -2/max(w,h) in y, then translate by -w/2,-h/2
-    const s = 2 / (this.w > this.h ? this.w : this.h);
+    // _deviceToScreen: the sample scales by screenW/width (landscape) or screenH/height (portrait); with screenW = 2·ratio and screenH = 2 both reduce to 2/height, then translate by -w/2,-h/2
+    const s = 2 / this.h;
     const sx = (deviceX - this.w * 0.5) * s;
     const sy = (this.h * 0.5 - deviceY) * s;
     // _viewMatrix with ViewScale=1 and screen rect (-ratio..ratio, -1..1) is identity in this setup

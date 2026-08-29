@@ -12,9 +12,10 @@ describe('ViewTransform', () => {
     expect(p.x).toBeCloseTo(-0.5);
     expect(p.y).toBeCloseTo(1);
   });
-  it('maps left edge to x=-1 for a landscape canvas', () => {
+  it('maps left edge to x=-ratio (-2) for a landscape canvas', () => {
     const v = new ViewTransform(800, 400);
-    expect(v.toView(0, 200).x).toBeCloseTo(-1);
+    expect(v.toView(0, 200).x).toBeCloseTo(-2);
+    expect(v.toView(0, 0).y).toBeCloseTo(1);
   });
   it('clamps gaze to [-1,1] for points outside the canvas', () => {
     const v = new ViewTransform(400, 800);
