@@ -24,6 +24,15 @@ importers:
         specifier: ^4.0.0
         version: 4.5.2
 
+  packages/stage:
+    dependencies:
+      '@ds/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.5.2
+
 packages:
 
   '@esbuild/aix-ppc64@0.28.2':
