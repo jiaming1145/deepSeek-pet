@@ -28,6 +28,6 @@ export function serveRenderer(dir: string): void {
     const target = normalize(join(root, relative));
     // `..` in the URL must not escape the renderer directory.
     if (target !== root && !target.startsWith(root + sep)) return new Response('forbidden', { status: 403 });
-    return net.fetch(pathToFileURL(target).toString());
+    return net.fetch(pathToFileURL(target).toString()).catch(() => new Response('not found', { status: 404 }));
   });
 }
