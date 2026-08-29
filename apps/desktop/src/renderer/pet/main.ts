@@ -6,7 +6,9 @@ import { PressTracker, tapCandidates } from './press';
 import { createDebugToggle, inDebugPanel, overDebugPanel } from './debug-panel';
 
 const params = new URLSearchParams(location.search);
-const TEST = params.get('test') === '1';
+// Dev builds only: `import.meta.env.DEV` is a compile-time constant, so the whole hook surface is
+// tree-shaken out of the production bundle. Playwright drives the Vite dev server, which is DEV.
+const TEST = import.meta.env.DEV && params.get('test') === '1';
 const DEBUG = TEST || params.get('debug') === '1';
 const character = params.get('character') ?? 'haru';
 
@@ -67,6 +69,8 @@ async function main(): Promise<void> {
    * Safe to reference `stage` before its initialiser completes: the first draw happens on the first
    * `tick()`, which cannot run until `create()` has resolved and `start()` has been called.
    */
+  // Only the FIRST idle pick is recorded (that is what the determinism test pins); later idle picks
+  // do not update lastMotion, taps do.
   let drawn = 0;
   function noteFirstIdlePick(value: number): void {
     if (drawn++ > 0) return;

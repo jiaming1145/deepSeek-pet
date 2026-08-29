@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "types": ["vite/client"],
     "lib": ["ES2022", "DOM"],
     // Mirrors packages/stage/tsconfig.json: the vendored Cubism Framework src is compiled as part of
     // this program (reached through @framework/*), and it needs these three relaxations to build.
