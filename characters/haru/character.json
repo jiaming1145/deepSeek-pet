@@ -1,0 +1,13 @@
+{
+  "id": "haru",
+  "name": "小春",
+  "model": "model/Haru.model3.json",
+  "emotionMap": { "happy": "F01", "sad": "F02", "angry": "F03", "think": "F04",
+                  "surprised": "F05", "awkward": "F06", "question": "F07",
+                  "curious": "F08", "neutral": null },
+  "motionMap": { "nod": ["TapBody", 0], "shake": ["TapBody", 1], "wave": ["TapBody", 2], "think": ["TapBody", 3] },
+  "idleGroup": "Idle",
+  "tapMotions": { "Head": { "TapBody": [0, 1] }, "Body": { "TapBody": [2, 3] } },
+  "scale": 1.0,
+  "offsetY": 0.0
+}

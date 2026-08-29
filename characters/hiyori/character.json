@@ -1,0 +1,13 @@
+{
+  "id": "hiyori",
+  "name": "日和",
+  "model": "model/Hiyori.model3.json",
+  "emotionMap": { "happy": ["TapBody", 0], "sad": null, "angry": null, "think": null,
+                  "surprised": ["TapBody", 0], "awkward": null, "question": null,
+                  "curious": null, "neutral": null },
+  "motionMap": { "nod": ["TapBody", 0] },
+  "idleGroup": "Idle",
+  "tapMotions": { "Body": { "TapBody": [0] } },
+  "scale": 1.0,
+  "offsetY": 0.0
+}
