@@ -2234,6 +2234,13 @@ powerMonitor.on('resume', () => { systemHidden = false; applyVisibility('none');
 ```
 and replace the tray `toggleVisible` body with `userHidden = !userHidden; applyVisibility('none');`; call `stopForeground()` in `before-quit`.
 
+- [ ] **Step 3b: Renderer side of `debug:toggle` + debug-panel interaction (handoff from Task 7)**
+
+Task 7 added the `debug:toggle` channel (`Channels.debugToggle`, `MAIN_TO_RENDERER`) and sends it from the tray's "调试面板" item, but left the renderer handler for this task. In `apps/desktop/src/renderer/pet/main.ts`:
+1. Subscribe: `bridge?.on(Channels.debugToggle, () => toggleDebugPanel())` where `toggleDebugPanel()` mounts the panel on first use (`mountDebugPanel(root, stage)`) and afterwards toggles `root.classList.toggle('show')`.
+2. The panel lives inside the click-through window, so it is only clickable where it overlaps the model's hit areas, and a click on a panel button also falls through to the canvas tap logic. Fix both: (a) treat "pointer is over `#debug` while it is shown" as `inside = true` in the hover sampling (`hover.sample(hit !== null || overDebugPanel(e), …)` for both DOM `mousemove` and `gaze:cursor` — compute `overDebugPanel` from `#debug.getBoundingClientRect()` when it has class `show`); (b) in the `mousedown`/`mouseup` handlers, `return` early when `e.target` is inside `#debug` so panel clicks never start a drag or fire `avatar:tap`.
+3. Add a `HoverTracker`-independent unit test? No — this is DOM wiring; verify manually in Step 4 (item 4 below).
+
 - [ ] **Step 4: Verify**
 
 ```powershell
@@ -2242,6 +2249,7 @@ pnpm --filter @ds/desktop typecheck
 $env:DS_DEBUG='1'; pnpm dev
 ```
 Manual checks, each with evidence:
+4. Tray → 调试面板 toggles the panel; every panel button is clickable anywhere on the panel (not just over Haru), and clicking a button neither drags the window nor plays a tap motion.
 1. Open a YouTube video in Edge and press F11 → within 2 s Haru disappears; leave fullscreen → she returns. Screenshot the fullscreen state as `docs/evidence/phase1/desktop-fullscreen-hidden.png` (she must be absent).
 2. `Win+L`, unlock → she returns; the renderer resumed (gaze follows cursor again).
 3. In Task Manager, GPU/CPU of the `ds` process drops when the cursor is away (30 FPS) vs hovering (60 FPS).
