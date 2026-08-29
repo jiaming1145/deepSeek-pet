@@ -63,6 +63,11 @@ export class PressTracker {
    * the defect the slop check exists to prevent.
    */
   private consumed = false;
+  /**
+   * The press began on a transparent pixel (the window is not click-through while hovered, so main
+   * does receive it). Releasing over her after sliding across must not read as a tap on her.
+   */
+  private offModel = false;
 
   constructor(private readonly opts: PressTrackerOptions) {}
 
@@ -70,13 +75,17 @@ export class PressTracker {
     if (e.button !== 0) return;
     this.rejected = false;
     this.consumed = false;
+    this.offModel = false;
     // Pressing a debug-panel control must not grab the window: the panel would run away from the
     // pointer and the click would never reach the button.
     if (this.opts.isRejected(e.target)) {
       this.rejected = true;
       return;
     }
-    if (this.opts.hitTest(e.clientX, e.clientY) === null) return;
+    if (this.opts.hitTest(e.clientX, e.clientY) === null) {
+      this.offModel = true;
+      return;
+    }
     this.drag = { x: e.screenX, y: e.screenY, moved: 0 };
     this.opts.onDragStart?.();
   }
@@ -101,10 +110,11 @@ export class PressTracker {
   mouseup(e: PressEvent): void {
     if (e.button !== 0) return;
     const press = this.drag;
-    const rejected = this.rejected || this.consumed;
+    const rejected = this.rejected || this.consumed || this.offModel;
     this.drag = null;
     this.rejected = false;
     this.consumed = false;
+    this.offModel = false;
     // Anything that moved already sent drag deltas, so main always gets its terminator.
     if (press && press.moved > 0) this.opts.onDragEnd();
     // A real drag ends there: letting go after moving the window must not also fire a tap. A press

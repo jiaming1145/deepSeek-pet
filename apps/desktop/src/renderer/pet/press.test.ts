@@ -111,3 +111,22 @@ describe('tapCandidates', () => {
     expect(tapCandidates({ TapBody: [], TapHead: [3] })).toEqual([['TapHead', 3]]);
   });
 });
+
+describe('PressTracker — press that starts off the model', () => {
+  it('does not tap when the button is released over her', () => {
+    const { tracker, log } = harness();
+    tracker.mousedown(ev({ clientX: 10, clientY: 10 })); // transparent corner
+    tracker.mousemove(ev({ clientX: 150, clientY: 150 }));
+    tracker.mouseup(ev({ clientX: 150, clientY: 150 })); // over Head
+    expect(log).toEqual([]);
+  });
+
+  it('still taps on the next clean press on her', () => {
+    const { tracker, log } = harness();
+    tracker.mousedown(ev({ clientX: 10, clientY: 10 }));
+    tracker.mouseup(ev({ clientX: 150, clientY: 150 }));
+    tracker.mousedown(ev({ clientX: 150, clientY: 150 }));
+    tracker.mouseup(ev({ clientX: 150, clientY: 150 }));
+    expect(log).toEqual(['dragStart', 'tap:Head']);
+  });
+});
