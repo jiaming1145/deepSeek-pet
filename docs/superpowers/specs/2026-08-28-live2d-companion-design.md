@@ -49,9 +49,9 @@ D:\ds
   packages/sim            stats model + scheduler — pure TS, injectable clock
   packages/memory         SQLite store, summarizer, core-memory consolidation, episode retrieval
   packages/stage          Cubism wrapper, MouthDriver, GazeDriver — browser only
-  characters/haru, hiyori model3.json + assets + character.json
+  characters/haru, hiyori character.json (committed) + model/ (GITIGNORED — Free Material License forbids redistributing the raw files; fetched by scripts/fetch-sdk.mjs)
   vendor/CubismWebFramework   git submodule @ 5-r.5
-  vendor/core/            live2dcubismcore.min.js — GITIGNORED, fetched by scripts/fetch-core.mjs
+  vendor/core/            live2dcubismcore.min.js + .d.ts — GITIGNORED, extracted from the SDK zip by scripts/fetch-sdk.mjs (the public CDN file is Core 5 and lacks the `offscreens` struct that Framework 5-r.5 requires; Core 6 ships only in the zip)
   docs/research, docs/superpowers/specs
 ```
 
@@ -129,19 +129,18 @@ Validates `moc3` version at load (`getMocVersionFromBuffer`) and surfaces a clea
 {
   "card": { "...Character Card V3 fields..." },
   "model": "Haru.model3.json",
-  "emotionMap": { "happy": "f01", "sad": "f03", "angry": "f04", "think": "f02",
-                  "surprised": "f05", "awkward": "f06", "question": "f07",
-                  "curious": "f08", "neutral": null },
+  "emotionMap": { "happy": "F01", "sad": "F03", "angry": "F04", "think": "F02",
+                  "surprised": "F05", "awkward": "F06", "question": "F07",
+                  "curious": "F08", "neutral": null },
   "motionMap": { "nod": ["TapBody", 0], "shake": ["TapBody", 1], "wave": ["TapBody", 2] },
   "idleGroup": "Idle",
   "thinkMotion": ["TapBody", 3],
   "tapMotions": { "Head": { "TapBody": [0, 1] }, "Body": { "TapBody": [2] } },
   "cannedLines": { "tap": ["干嘛戳我～", "嗯？"], "offline": ["网络不太好呢…"] },
-  "lipSyncParams": ["ParamMouthOpenY"],
   "scale": 0.22, "anchor": [0.5, 1.0]
 }
 ```
-Haru's actual expression IDs (f01–f08) and TapBody indices are confirmed when the model is opened in Phase 1 and the map is filled then; the mapping above is illustrative. Hiyori has no expressions — emotions map to motions only (`emotionMap` values may be `["group", i]`).
+Verified from the 5-r.5 SDK: Haru has expressions `F01`–`F08`, motion groups `Idle` (2) and `TapBody` (4, each with a `.wav` we do not play), hit areas `Head` and `Body`, LipSync group `ParamMouthOpenY`. Hiyori has **no expressions**, `Idle` (9), `TapBody` (1), hit area `Body` only — its emotions map to motions (`emotionMap` values may be `["group", i]`). Which of Haru's F01–F08 means which emotion is decided by looking at them in Phase 1's debug panel. LipSync/EyeBlink parameter ids are read from the model3.json `Groups`, not from `character.json`.
 
 ### 4.3 Gaze
 Main polls `screen.getCursorScreenPoint()` at 30 Hz, converts to pet-window coordinates, sends `gaze:cursor`. `GazeDriver` eases toward the target (critically damped, ~250 ms) and drifts back to center after 3 s idle. Random blink 2–6 s, breath from the Framework.
@@ -213,8 +212,8 @@ No embeddings in v1 (DeepSeek offers none; Chinese-capable vector search is phas
 Out of scope for v1 (separate specs later): voice (STT/TTS/lip-sync, `AudioMouthDriver`), vector memory, screen awareness/vision, user-uploaded models, web build, code signing, any compliance features.
 
 ## 11. Licensing notes
-- Cubism Core: proprietary, fetched from `https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js` at install time (verified live 2026-08-28), gitignored, and excluded from the repo license via `NOTICE`. Shipping it inside the packaged app is permitted (Proprietary Software License §5.1).
+- Cubism Core: proprietary. `scripts/fetch-sdk.mjs` downloads `https://cubism.live2d.com/sdk-web/bin/CubismSdkForWeb-5-r.5.zip` (verified live 2026-08-28, 20.7 MB, contains Core 06.00) and extracts `Core/live2dcubismcore.min.js` + `.d.ts` into `vendor/core/` (gitignored) and excluded from the repo license via `NOTICE`. Shipping it inside the packaged app is permitted (Proprietary Software License §5.1). The public CDN copy is Core 5 and is incompatible with Framework 5-r.5 — do not use it.
 - CubismWebFramework: Live2D Open Software License (submodule, unmodified).
-- Sample models: Live2D Free Material License; required credit line in Settings → 关于 and README: *"This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion."* Hiyori's design must not be altered.
+- Sample models: Live2D Free Material License; the raw model files may not be redistributed, so the same script extracts `Samples/Resources/Haru` and `Hiyori` into `characters/<id>/model/` (gitignored). Required credit line in Settings → 关于 and README: *"This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion."* Hiyori's design must not be altered.
 - DeepSeek ToS requires disclosing to end users that output is AI-generated → shown on first run and in 关于.
 - Our code: MIT.
