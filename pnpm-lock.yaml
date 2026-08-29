@@ -61,6 +61,18 @@ importers:
         specifier: ^4.0.0
         version: 4.5.2
 
+  packages/memory:
+    dependencies:
+      '@ds/brain':
+        specifier: workspace:*
+        version: link:../brain
+      '@ds/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.5.2
+
   packages/protocol:
     dependencies:
       zod:
