@@ -1,5 +1,7 @@
 export * from './character';
+export * from './gaze-driver';
 export * from './mouth';
+export * from './rng';
 export * from './view';
 export * from './companion-model';
 export * from './ticker';

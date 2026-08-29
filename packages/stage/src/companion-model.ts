@@ -6,21 +6,23 @@ import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismUserModel } from '@framework/model/cubismusermodel';
 import { CubismMoc } from '@framework/model/cubismmoc';
 import type { CubismMatrix44 } from '@framework/math/cubismmatrix44';
-import type { ACubismMotion } from '@framework/motion/acubismmotion';
+import { ACubismMotion } from '@framework/motion/acubismmotion';
 import { InvalidMotionQueueEntryHandleValue } from '@framework/motion/cubismmotionqueuemanager';
 import { CubismUpdateScheduler } from '@framework/motion/cubismupdatescheduler';
 import { CubismBreathUpdater } from '@framework/motion/cubismbreathupdater';
 import { CubismEyeBlinkUpdater } from '@framework/motion/cubismeyeblinkupdater';
 import { CubismExpressionUpdater } from '@framework/motion/cubismexpressionupdater';
 import { CubismLipSyncUpdater } from '@framework/motion/cubismlipsyncupdater';
-import { CubismLookUpdater } from '@framework/motion/cubismlookupdater';
 import { CubismPhysicsUpdater } from '@framework/motion/cubismphysicsupdater';
 import { CubismPoseUpdater } from '@framework/motion/cubismposeupdater';
 import { IParameterProvider } from '@framework/motion/iparameterprovider';
 import { BreathParameterData, CubismBreath } from '@framework/effect/cubismbreath';
 import { CubismEyeBlink } from '@framework/effect/cubismeyeblink';
 import { CubismLook, LookParameterData } from '@framework/effect/cubismlook';
+import { GazeDriver, GazeLookUpdater } from './gaze-driver';
+import { MotionFinishTracker } from './motion-callbacks';
 import type { MouthDriver } from './mouth';
+import { pickIndex, type Rng } from './rng';
 import { loadTexture } from './textures';
 
 export const Priority = { none: 0, idle: 1, normal: 2, force: 3 } as const;
@@ -44,6 +46,20 @@ async function fetchBuffer(url: string): Promise<ArrayBuffer> {
   return r.arrayBuffer();
 }
 
+export interface CompanionModelOptions {
+  baseUrl: string;
+  modelJson: string;
+  gl: WebGL2RenderingContext;
+  shaderPath: string;
+  mouth: MouthDriver;
+  checkMoc?: boolean;
+  /**
+   * Random source for idle-motion picks. Injectable so `?test=1` can seed it and spec §9's
+   * "with a fixed seed" screenshot comparison stops racing a random idle animation.
+   */
+  rng?: Rng;
+}
+
 export class CompanionModel extends CubismUserModel {
   private setting: ICubismModelSetting;
   private baseUrl = '';
@@ -57,17 +73,18 @@ export class CompanionModel extends CubismUserModel {
   /** Kept so release() can delete them: CubismRenderer_WebGL borrows textures and only nulls its array. */
   private readonly textures: WebGLTexture[] = [];
   private gl: WebGL2RenderingContext = null;
+  private rng: Rng = Math.random;
+  /** Spec §4.3's gaze easing, in place of the Framework's frame-count-driven CubismTargetPoint. */
+  private readonly gaze = new GazeDriver();
+  private readonly finishedCallbacks = new MotionFinishTracker();
+  /** Post-setupFromLayout model matrix, so the viewport fit is always re-derived from it. */
+  private layoutMatrix: Float32Array = null;
+  private released = false;
   public idleGroup = 'Idle';
 
-  static async load(opts: {
-    baseUrl: string;
-    modelJson: string;
-    gl: WebGL2RenderingContext;
-    shaderPath: string;
-    mouth: MouthDriver;
-    checkMoc?: boolean;
-  }): Promise<CompanionModel> {
+  static async load(opts: CompanionModelOptions): Promise<CompanionModel> {
     const m = new CompanionModel();
+    if (opts.rng) m.rng = opts.rng;
     // model3.json references its siblings (moc3, textures, expressions/, motions/) relative to ITS
     // OWN directory, so every fetch is rooted at <characterUrl>/<dirname(modelJson)>/, not the character dir.
     const charBase = opts.baseUrl.endsWith('/') ? opts.baseUrl : opts.baseUrl + '/';
@@ -103,8 +120,10 @@ export class CompanionModel extends CubismUserModel {
     const mocVersion = CubismMoc.getMocVersionFromBuffer(mocBuf);
     const latest = Live2DCubismCore.Version.csmGetLatestMocVersion();
     if (mocVersion > latest) {
+      // Named model file first: spec §8 wants a dialog naming the model, and the renderer forwards
+      // only { message }, so anything not in this string cannot reach the user.
       throw new Error(
-        `model moc3 version ${mocVersion} is newer than bundled Core (${latest})`,
+        `${s.getModelFileName()}: moc3 version ${mocVersion} is newer than bundled Core (${latest})`,
       );
     }
     this.loadModel(mocBuf, checkMoc);
@@ -175,7 +194,9 @@ export class CompanionModel extends CubismUserModel {
       );
     }
 
-    // look (gaze) - driven by _dragManager via setGaze()
+    // look (gaze) - driven by our GazeDriver via setGaze(), NOT by _dragManager: CubismTargetPoint
+    // advances its position by a per-call constant (cubismtargetpoint.ts:119-120), so its easing
+    // speed changed with the 30/60 fps hover switch.
     const look = CubismLook.create();
     look.setParameters([
       new LookParameterData(angleX, 30.0, 0.0, 0.0),
@@ -185,13 +206,15 @@ export class CompanionModel extends CubismUserModel {
       new LookParameterData(id(CubismDefaultParameterId.ParamEyeBallX), 1.0, 0.0, 0.0),
       new LookParameterData(id(CubismDefaultParameterId.ParamEyeBallY), 0.0, 1.0, 0.0),
     ]);
-    this.scheduler.addUpdatableList(new CubismLookUpdater(look, this._dragManager));
+    this.scheduler.addUpdatableList(new GazeLookUpdater(look, this.gaze));
     this.scheduler.sortUpdatableList();
 
     // layout
     const layout = new Map<string, number>();
     s.getLayoutMap(layout);
     this._modelMatrix.setupFromLayout(layout);
+    // Snapshot the baseline before anything applies a viewport fit on top of it.
+    this.layoutMatrix = new Float32Array(this._modelMatrix.getArray());
 
     // motions (preload all groups)
     this._model.saveParameters();
@@ -276,9 +299,12 @@ export class CompanionModel extends CubismUserModel {
     if (!motion) return false;
     if (priority === Priority.force) this._motionManager.setReservePriority(priority);
     else if (!this._motionManager.reserveMotion(priority)) return false;
-    motion.setFinishedMotionHandler(onFinished ? () => onFinished() : null);
-    const h = this._motionManager.startMotionPriority(motion, false, priority);
-    return h !== InvalidMotionQueueEntryHandleValue;
+    // The finished callback belongs to THIS playback, not to the shared preloaded motion object:
+    // see MotionFinishTracker. tick() invokes it once the queue entry reports finished.
+    const handle = this._motionManager.startMotionPriority(motion, false, priority);
+    if (handle === InvalidMotionQueueEntryHandleValue) return false;
+    if (onFinished) this.finishedCallbacks.track(handle, onFinished);
+    return true;
   }
 
   hitTest(areaName: string, viewX: number, viewY: number): boolean {
@@ -299,7 +325,12 @@ export class CompanionModel extends CubismUserModel {
   }
 
   setGaze(x: number, y: number): void {
-    this.setDragging(x, y);
+    this.gaze.setTarget(x, y);
+  }
+
+  /** The post-setupFromLayout model matrix, or null before setup finished. Do not mutate. */
+  getLayoutMatrix(): Float32Array | null {
+    return this.layoutMatrix;
   }
 
   /** Frame update - identical order to LAppModel.update() at 5-r.5. */
@@ -309,13 +340,16 @@ export class CompanionModel extends CubismUserModel {
     this.motionUpdated = false;
     if (this._motionManager.isFinished()) {
       const n = this.setting.getMotionCount(this.idleGroup);
-      if (n > 0) this.startMotion(this.idleGroup, Math.floor(Math.random() * n), Priority.idle);
+      if (n > 0) this.startMotion(this.idleGroup, pickIndex(n, this.rng), Priority.idle);
     } else {
       this.motionUpdated = this._motionManager.updateMotion(this._model, dt);
     }
     this._model.saveParameters();
     this.scheduler.onLateUpdate(this._model, dt);
     this._model.update();
+    // After the whole update traversal: a finished callback is free to start another motion, swap
+    // the character or dispose the stage without re-entering a manager that is mid-update.
+    this.finishedCallbacks.flush(this._motionManager);
   }
 
   draw(projection: CubismMatrix44, framebuffer: WebGLFramebuffer | null, viewport: number[]): void {
@@ -329,17 +363,34 @@ export class CompanionModel extends CubismUserModel {
   }
 
   /**
-   * Releases what CubismUserModel.release() knows nothing about — the update scheduler's updaters
-   * and the GL textures loadTexture() created (CubismRenderer_WebGL borrows them and only nulls its
-   * own array). Safe to call on a partially loaded model: every field it touches is either
-   * initialised at declaration or null-checked, and the Framework's own delete helpers are null-safe.
+   * Releases what CubismUserModel.release() knows nothing about — the update scheduler's updaters,
+   * the GL textures loadTexture() created (CubismRenderer_WebGL borrows them and only nulls its own
+   * array) and the preloaded motions/expressions (started with autoDelete=false, so the queue never
+   * disposes them and their curve data would outlive a replaced character).
+   *
+   * Idempotent: CubismUserModel.release() is not (`model/cubismusermodel.ts:461`, it nulls the
+   * managers it releases), and this is reachable twice — Live2DStage.dispose() calls it, and it is
+   * public. Safe to call on a partially loaded model: every field it touches is either initialised
+   * at declaration or null-checked, and the Framework's own delete helpers are null-safe.
    */
   override release(): void {
+    if (this.released) return;
+    this.released = true;
+    this.finishedCallbacks.clear();
     this.scheduler.release();
     if (this.gl) {
       for (const tex of this.textures) this.gl.deleteTexture(tex);
     }
     this.textures.length = 0;
+    this.layoutMatrix = null;
     super.release();
+    // After the managers are down, so nothing can be mid-playback on a released motion.
+    // ACubismMotion.delete -> release() drops CubismMotion's parsed curve data
+    // (`motion/cubismmotion.ts:801`).
+    for (const motion of new Set([...this.motions.values(), ...this.expressions.values()])) {
+      if (motion) ACubismMotion.delete(motion);
+    }
+    this.motions.clear();
+    this.expressions.clear();
   }
 }
