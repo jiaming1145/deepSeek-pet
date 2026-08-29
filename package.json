@@ -3,7 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.34.5",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "fetch-sdk": "node scripts/fetch-sdk.mjs",
     "test": "vitest run",
@@ -13,6 +15,7 @@
     "build": "pnpm --filter @ds/desktop build"
   },
   "devDependencies": {
+    "fflate": "^0.8.3",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
