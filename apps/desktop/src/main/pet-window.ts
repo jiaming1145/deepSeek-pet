@@ -160,6 +160,23 @@ export function savePetPosition(win: BrowserWindow): void {
   saveWindowState(stateFile(), { x, y });
 }
 
+/**
+ * Display topology changed (monitor unplugged, resolution/scale changed): the pet may now sit
+ * entirely on a display that no longer exists, where no drag can reach her and the tray's show is
+ * useless. Pull her back to a grabbable position and persist it. Returns true when she moved.
+ */
+export function reconcileDisplays(win: BrowserWindow): boolean {
+  if (win.isDestroyed()) return false;
+  const [x, y] = win.getPosition();
+  const safe = clampDrag({ x, y, ...PET_SIZE }, workAreas());
+  const nx = Math.round(safe.x);
+  const ny = Math.round(safe.y);
+  if (nx === x && ny === y) return false;
+  win.setPosition(nx, ny, false);
+  savePetPosition(win);
+  return true;
+}
+
 /** Click-through: `true` lets clicks reach the windows behind the pet (mouse moves are still forwarded). */
 export function setClickThrough(win: ClickThroughTarget, ignore: boolean): void {
   if (win.isDestroyed()) return;

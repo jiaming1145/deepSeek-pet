@@ -77,6 +77,8 @@ describe('createVisibilityController', () => {
     const calls: string[] = [];
     const sent: VisibilityVerdict[] = [];
     const paused: boolean[] = [];
+    const clickThrough: boolean[] = [];
+    let rechecks = 0;
     const window = {
       isDestroyed: () => destroyed,
       hide: () => calls.push('hide'),
@@ -86,11 +88,13 @@ describe('createVisibilityController', () => {
       window: () => window,
       send: (verdict) => sent.push(verdict),
       setCursorPaused: (p) => paused.push(p),
+      setClickThrough: (ignore) => clickThrough.push(ignore),
+      recheckCursor: () => { rechecks++; },
       log: () => { /* quiet */ },
     });
     // Exactly how index.ts wires `createPetWindow({ onReadyToShow })`.
     const readyToShow = (): void => controller.apply();
-    return { calls, sent, paused, controller, readyToShow };
+    return { calls, sent, paused, clickThrough, rechecks: () => rechecks, controller, readyToShow };
   }
 
   it('hide-before-paint: ready-to-show never shows her when a flag is already set', () => {
@@ -145,5 +149,42 @@ describe('createVisibilityController', () => {
     h.controller.set('locked', true);
     expect(h.controller.verdict).toEqual({ hidden: true, reason: 'locked' });
     expect(h.controller.get('locked')).toBe(true);
+  });
+});
+
+describe('createVisibilityController — hover resync across hide/show', () => {
+  function harness() {
+    const calls: string[] = [];
+    const clickThrough: boolean[] = [];
+    let rechecks = 0;
+    const controller = createVisibilityController({
+      window: () => ({ isDestroyed: () => false, hide: () => calls.push('hide'), showInactive: () => calls.push('showInactive') }),
+      send: () => { /* not under test */ },
+      setClickThrough: (ignore) => clickThrough.push(ignore),
+      recheckCursor: () => { rechecks++; },
+      log: () => { /* quiet */ },
+    });
+    return { calls, clickThrough, rechecks: () => rechecks, controller };
+  }
+
+  it('forces native click-through before hiding (the leave event may never arrive)', () => {
+    const h = harness();
+    h.controller.set('fullscreen', true);
+    h.controller.apply();
+    expect(h.clickThrough).toEqual([true]);
+    expect(h.calls).toEqual(['hide']);
+    expect(h.rechecks()).toBe(0);
+  });
+
+  it('re-samples the cursor after showing so a stationary cursor on her re-enables interaction', () => {
+    const h = harness();
+    h.controller.set('fullscreen', true);
+    h.controller.apply();
+    h.controller.set('fullscreen', false);
+    h.controller.apply();
+    expect(h.calls).toEqual(['hide', 'showInactive']);
+    expect(h.rechecks()).toBe(1);
+    // Show never forces the click-through state itself: the renderer's fresh hit decides.
+    expect(h.clickThrough).toEqual([true]);
   });
 });

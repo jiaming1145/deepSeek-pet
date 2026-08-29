@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Handler = (...args: unknown[]) => void;
@@ -74,7 +75,7 @@ vi.mock('electron', () => ({
   BrowserWindow: FakeWindow,
 }));
 
-const { createPetWindow, handleLoadFailure, moveBy, PET_SIZE, setClickThrough } = await import('./pet-window');
+const { createPetWindow, handleLoadFailure, moveBy, PET_SIZE, reconcileDisplays, setClickThrough } = await import('./pet-window');
 
 function build(overrides: { onReadyToShow?: () => void; onLoadFailure?: (err: unknown) => void } = {}) {
   const onReadyToShow = overrides.onReadyToShow ?? vi.fn();
@@ -84,6 +85,8 @@ function build(overrides: { onReadyToShow?: () => void; onLoadFailure?: (err: un
 }
 
 beforeEach(() => {
+  // A remembered position (left by reconcileDisplays/savePetPosition) would change the startup placement.
+  rmSync('/tmp/ds-test-userdata/window.json', { force: true });
   FakeWindow.nextLoadResult = null;
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -232,5 +235,24 @@ describe('moveBy', () => {
     win.destroyed = true;
     moveBy(win as never, 10, 10);
     expect(win.position).toEqual([500, 200]);
+  });
+});
+
+describe('reconcileDisplays', () => {
+  // reconcileDisplays persists the corrected position; keep it out of the other tests' startup path.
+  afterEach(() => rmSync('/tmp/ds-test-userdata/window.json', { force: true }));
+
+  it('pulls a pet stranded on a removed display back to a grabbable spot and reports the move', () => {
+    const { win } = build();
+    win.position = [5000, 200]; // the display that used to be here is gone; only 0..1920 remains
+    expect(reconcileDisplays(win as never)).toBe(true);
+    expect(win.position).toEqual([1920 - 48, 200]);
+  });
+
+  it('leaves a reachable pet alone', () => {
+    const { win } = build();
+    win.position = [1000, 200];
+    expect(reconcileDisplays(win as never)).toBe(false);
+    expect(win.position).toEqual([1000, 200]);
   });
 });

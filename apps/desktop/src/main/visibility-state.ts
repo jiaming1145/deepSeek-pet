@@ -71,6 +71,10 @@ export type VisibilityDeps = {
   window: () => VisibilityWindow | null;
   send: (verdict: VisibilityVerdict) => void;
   setCursorPaused?: (paused: boolean) => void;
+  /** Forces the native click-through state; called with `true` on every hide. */
+  setClickThrough?: (ignore: boolean) => void;
+  /** Re-samples the cursor after a show so the renderer recomputes the real hit. */
+  recheckCursor?: () => void;
   log?: (line: string) => void;
 };
 
@@ -111,10 +115,19 @@ export function createVisibilityController(deps: VisibilityDeps): VisibilityCont
       const v = verdict();
       (deps.log ?? console.log)(`[shell] ${v.hidden ? 'hide' : 'show'} reason=${v.reason} ${state.describe()}`);
       // showInactive, never show: reappearing must not steal focus from the app the user is in.
-      if (v.hidden) win.hide();
-      else win.showInactive();
+      if (v.hidden) {
+        // The renderer's leave event may never arrive once the window is gone; a window hidden
+        // while interactive would otherwise come back with transparent pixels eating clicks.
+        deps.setClickThrough?.(true);
+        win.hide();
+      } else {
+        win.showInactive();
+      }
       deps.setCursorPaused?.(v.hidden);
       deps.send(v);
+      // After a show the renderer has reset its hover cache (on shell:visibility) and needs one
+      // fresh sample to re-emit the true hit — the cursor may still be sitting on her.
+      if (!v.hidden) deps.recheckCursor?.();
     },
     resend(): void {
       deps.send(verdict());

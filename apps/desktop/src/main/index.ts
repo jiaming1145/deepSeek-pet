@@ -1,8 +1,8 @@
-import { app, BrowserWindow, powerMonitor, type Tray } from 'electron';
+import { app, BrowserWindow, powerMonitor, type Tray, screen } from 'electron';
 import { join } from 'node:path';
 import { Channels } from '@ds/protocol';
 import { registerAppScheme, serveRenderer } from './app-protocol';
-import { createPetWindow, handleLoadFailure, moveBy, savePetPosition, setClickThrough } from './pet-window';
+import { createPetWindow, handleLoadFailure, moveBy, reconcileDisplays, savePetPosition, setClickThrough } from './pet-window';
 import { onFromPet, sendToPet } from './ipc';
 import { startCursorPolling, type CursorPolling } from './cursor';
 import { startForegroundWatch, type ForegroundWatch } from './foreground';
@@ -34,6 +34,8 @@ const visibility = createVisibilityController({
     if (pet) sendToPet(pet, Channels.shellVisibility, verdict);
   },
   setCursorPaused: (paused) => cursorPolling?.setPaused(paused),
+  setClickThrough: (ignore) => { if (pet) setClickThrough(pet, ignore); },
+  recheckCursor: () => cursorPolling?.recheck(),
 });
 
 if (!app.requestSingleInstanceLock()) {
@@ -136,7 +138,17 @@ if (!app.requestSingleInstanceLock()) {
     /* keep running in the tray */
   });
 
+  // A monitor unplugged (or rescaled) under her: clampDrag only runs on the next drag event and
+  // clampToDisplays only at startup, so without this she can stay stranded on a display that is gone.
+  const onDisplaysChanged = (): void => {
+    if (pet && reconcileDisplays(pet)) console.log('[pet] moved back onto a live display');
+  };
+  screen.on('display-removed', onDisplaysChanged);
+  screen.on('display-metrics-changed', onDisplaysChanged);
+
   app.on('before-quit', () => {
+    screen.removeListener('display-removed', onDisplaysChanged);
+    screen.removeListener('display-metrics-changed', onDisplaysChanged);
     // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
     if (pet) savePetPosition(pet);
     cursorPolling?.stop();

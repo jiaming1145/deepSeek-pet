@@ -135,7 +135,16 @@ async function main(): Promise<void> {
   bridge?.on(Channels.debugMotion, ({ group, index }) => stage.playMotion([group, index]));
   // Hidden means nobody can see her: stop the render loop entirely rather than idling at 30 fps
   // (spec §4.6). The 30/60 split for idle/hovered is decided locally in the HoverTracker callback.
-  bridge?.on(Channels.shellVisibility, ({ hidden }) => (hidden ? stage.stop() : stage.start()));
+  bridge?.on(Channels.shellVisibility, ({ hidden }) => {
+    if (hidden) {
+      stage.stop();
+      return;
+    }
+    stage.start();
+    // Main forced click-through while hidden; forget the cached hover so the next cursor sample
+    // (main re-sends one right after showing) re-emits the true hit.
+    hover.reset();
+  });
   bridge?.on(Channels.debugToggle, () => toggleDebugPanel());
 
   if (DEBUG) toggleDebugPanel();
