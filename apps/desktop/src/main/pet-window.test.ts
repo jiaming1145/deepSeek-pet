@@ -208,15 +208,15 @@ describe('handleLoadFailure', () => {
 });
 
 describe('moveBy', () => {
-  it('clamps the accumulated position into the work area', () => {
+  it('keeps a grabbable margin of her inside the work area, never fully off', () => {
     const { win } = build();
     win.position = [1000, 200];
     moveBy(win as never, 100000, 100000);
-    // Bottom-right corner of the work area, not 101000/100200.
-    expect(win.position).toEqual([1920 - PET_SIZE.w, 1040 - PET_SIZE.h]);
+    // A live drag may hang off the edge (like any window) but 48 px stay grabbable — not 101000/100200.
+    expect(win.position).toEqual([1920 - 48, 1040 - 48]);
 
     moveBy(win as never, -100000, -100000);
-    expect(win.position).toEqual([0, 0]);
+    expect(win.position).toEqual([-(PET_SIZE.w - 48), -(PET_SIZE.h - 48)]);
   });
 
   it('applies an ordinary delta unchanged', () => {

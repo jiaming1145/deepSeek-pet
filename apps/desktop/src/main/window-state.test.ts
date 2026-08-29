@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clampToDisplays, loadWindowState, saveWindowState } from './window-state';
+import { clampDrag, clampToDisplays, loadWindowState, saveWindowState } from './window-state';
 
 // Work areas, not bounds: 1080 tall displays with a 40 px taskbar on the primary.
 const areas = [
@@ -100,5 +100,45 @@ describe('loadWindowState / saveWindowState', () => {
     const nan = join(dir, 'nan.json');
     writeFileSync(nan, '{"x":0,"y":-1e400}');
     expect(loadWindowState(nan)).toBeNull();
+  });
+});
+
+describe('clampDrag (live drag, union of work areas)', () => {
+  const PET = { w: 420, h: 720 };
+  const left = { x: 0, y: 0, width: 1920, height: 1040 };
+  const right = { x: 1920, y: 0, width: 1920, height: 1040 };
+  const top = { x: 0, y: -1080, width: 1920, height: 1080 };
+  type Area = { x: number; y: number; width: number; height: number };
+
+  function drag(areas: Area[], start: { x: number; y: number }, dx: number, dy: number, n: number) {
+    let pos = { ...start };
+    for (let i = 0; i < n; i++) pos = clampDrag({ x: pos.x + dx, y: pos.y + dy, ...PET }, areas);
+    return pos;
+  }
+
+  it('crosses a side-by-side monitor seam in 20 px steps', () => {
+    const end = drag([left, right], { x: 1000, y: 100 }, 20, 0, 200);
+    expect(end.x).toBeGreaterThanOrEqual(1920);
+  });
+
+  it('crosses a stacked monitor seam in 20 px steps', () => {
+    const end = drag([left, top], { x: 100, y: 500 }, 0, -20, 200);
+    expect(end.y).toBeLessThan(0);
+  });
+
+  it('lets her hang off the far edge but keeps a grabbable margin inside', () => {
+    const end = drag([left, right], { x: 3300, y: 100 }, 20, 0, 200);
+    expect(end.x).toBe(right.x + right.width - 48);
+  });
+
+  it('returns the placement unchanged while it is grabbable somewhere', () => {
+    expect(clampDrag({ x: 1700, y: 100, ...PET }, [left, right])).toEqual({ x: 1700, y: 100 });
+  });
+
+  it('pulls a fully lost placement back to the nearest area', () => {
+    expect(clampDrag({ x: 5000, y: 5000, ...PET }, [left, right])).toEqual({
+      x: right.x + right.width - 48,
+      y: right.y + right.height - 48,
+    });
   });
 });
