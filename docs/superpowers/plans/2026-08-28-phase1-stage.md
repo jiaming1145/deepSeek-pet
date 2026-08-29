@@ -1496,6 +1496,8 @@ Run `pnpm install` then replace `"latest"` with the resolved electron-vite versi
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
     "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "useDefineForClassFields": false,
     "experimentalDecorators": true,
     "baseUrl": ".",
     "paths": { "@framework/*": ["../../vendor/CubismWebFramework/src/*"] }
