@@ -1,0 +1,131 @@
+MiSans licence review — Phase 2, Task 0 (Step 8)
+Reviewed: 2026-08-29
+Reviewer: Phase 2 Task 0 implementer (automated fetch, no human re-read of a PDF)
+Verdict: FALLBACK — no font file is bundled with this application.
+
+================================================================================
+1. WHAT WAS FETCHED
+================================================================================
+
+Fetch tool: Claude Code WebFetch (HTML -> markdown, then extraction). The MiSans
+site is a client-rendered SPA, so a plain HTML GET of the landing page returns
+almost no text; the licence prose is served on the download page.
+
+  [1] https://hyperos.mi.com/font/          2026-08-29 — landing page.
+      Returned only the word "MiSans" plus marketing copy. No licence text.
+
+  [2] https://hyperos.mi.com/font/zh/       2026-08-29 — Chinese landing page.
+      Marketing copy only: font features (600+ languages, 100,000+ glyphs,
+      20+ writing systems), formats (VF/OTF/TTF/WOFF/WOFF2), and the tagline
+      「全球免费商用字体」 / "Global Free Commercial-Use Fonts".
+      NO licence clauses.
+
+  [3] https://hyperos.mi.com/font/en/       2026-08-29 — English landing page.
+      Marketing copy only. NO licence clauses.
+
+  [4] https://hyperos.mi.com/font/zh/download/   2026-08-29 — download page.
+      THIS is the page that carries licence prose. Agreement name as shown:
+      「MiSans 字体知识产权许可协议」. The page exposes an introductory clause
+      and three numbered conditions. No version number and no effective date
+      were exposed in the fetched text.
+
+================================================================================
+2. CLAUSES RECOVERED VERBATIM (from [4])
+================================================================================
+
+  C1  「您应在软件中特别注明使用了 MiSans 字体。」
+      (You must specifically state, in the software, that MiSans is used.)
+
+  C2  「您不得对 MiSans 字体或其任何单独组件进行改编或二次开发。」
+      (You may not adapt, or carry out secondary development on, the MiSans
+      font or any of its individual components.)
+
+  C3  「您不得单独将 MiSans 字体或其组件对外租赁、再许可、给予、出借或进一步
+      分发字体软件或其任何副本以及重新分发或售卖。」
+      (You may not, on a standalone basis, lease, sub-license, give, lend or
+      further distribute the font software or any copy of it to third parties,
+      nor redistribute or sell it.)
+
+  C3a 「此限制不适用于您使用 MiSans 字体创作的任何其他作品。」
+      (This restriction does not apply to any other works you create using the
+      MiSans font.)
+
+Completeness caveat, stated honestly: the fetch could not recover the agreement
+in full — no clause numbering scheme, no version, no effective date, and no
+explicit fee clause were exposed. The four clauses above are what the download
+page rendered. The verdict below therefore rests on the text that IS available,
+which is the correct direction of caution: an unrecovered clause cannot grant a
+permission that C2 denies.
+
+================================================================================
+3. THE FOUR GATES (task-0-brief.md Step 8)
+================================================================================
+
+G1  Commercial use permitted, no fee, no per-title licence?
+    UNCONFIRMED-FROM-LICENCE-TEXT. The marketing tagline 「全球免费商用字体」
+    ("global free commercial-use fonts") appears on [2] and [3], but a tagline
+    is not a clause, and R7 requires the licence text, not a "free for
+    commercial use" claim. No fee clause was recovered from [4].
+    -> Treated as NOT ANSWERABLE from the licence text.
+
+G2  Redistribution of the font file inside a compiled desktop application?
+    NO / UNCONFIRMED. C3 forbids further distribution of the font software or
+    any copy of it. C3a carves out "other works created using the font" — a
+    poster, a UI screenshot, a rendered image. Shipping the .woff2 inside the
+    application bundle is distributing a copy of the font software itself, not
+    a work created with it, so the carve-out does not plainly reach it and the
+    prohibition in C3 is the operative text.
+    -> FAIL (cannot be confirmed as permitted).
+
+G3  Producing and distributing a SUBSET — which is a modified font file?
+    NO. C2 is an unconditional prohibition on 改编 (adaptation) and 二次开发
+    (secondary development) of the font "or any of its individual components".
+    A pyftsubset run produces a new, modified font binary derived from the
+    original — precisely 改编/二次开发 of a component.
+    -> FAIL, explicitly and unambiguously.
+
+G4  Subset (GB2312 + ASCII + CJK punctuation, 400/500/600, woff2) <= 1.2 MB?
+    NOT REACHED. G3 already fails, so no subset was produced and no size was
+    measured.
+    -> N/A.
+
+================================================================================
+4. DECISION
+================================================================================
+
+Two of the four gates fail (G3 outright, G2 unconfirmable) and G1 cannot be
+answered from the licence text. Per the brief's Step 8 rule — "If any of G1-G4
+is No, or cannot be answered from the licence text: take the fallback" — Phase 2
+takes the FALLBACK BRANCH.
+
+Consequences, and they cost nothing:
+
+  * No font file is added to the repository. No apps/desktop/src/renderer/
+    shared/fonts/ directory, no fonts.css, no @font-face rule.
+  * tokens.css is NOT edited for this decision: --font-sans already names
+    "MiSans VF" and "MiSans" first (so a user who has installed MiSans locally
+    gets it, which C2/C3 do not restrict — that is ordinary use of an installed
+    font, not redistribution), and then falls back through HarmonyOS Sans SC,
+    Noto Sans SC and Source Han Sans SC to the two faces Windows 11 already
+    ships: "Microsoft YaHei UI" and "Segoe UI Variable Text".
+  * NOTICE gains item 4 recording this finding, the date, the URL and this file.
+  * The design is therefore proven on the fallback stack, not on a font that may
+    not be installed: the Step 11 token-sheet screenshots are rendered by
+    headless Chromium with no MiSans present, so what they photograph is
+    Microsoft YaHei UI / Segoe UI Variable Text.
+
+Re-open this decision only with the complete agreement text in hand — in
+particular a clause that positively permits (a) embedding a copy of the font
+file in a distributed application and (b) producing a subset. Until then the
+fallback stands.
+
+================================================================================
+5. WHAT WOULD CHANGE THE VERDICT
+================================================================================
+
+  * A recovered clause permitting embedding in software distributions, AND
+  * a recovered clause permitting subsetting or an explicit exemption of
+    subsetting from 改编/二次开发, AND
+  * a measured subset total <= 1.2 MB.
+
+All three are required. Any one missing keeps the fallback.
