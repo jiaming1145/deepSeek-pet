@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { sanitizeMemoryText } from './summary.ts';
-import { toMatchQuery, tok, tokUnigram } from './tok.ts';
+import { toMatchQuery, tok, tokBigram, tokUnigram } from './tok.ts';
 
 export const FACT_MAX_CHARS = 120; // R3-10 sanitisation bound; identical to MEMORY_LABEL_MAX
 export const FACT_MIN_CONFIDENCE = 0.6; // R3-10: "<= 5 facts with confidence >= 0.6"
@@ -149,8 +149,7 @@ export class FactStore {
       .prepare("SELECT id, value, alias FROM facts WHERE value_tok = '' AND value <> ''")
       .all() as Array<{ id: number; value: string; alias: string }>;
     if (rows.length === 0) return;
-    this.db.exec('BEGIN');
-    try {
+    this.tx(() => {
       const upd = this.db.prepare('UPDATE facts SET value_tok = ?, alias_tok = ? WHERE id = ?');
       const ins = this.db.prepare(
         'INSERT INTO facts_fts (rowid, value_tok, alias_tok) VALUES (?, ?, ?)',
@@ -161,12 +160,34 @@ export class FactStore {
         upd.run(valueTok, aliasTok, r.id);
         ins.run(r.id, valueTok, aliasTok);
       }
+    });
+  }
+
+  /**
+   * Runs `fn` inside one BEGIN…COMMIT, with the ROLLBACK guard every write path here needs.
+   *
+   * FIX ROUND 1, finding 3. `facts` and the CONTENTLESS `facts_fts` are two stores that must agree:
+   * retiring an index row means handing FTS5 the OLD tokens by hand, so a throw between the
+   * `'delete'`, the `UPDATE` and the re-`INSERT` leaves a fact that is live in the table and absent
+   * from the index — unsearchable forever, since `reindexMigratedRows` only repairs rows whose
+   * `value_tok` is `''`. node:sqlite autocommits each statement, so nothing but an explicit
+   * transaction closes that window.
+   *
+   * A call that is ALREADY inside a transaction joins it rather than failing with
+   * "cannot start a transaction within a transaction": the outer BEGIN is the wider guarantee.
+   */
+  private tx<T>(fn: () => T): T {
+    if (this.db.isTransaction) return fn();
+    this.db.exec('BEGIN');
+    try {
+      const out = fn();
       this.db.exec('COMMIT');
+      return out;
     } catch (err) {
       try {
         this.db.exec('ROLLBACK');
       } catch {
-        // the failing statement already rolled the transaction back
+        // the failing statement already rolled the transaction back; keep the original error
       }
       throw err;
     }
@@ -198,16 +219,18 @@ export class FactStore {
       | undefined;
 
     if (existing === undefined) {
-      const res = this.db
-        .prepare(
-          'INSERT INTO facts (key, value, alias, value_tok, alias_tok, confidence, source_turn, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        )
-        .run(f.key, value, alias, valueTok, aliasTok, confidence, f.sourceTurn, ts);
-      const id = Number(res.lastInsertRowid);
-      this.db
-        .prepare('INSERT INTO facts_fts (rowid, value_tok, alias_tok) VALUES (?, ?, ?)')
-        .run(id, valueTok, aliasTok);
-      return { id, changed: true };
+      return this.tx(() => {
+        const res = this.db
+          .prepare(
+            'INSERT INTO facts (key, value, alias, value_tok, alias_tok, confidence, source_turn, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          )
+          .run(f.key, value, alias, valueTok, aliasTok, confidence, f.sourceTurn, ts);
+        const id = Number(res.lastInsertRowid);
+        this.db
+          .prepare('INSERT INTO facts_fts (rowid, value_tok, alias_tok) VALUES (?, ?, ?)')
+          .run(id, valueTok, aliasTok);
+        return { id, changed: true };
+      });
     }
 
     if (existing.value === value && existing.alias === alias) {
@@ -220,27 +243,29 @@ export class FactStore {
       return { id: existing.id, changed: false };
     }
 
-    // Contentless FTS5: the old tokens must be handed back before the row can be re-indexed.
-    this.db
-      .prepare(
-        `INSERT INTO facts_fts (facts_fts, rowid, value_tok, alias_tok) VALUES ('delete', ?, ?, ?)`,
-      )
-      .run(existing.id, existing.value_tok, existing.alias_tok);
     const history =
       existing.value === value
         ? existing.history
         : [...(existing.history === '' ? [] : existing.history.split('\n')), existing.value]
             .slice(-FACT_HISTORY_MAX)
             .join('\n');
-    this.db
-      .prepare(
-        'UPDATE facts SET value = ?, alias = ?, value_tok = ?, alias_tok = ?, confidence = ?, source_turn = ?, updated_at = ?, tombstone = 0, history = ? WHERE id = ?',
-      )
-      .run(value, alias, valueTok, aliasTok, confidence, f.sourceTurn, ts, history, existing.id);
-    this.db
-      .prepare('INSERT INTO facts_fts (rowid, value_tok, alias_tok) VALUES (?, ?, ?)')
-      .run(existing.id, valueTok, aliasTok);
-    return { id: existing.id, changed: true };
+    return this.tx(() => {
+      // Contentless FTS5: the old tokens must be handed back before the row can be re-indexed.
+      this.db
+        .prepare(
+          `INSERT INTO facts_fts (facts_fts, rowid, value_tok, alias_tok) VALUES ('delete', ?, ?, ?)`,
+        )
+        .run(existing.id, existing.value_tok, existing.alias_tok);
+      this.db
+        .prepare(
+          'UPDATE facts SET value = ?, alias = ?, value_tok = ?, alias_tok = ?, confidence = ?, source_turn = ?, updated_at = ?, tombstone = 0, history = ? WHERE id = ?',
+        )
+        .run(value, alias, valueTok, aliasTok, confidence, f.sourceTurn, ts, history, existing.id);
+      this.db
+        .prepare('INSERT INTO facts_fts (rowid, value_tok, alias_tok) VALUES (?, ?, ?)')
+        .run(existing.id, valueTok, aliasTok);
+      return { id: existing.id, changed: true };
+    });
   }
 
   /** Tombstones instead of deleting (R3-10). The FTS row STAYS; retrieval filters on tombstone = 0. */
@@ -255,9 +280,15 @@ export class FactStore {
     return id;
   }
 
-  /** The two-pass retrieval of §8.4. Returns <= FACT_RETRIEVE_MAX sanitised value strings. */
+  /**
+   * The two-pass retrieval of §8.4. Returns <= FACT_RETRIEVE_MAX sanitised value strings.
+   *
+   * Pass 1 is the BIGRAM query (`tokBigram`), pass 2 the unigram fallback minus STOPWORDS. See
+   * `tokBigram`'s comment for why pass 1 stopped being `tok(query)` in fix round 1 (finding 2):
+   * with unigrams in pass 1 the fallback was unreachable by construction and STOPWORDS was dead.
+   */
   retrieve(query: string, nowWall: number): string[] {
-    const pass1 = this.match(toMatchQuery(tok(query)));
+    const pass1 = this.match(toMatchQuery(tokBigram(query)));
     const rows =
       pass1.length >= FACT_FALLBACK_MIN_HITS
         ? pass1
@@ -281,13 +312,27 @@ export class FactStore {
     return (this.db.prepare(sql).all() as RawFact[]).map(toRow);
   }
 
-  /** X4 one-click wipe: tombstones every row and clears the FTS index. Returns the row count. */
+  /**
+   * X4 one-click wipe: §8.9's normative sentence, "tombstones every fact". Returns the row count.
+   *
+   * FIX ROUND 1, finding 1. This used to follow the UPDATE with
+   * `INSERT INTO facts_fts (facts_fts) VALUES ('delete-all')`, which emptied the contentless index
+   * while leaving every `value_tok` / `alias_tok` in `facts` — so the next `upsert()` of a key that
+   * existed before the wipe handed FTS5 a `'delete'` for tokens that were no longer in the index
+   * and threw `database disk image is malformed` (SQLITE_CORRUPT, errcode 267) BEFORE the UPDATE:
+   * the new value was lost and that key became permanently un-updatable. Keys are stable
+   * identifiers by design (`job_interview`, `pet_name`), so it fired on the first extraction after
+   * the wipe. Reproduced on a scratch database this session; pinned by facts.test.ts below.
+   *
+   * A wipe is therefore exactly a BULK `tombstone()`, and it keeps that method's documented
+   * semantics: the FTS rows STAY and retrieval filters `f.tombstone = 0`. Nothing is leaked — the
+   * values themselves are deliberately kept in `facts` (§8.9 wipes memory, not the row), so an
+   * index over them is not a second copy of anything, and table and index never diverge.
+   * DEVIATION: §8.2's doc comment says "and clears the FTS index"; that clause is what corrupts.
+   */
   wipe(): number {
-    const n = this.db.prepare('UPDATE facts SET tombstone = 1 WHERE tombstone = 0').run()
+    return this.db.prepare('UPDATE facts SET tombstone = 1 WHERE tombstone = 0').run()
       .changes as number;
-    // 'delete-all' is the documented command form for a contentless table (verified this session).
-    this.db.exec(`INSERT INTO facts_fts (facts_fts) VALUES ('delete-all')`);
-    return n;
   }
 
   // ---- internal ----------------------------------------------------------

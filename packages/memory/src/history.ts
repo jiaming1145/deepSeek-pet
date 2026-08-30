@@ -115,10 +115,22 @@ export class HistoryStore implements HistoryPort, MetricsPort {
     return this.summaryStore.get();
   }
 
-  /** §8.6: tier 3. The values are already sanitised by FactStore.retrieve (§8.10). */
+  /**
+   * §8.6: tier 3. The values are already sanitised by FactStore.retrieve (§8.10).
+   *
+   * FIX ROUND 1, finding 6. The query is CONSUMED here. §8.6 does not say how long a `setQuery`
+   * lives, and leaving it set meant any `facts()` on a path that does not set one first — a
+   * proactive turn, or a second assembly after the user text changed — would retrieve against the
+   * PREVIOUS turn's query and inject stale facts into 【你记得】. One `setQuery` now feeds exactly
+   * one retrieval, and an unset query yields no facts instead of yesterday's.
+   * `TurnRunner.send` sets it before every `facts()` (turn.ts), and a regeneration re-uses
+   * `turn.base.facts` rather than retrieving again, so no live path loses its facts.
+   */
   facts(): Promise<string[]> {
-    if (this.factStore === null) return Promise.resolve([]);
-    return Promise.resolve(this.factStore.retrieve(this.pendingQuery, this.now()));
+    const query = this.pendingQuery;
+    this.pendingQuery = '';
+    if (this.factStore === null || query === '') return Promise.resolve([]);
+    return Promise.resolve(this.factStore.retrieve(query, this.now()));
   }
 
   /** §8.6: HistoryPort.setQuery. Stores the raw user text; no database access. */

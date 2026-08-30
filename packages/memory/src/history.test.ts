@@ -568,6 +568,28 @@ describe('§8.6 facts(), setQuery and the shared write chain', () => {
     expect(await s.facts()).toEqual([]);
   });
 
+  it('facts() CONSUMES the query — a second call without setQuery returns [], not last turn\u2019s facts', async () => {
+    // FIX ROUND 1, finding 6. §8.6 does not say how long a setQuery lives. Leaving it set meant any
+    // facts() on a path that does not set one first — a proactive turn, or a second assembly after
+    // the user text changed — retrieved against the PREVIOUS turn's query and injected stale facts
+    // into 【你记得】. One setQuery now feeds exactly one retrieval.
+    const facts = new FactStore(db, () => clock);
+    facts.upsert({
+      key: 'job_interview',
+      value: '主人下周三要去杭州面试',
+      alias: ['面试', '工作'],
+      confidence: 0.9,
+      sourceTurn: null,
+    });
+    const s = makeStore({ factStore: facts });
+
+    s.setQuery('面试怎么样了');
+    expect(await s.facts()).toEqual(['主人下周三要去杭州面试']);
+    expect(await s.facts()).toEqual([]); // the query was consumed, not remembered
+    s.setQuery('面试怎么样了');
+    expect(await s.facts()).toEqual(['主人下周三要去杭州面试']); // and a fresh one works again
+  });
+
   it('facts() never returns more than the 【你记得】 budget and never returns raw 【】', async () => {
     const facts = new FactStore(db, () => clock);
     for (let i = 0; i < 9; i++) {

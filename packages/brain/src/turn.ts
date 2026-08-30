@@ -376,7 +376,14 @@ export class TurnRunner {
     };
     if (nudge !== undefined) input.nudge = nudge;
     const messages = assemblePrompt(input);
-    turn.envelope = JSON.stringify(messages); // §8.8, audit only
+    // §8.8, audit only — never replayed. UNBOUNDED, and deliberately flagged: this is the complete
+    // assembled prompt (system profile + up to a 24 000-token history window + the state card + the
+    // user text), roughly 50-70 KB of TEXT per turn in ds.sqlite at the trim ceiling, with no cap,
+    // no retention window and no sweep anywhere in Phase 3. §8.8 mandates the column and nothing
+    // bounds it; the memory/footprint lane is §11.4's (T3-E), which owns the decision — cap what is
+    // stored, keep only the last N turns, or add a retention sweep — before scripts/phase3-cache.mjs
+    // is built on top of the column. Fix round 1, finding 7.
+    turn.envelope = JSON.stringify(messages);
     return messages;
   }
 

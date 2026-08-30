@@ -36,6 +36,12 @@ export interface FactExtractorDeps {
   /** The write chain owner. `enqueueWrite` is what serialises this against a trim (§8.5). */
   history: HistoryStore;
   db: DatabaseSync;
+  /**
+   * Accepted for §8.5's constructor shape, and deliberately NOT read: fact rows are stamped by
+   * `FactStore`'s own clock, and one lane has one clock (rulings, ownership table). FIX ROUND 1,
+   * finding 4 — this used to be stored in a field kept alive by a `void this.now;` statement, which
+   * made the injected clock look like it reached the written rows. It never did.
+   */
   now?: () => number;
 }
 
@@ -48,7 +54,6 @@ export interface FactExtractorDeps {
  */
 export class FactExtractor {
   private readonly deps: FactExtractorDeps;
-  private readonly now: () => number;
   /** The user turns since the last attempt. Cleared when an attempt is queued, not when it lands. */
   private pending: string[] = [];
   private controller: AbortController | null = null;
@@ -58,7 +63,6 @@ export class FactExtractor {
 
   constructor(deps: FactExtractorDeps) {
     this.deps = deps;
-    this.now = deps.now ?? Date.now;
   }
 
   /** Called from BrainService on every completed USER turn. Counts, and fires at N = 6. */
@@ -199,6 +203,5 @@ export class FactExtractor {
       // turn id and §8.5's constructor takes none. Null until the controller rules (Concern C-11).
       sourceTurn: null,
     });
-    void this.now; // the clock reaches the rows through FactStore's own `now`
   }
 }

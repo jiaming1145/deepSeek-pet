@@ -13,7 +13,7 @@ import {
   FactStore,
   STOPWORDS,
 } from './facts.ts';
-import { tok } from './tok.ts';
+import { toMatchQuery, tok, tokBigram } from './tok.ts';
 
 const NOW = Date.parse('2026-08-30T04:00:00.000Z');
 let dir: string;
@@ -116,9 +116,9 @@ describe('FactStore.upsert (contracts §8.2)', () => {
       '猫叫四号',
       '猫叫五号',
     ]);
-    // DEVIATION (task-2 Step 17): the brief asserts `retrieve('零号') === []`. It cannot be —
-    // tok('零号') is `零 零号 号` and the OR-joined query's `号` legitimately matches the LIVE
-    // value 猫叫六号 through facts.value_tok, which is correct retrieval, not a history leak.
+    // DEVIATION (task-2 Step 17): the brief asserts `retrieve('零号') === []`. It cannot be: the
+    // §8.4 FALLBACK pass splits 零号 into 零 and 号, and 号 legitimately matches the LIVE value
+    // 猫叫六号 through facts.value_tok, which is correct retrieval, not a history leak.
     // What this case is actually for is that history is never indexed and never surfaces, so
     // that is what it now asserts.
     const out = store.retrieve('零号', NOW);
@@ -203,16 +203,76 @@ describe('FactStore.tombstone / pin / list / wipe (contracts §8.2, X4)', () => 
     expect(store.retrieve('咖啡', NOW)[0]).toBe('主人说过咖啡要少冰');
   });
 
-  it('list is newest first and wipe tombstones everything and empties the index', () => {
+  it('list is newest first and wipe tombstones everything (§8.9: it tombstones, it does not delete)', () => {
     plant('a', '主人喜欢猫', ['猫']);
     clock = NOW + 1000;
     plant('b', '主人喜欢狗', ['狗']);
     expect(store.list().map((r) => r.key)).toEqual(['b', 'a']);
     expect(store.wipe()).toBe(2);
     expect(store.list()).toEqual([]);
-    expect(store.retrieve('猫', clock)).toEqual([]);
-    expect((db.prepare('SELECT COUNT(*) AS n FROM facts_fts').get() as { n: number }).n).toBe(0);
+    expect(store.retrieve('猫', clock)).toEqual([]); // the tombstone = 0 join is what hides them
     expect((db.prepare('SELECT COUNT(*) AS n FROM facts').get() as { n: number }).n).toBe(2); // rows kept
+    // FIX ROUND 1, finding 1: the index rows STAY, exactly as `tombstone()` leaves them. Emptying
+    // the contentless index while `facts.value_tok` still held the tokens is what corrupted the
+    // next upsert of a pre-wipe key (see the case below).
+    expect((db.prepare('SELECT COUNT(*) AS n FROM facts_fts').get() as { n: number }).n).toBe(2);
+  });
+
+  it('a key that existed before a wipe is still updatable afterwards (fix round 1, finding 1)', () => {
+    // The regression, reproduced on a scratch database this session before the fix: `wipe()` ran
+    // `INSERT INTO facts_fts (facts_fts) VALUES ('delete-all')` but left `facts.value_tok`
+    // populated, so this third upsert handed FTS5 a 'delete' for tokens no longer in the index and
+    // threw `database disk image is malformed` (SQLITE_CORRUPT, errcode 267) BEFORE the UPDATE --
+    // the new value was silently lost and `k1` was permanently un-updatable. Keys are stable
+    // identifiers by design, so it fired on the first extraction after X4's one-click wipe.
+    plant('k1', '主人喜欢猫', ['猫']);
+    plant('k2', '主人喜欢狗', ['狗']);
+    expect(store.wipe()).toBe(2);
+
+    const again = store.upsert({
+      key: 'k1',
+      value: '主人喜欢鸟',
+      alias: ['鸟'],
+      confidence: 0.9,
+      sourceTurn: null,
+    });
+    expect(again.changed).toBe(true);
+    const row = db.prepare('SELECT value, tombstone FROM facts WHERE key = ?').get('k1') as {
+      value: string;
+      tombstone: number;
+    };
+    expect(row.value).toBe('主人喜欢鸟'); // it landed
+    expect(row.tombstone).toBe(0); // and the upsert revived it
+    expect(store.retrieve('鸟', clock)).toEqual(['主人喜欢鸟']); // searchable through the index
+    expect(store.retrieve('猫', clock)).toEqual([]); // the superseded value left the index
+    // k2 is untouched by the wipe-then-revive, and still updatable itself
+    expect(
+      store.upsert({ key: 'k2', value: '主人喜欢鱼', alias: [], confidence: 0.9, sourceTurn: null })
+        .changed,
+    ).toBe(true);
+    expect(store.retrieve('鱼', clock)).toEqual(['主人喜欢鱼']);
+  });
+
+  it('upsert is atomic: a failed change leaves the table and the contentless index in agreement', () => {
+    // FIX ROUND 1, finding 3. The change path is three statements -- the FTS 'delete', the UPDATE
+    // and the FTS re-INSERT -- and node:sqlite autocommits each one. A throw in the middle used to
+    // leave a fact that is live in `facts` and absent from `facts_fts`: unsearchable forever, since
+    // reindexMigratedRows only repairs rows whose value_tok is ''. The trigger below makes the
+    // middle statement fail on demand.
+    plant('boom', '主人喜欢猫', ['猫']);
+    db.exec(
+      `CREATE TRIGGER t_boom BEFORE UPDATE ON facts WHEN NEW.value = '爆炸'
+         BEGIN SELECT RAISE(ABORT, 'boom'); END`,
+    );
+    expect(() =>
+      store.upsert({ key: 'boom', value: '爆炸', alias: [], confidence: 0.9, sourceTurn: null }),
+    ).toThrow();
+    db.exec('DROP TRIGGER t_boom');
+
+    expect(db.isTransaction).toBe(false); // the ROLLBACK guard ran
+    const row = db.prepare('SELECT value FROM facts WHERE key = ?').get('boom') as { value: string };
+    expect(row.value).toBe('主人喜欢猫'); // unchanged...
+    expect(store.retrieve('猫', NOW)).toEqual(['主人喜欢猫']); // ...and still in the index
   });
 
   it('list returns the FactRow shape §8.2 declares', () => {
@@ -277,32 +337,60 @@ describe('FactStore.retrieve — two-pass bm25 (contracts §8.4, R3-10)', () => 
   });
 
   it('the unigram fallback fires only when pass 1 returns fewer than FACT_FALLBACK_MIN_HITS', () => {
-    // Pass 1 on '面试' hits ONE row, so the fallback runs and may widen the set.
+    // FIX ROUND 1, finding 2: pass 1 is the BIGRAM query (tokBigram), so pass 2 can actually add
+    // rows pass 1 never saw. Before the fix pass 1 queried tok() -- unigrams included -- and was a
+    // strict superset of pass 2, so merge() could never add anything and this case passed on pass 1
+    // alone. It is now asserted the only way that means something: the widening rows are named, and
+    // pass 1's own hit count is checked directly.
     plant('a', '主人在准备面试', ['面试']);
     plant('b', '主人在准备试卷', ['考试']);
     plant('c', '主人喜欢面条', ['面食']);
     plant('d', '主人喜欢猫', ['猫']);
+
+    const pass1Hits = (q: string): number => {
+      const m = toMatchQuery(tokBigram(q));
+      if (m === '') return 0;
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM facts_fts JOIN facts f ON f.id = facts_fts.rowid
+              WHERE facts_fts MATCH ?1 AND f.tombstone = 0 AND f.confidence >= ?2`,
+          )
+          .get(m, FACT_MIN_CONFIDENCE) as { n: number }
+      ).n;
+    };
+
+    expect(pass1Hits('面试')).toBe(1); // only 'a' carries the BIGRAM 面试
+    expect(pass1Hits('面试')).toBeLessThan(FACT_FALLBACK_MIN_HITS); // so the fallback runs
     const out = store.retrieve('面试', NOW);
     expect(out[0]).toBe('主人在准备面试'); // the bigram hit still ranks first
-    expect(out.length).toBeGreaterThan(1); // 面 / 试 unigrams reached 试卷 and 面条
-    // Four bigram hits: pass 1 is enough, the fallback never runs, and 猫 stays out.
+    expect(out).toContain('主人在准备试卷'); // reached by the 试 unigram, pass 2 only
+    expect(out).toContain('主人喜欢面条'); // reached by the 面 unigram, pass 2 only
+    expect(out).not.toContain('主人喜欢猫');
+
+    // Five bigram hits: pass 1 is enough on its own, so the fallback never runs and NOTHING that
+    // only a unigram could reach comes back.
     for (let i = 0; i < 4; i++) plant(`m_${i}`, `主人的第${i}个面试安排`, ['面试']);
-    expect(store.retrieve('面试', NOW).every((v) => !v.includes('猫'))).toBe(true);
+    expect(pass1Hits('面试')).toBeGreaterThanOrEqual(FACT_FALLBACK_MIN_HITS);
+    const wide = store.retrieve('面试', NOW);
+    expect(wide).not.toContain('主人在准备试卷');
+    expect(wide).not.toContain('主人喜欢面条');
+    expect(wide.every((v) => !v.includes('猫'))).toBe(true);
   });
 
   it('drops STOPWORDS from the fallback pass so a query cannot collapse to "everything with 的"', () => {
-    plant('x', '主人养猫叫芝麻', ['猫']);
-    plant('y', '主人养狗叫大黄', ['狗']);
-    // DEVIATION (task-2 Step 17): the brief plants 主人的猫叫芝麻 / 主人的狗叫大黄 and expects
-    // `retrieve('的')` to be []. It cannot be: contracts §8.4 says STOPWORDS "is applied **only**
-    // to the unigram fallback pass", so pass 1 still matches the literal token 的 in value_tok and
-    // correctly returns both rows. Dropping 的 from the corpus is what actually isolates the rule
-    // under test — an all-stopword query leaves the FALLBACK with an empty token list, so it
-    // cannot widen the result to the whole table.
+    // FIX ROUND 1, finding 2: the corpus the brief actually specified is restored -- both values
+    // CONTAIN 的. Round 0 had to drop 的 from the corpus because pass 1 queried tok(), whose
+    // unigrams matched the bare 的 in value_tok before STOPWORDS was ever consulted, so §8.4's
+    // stated purpose ("prevents a query collapsing to every fact that contains 的") could not hold.
+    // With pass 1 bigram-only, 的 has no bigram, pass 1 is empty, and the stopword filter is the
+    // only thing standing between the query and the whole table.
+    plant('x', '主人的猫叫芝麻', ['猫']);
+    plant('y', '主人的狗叫大黄', ['狗']);
     expect(store.retrieve('的', NOW)).toEqual([]);
     expect(store.retrieve('我的', NOW)).toEqual([]); // 我 and 的 are both stopwords
     // …and the fallback still uses the NON-stopword characters of a mixed query.
-    expect(store.retrieve('的猫', NOW)).toEqual(['主人养猫叫芝麻']);
+    expect(store.retrieve('的猫', NOW)).toEqual(['主人的猫叫芝麻']);
   });
 
   it('an empty or punctuation-only query returns [] without touching FTS5', () => {
