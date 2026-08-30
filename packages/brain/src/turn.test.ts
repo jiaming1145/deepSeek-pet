@@ -217,6 +217,7 @@ describe('TurnRunner — the happy path', () => {
     expect(h.states).toEqual(['thinking', 'speaking', 'idle']);
     expect(h.runner.state).toBe('idle');
 
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows).toEqual([
       { role: 'user', content: '我回来了。', meta: { turnId: 't1', kind: 'chat' } },
       { role: 'assistant', content: '回来啦。今天怎么样。', meta: { turnId: 't1', kind: 'chat' } },
@@ -242,6 +243,8 @@ describe('TurnRunner — the happy path', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.sentences).toHaveLength(1);
     expect(h.sentences[0].text).toBe('回来啦，吃饭没？');
+    h.runner.turnShown('t1'); // CX-1: the normal row lands only after playback is acknowledged
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows[1].content).toBe('回来啦，吃饭没？');
   });
 
@@ -345,6 +348,8 @@ describe('TurnRunner — turn commit and interruption', () => {
     const second = await h.runner.send('那你先睡吧。');
     expect(second).toBe('t2');
     await until(() => h.turnDone.length === 2, 'both turns done');
+    h.runner.turnShown(second);
+    await until(() => h.history.rows.length === 4, 'the second assistant row');
     expect(h.history.rows).toEqual([
       { role: 'user', content: '我回来了。', meta: { turnId: 't1', kind: 'chat' } },
       { role: 'assistant', content: '回来啦。', meta: { turnId: 't1', kind: 'chat', interrupted: true } },
@@ -416,6 +421,8 @@ describe('TurnRunner — streaming lint (R4)', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.client.requests).toHaveLength(1);
     expect(h.sentences.map((s) => s.text)).toEqual(['回来啦。', '今天怎么样。']);
+    h.runner.turnShown('t1'); // CX-1: the normal row lands only after playback is acknowledged
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows[1].content).toBe('回来啦。今天怎么样。');
   });
 
@@ -425,6 +432,8 @@ describe('TurnRunner — streaming lint (R4)', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.client.requests).toHaveLength(1);
     expect(h.sentences.map((s) => s.text)).toEqual(['回来啦。', '饭吃了没。']);
+    h.runner.turnShown('t1'); // CX-1: the normal row lands only after playback is acknowledged
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows[1].content).toBe('回来啦。饭吃了没。');
     expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('closing-moral');
     expect(h.turnDone[0].regenerated).toBe(false);
@@ -445,6 +454,8 @@ describe('TurnRunner — streaming lint (R4)', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.client.requests).toHaveLength(1);
     expect(h.sentences.map((s) => s.text)).toEqual(['回来啦……']);
+    h.runner.turnShown('t1'); // CX-1: the normal row lands only after playback is acknowledged
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows[1].content).toBe('回来啦……');
     expect(h.turnDone[0].lint.severity).toBe('strip');
   });
@@ -552,6 +563,8 @@ describe('TurnRunner — review fixes (M-1 / I-3)', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.client.requests).toHaveLength(1);
     expect(h.sentences.map((s) => s.text)).toEqual(['主人回来啦😀。', '今天吃了吗。']);
+    h.runner.turnShown('t1'); // CX-1: the normal row lands only after playback is acknowledged
+    await until(() => h.history.rows.length === 2, 'the assistant row');
     expect(h.history.rows[1].content).toBe('主人回来啦😀。今天吃了吗。');
     expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('emoji-rate');
     expect(h.metrics.records[0].lint.violations.map((v) => v.rule)).toContain('emoji-rate');
@@ -751,6 +764,8 @@ describe('TurnRunner — write barrier (G-5) and awaitable cancel', () => {
     const prompt = h.client.requests[1].messages.map((m) => m.content);
     expect(prompt).toContain('我回来了。');
     expect(prompt).toContain('回来啦。');
+    h.runner.turnShown('t2');
+    await until(() => h.history.rows.length === 4, 'the second assistant row');
     expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '回来啦。', '那你先睡吧。', '好吧。']);
   });
 
@@ -773,5 +788,99 @@ describe('TurnRunner — write barrier (G-5) and awaitable cancel', () => {
     expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '回来啦。']);
     expect(h.metrics.records).toHaveLength(1);
     await expect(h.runner.cancel()).resolves.toBeUndefined();
+  });
+});
+
+describe('TurnRunner — stream finished but playback not acknowledged (CX-1)', () => {
+  /** GREETING ends normally; turnDone is out, the bubble is still revealing (no turnShown yet). */
+  async function finishedUnacknowledged(scripts: Script[]) {
+    const h = harness(scripts);
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences).toHaveLength(2);
+    expect(h.runner.state).toBe('speaking');
+    h.runner.sentenceShown('t1', 0); // only the first sentence has been revealed
+    await until(() => h.history.rows.length === 1, 'the user row');
+    expect(h.history.rows.map((r) => r.role)).toEqual(['user']); // no assistant row yet
+    return h;
+  }
+
+  it('CX-1: send() before turnShown retires the turn and keeps only the shown prefix, interrupted', async () => {
+    const h = await finishedUnacknowledged([{ chunks: GREETING }, { chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    const second = await h.runner.send('那你先睡吧。');
+    expect(second).toBe('t2');
+    expect(h.turnDone).toHaveLength(1); // the superseded turn already reported: no second turnDone
+    await until(() => h.turnDone.length === 2, 'the second turn');
+    h.runner.turnShown(second);
+    await until(() => h.history.rows.length === 4, 'the second assistant row');
+    expect(h.history.rows).toEqual([
+      { role: 'user', content: '我回来了。', meta: { turnId: 't1', kind: 'chat' } },
+      { role: 'assistant', content: '回来啦。', meta: { turnId: 't1', kind: 'chat', interrupted: true } },
+      { role: 'user', content: '那你先睡吧。', meta: { turnId: 't2', kind: 'chat' } },
+      { role: 'assistant', content: '好吧。', meta: { turnId: 't2', kind: 'chat' } },
+    ]);
+    expect(h.metrics.records.map((r) => r.turnId)).toEqual(['t1', 't2']);
+    // The superseded turn's late turnShown is ignored: no second row for t1.
+    h.runner.turnShown('t1');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.history.rows).toHaveLength(4);
+  });
+
+  it('CX-1: cancel() before turnShown keeps only the shown prefix, interrupted, and goes idle', async () => {
+    const h = await finishedUnacknowledged([{ chunks: GREETING }]);
+    await h.runner.cancel();
+    expect(h.runner.state).toBe('idle');
+    expect(h.states).toEqual(['thinking', 'speaking', 'idle']);
+    expect(h.turnDone).toHaveLength(1);
+    expect(h.history.rows).toEqual([
+      { role: 'user', content: '我回来了。', meta: { turnId: 't1', kind: 'chat' } },
+      { role: 'assistant', content: '回来啦。', meta: { turnId: 't1', kind: 'chat', interrupted: true } },
+    ]);
+    expect(h.metrics.records).toHaveLength(1);
+    await expect(h.runner.cancel()).resolves.toBeUndefined();
+    h.runner.turnShown('t1');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.history.rows).toHaveLength(2);
+  });
+
+  it('CX-1: nothing shown at all -> cancel() before turnShown writes no assistant row', async () => {
+    const h = harness([{ chunks: GREETING }]);
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    await h.runner.cancel();
+    expect(h.history.rows.map((r) => r.role)).toEqual(['user']);
+    expect(h.runner.state).toBe('idle');
+  });
+
+  it('CX-1: turnShown after the stream ended writes the full normal row exactly once', async () => {
+    const h = await finishedUnacknowledged([{ chunks: GREETING }]);
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    await until(() => h.history.rows.length === 2, 'the assistant row');
+    expect(h.history.rows[1]).toEqual(
+      { role: 'assistant', content: '回来啦。今天怎么样。', meta: { turnId: 't1', kind: 'chat' } },
+    );
+    // Settled now: a later cancel()/send() must not rewrite it.
+    await h.runner.cancel();
+    h.runner.turnShown('t1');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.history.rows).toHaveLength(2);
+    expect(h.turnDone).toHaveLength(1);
+  });
+
+  it('CX-1: the deferred assistant row is covered by the write barrier of a following send', async () => {
+    const h = harness([{ chunks: GREETING }, { chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    h.history.windowFromRows = true;
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    h.runner.turnShown('t1');
+    await h.runner.send('那你先睡吧。');
+    for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.client.requests).toHaveLength(1); // t2 waits behind t1's assistant row
+    open();
+    await until(() => h.turnDone.length === 2, 'both turns done');
+    expect(h.client.requests[1].messages.map((m) => m.content)).toContain('回来啦。今天怎么样。');
   });
 });
