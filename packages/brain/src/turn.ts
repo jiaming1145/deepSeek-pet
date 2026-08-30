@@ -64,6 +64,8 @@ interface Turn {
   /** The text this turn will commit — already the concatenation when it superseded a pending turn. */
   userText: string;
   startedAt: number;
+  /** Stamped at the top of every runAttempt: ttftMs is dispatch-relative (M-6, §3.11.2). */
+  dispatchedAt: number;
   preamble: StatePreamble;
   ctx: LintContext;
   controller: AbortController;
@@ -82,10 +84,15 @@ interface Turn {
   emptyRetried: boolean;
   /** True once any sentence of the current attempt reached consider() — gates the A23 strip (M-1). */
   consideredAny: boolean;
+  /** One warning per turn for motions outside persona.motionKeys (M-25). */
+  motionWarned: boolean;
   lastLint: LintResult;
   commit: Promise<void> | null;
   committed: boolean;
+  /** Reached a terminal outcome (normal, empty, error, retire). Guards cancel()/send() and fail(). */
   settled: boolean;
+  /** Abandoned by cancel() or a superseding send() — the only reason the turn body stops early (G-4). */
+  interrupted: boolean;
   acknowledged: boolean;
   base: { history: ChatMessage[]; summary: string; facts: string[] } | null;
 }
@@ -106,6 +113,12 @@ export class TurnRunner {
   };
   private current: Turn | null = null;
   private turnState: TurnState = 'idle';
+  /**
+   * The write barrier (G-5): every history append goes through this chain, in the order it was
+   * requested, and a new turn awaits it before reading its history window. A failed append is
+   * warned about and the chain continues — it never rejects (I-8 / G-4).
+   */
+  private writes: Promise<void> = Promise.resolve();
 
   constructor(deps: TurnRunnerDeps) {
     this.deps = deps;
@@ -148,6 +161,7 @@ export class TurnRunner {
     let userText = text;
     if (previous !== null && !previous.settled) {
       previous.settled = true;
+      previous.interrupted = true;
       previous.controller.abort();
       // Nothing was written for an uncommitted turn, so its text moves to the new turn instead.
       if (!previous.committed) userText = `${previous.userText}\n${text}`;
@@ -160,6 +174,7 @@ export class TurnRunner {
       kind,
       userText,
       startedAt: this.now(),
+      dispatchedAt: 0,
       preamble: this.deps.state(),
       ctx: { recent: [], sensitiveTurn: false },
       controller: new AbortController(),
@@ -174,10 +189,12 @@ export class TurnRunner {
       regenerated: false,
       emptyRetried: false,
       consideredAny: false,
+      motionWarned: false,
       lastLint: cleanLint(),
       commit: null,
       committed: false,
       settled: false,
+      interrupted: false,
       acknowledged: false,
       base: null,
     };
@@ -187,12 +204,20 @@ export class TurnRunner {
     return Promise.resolve(id);
   }
 
-  cancel(): void {
+  /**
+   * Resolves after retire()'s writes (user row, interrupted assistant row, metrics) have settled;
+   * never rejects; resolves immediately when idle. The synchronous side effects (state -> idle,
+   * turnDone) happen before it returns, exactly as before.
+   */
+  cancel(): Promise<void> {
     const turn = this.current;
-    if (turn === null || turn.settled) return;
+    if (turn === null || turn.settled) return Promise.resolve();
     turn.settled = true;
+    turn.interrupted = true;
     turn.controller.abort();
-    this.detach(this.retire(turn, true, true));
+    const work = this.retire(turn, true, true);
+    this.detach(work);
+    return work.catch(() => undefined);
   }
 
   sentenceShown(turnId: string, seq: number): void {
@@ -211,7 +236,16 @@ export class TurnRunner {
   // -------------------------------------------------------------- the turn body
 
   private abandoned(turn: Turn): boolean {
-    return this.current !== turn || turn.settled;
+    return this.current !== turn || turn.interrupted;
+  }
+
+  /** G-5: one ordered chain for every history append; a failure is warned about, never thrown. */
+  private enqueue(label: string, work: () => Promise<void>): Promise<void> {
+    const next = this.writes.then(work).catch((err: unknown) => {
+      console.warn(`[turn] history write failed (${label})`, err);
+    });
+    this.writes = next;
+    return next;
   }
 
   private detach(work: Promise<void>): void {
@@ -222,6 +256,9 @@ export class TurnRunner {
 
   private async run(turn: Turn): Promise<void> {
     try {
+      // G-5: a superseding turn must not overtake the previous turn's appends.
+      await this.writes;
+      if (this.abandoned(turn)) return;
       turn.ctx = {
         recent: await this.deps.history.recentAssistant(5),
         sensitiveTurn: isSensitive(turn.userText),
@@ -317,6 +354,7 @@ export class TurnRunner {
 
   private async runAttempt(turn: Turn, messages: ChatMessage[]): Promise<AttemptOutcome> {
     turn.controller = new AbortController();
+    turn.dispatchedAt = this.now();
     const request: ChatRequest = { messages };
     try {
       for await (const chunk of this.deps.client.stream(request, turn.controller.signal)) {
@@ -326,7 +364,7 @@ export class TurnRunner {
           continue;
         }
         if (chunk.kind === 'done') continue;
-        if (turn.ttftMs === null) turn.ttftMs = this.now() - turn.startedAt;
+        if (turn.ttftMs === null) turn.ttftMs = this.now() - turn.dispatchedAt;
         turn.rawStream += chunk.text;
         for (const ev of turn.parser.push(chunk.text)) {
           if (this.consider(turn, ev) === 'regenerate') {
@@ -369,7 +407,16 @@ export class TurnRunner {
     if (result.severity !== 'none') return 'dropped';
 
     if (turn.pending !== null) this.release(turn);
-    turn.pending = { ...ev, text: display };
+    const next: SentenceEvent = { ...ev, text: display };
+    // M-25: a motion the persona does not declare never reaches the stage; the emotion stays.
+    if (next.motion !== undefined && !this.deps.persona.motionKeys.includes(next.motion)) {
+      if (!turn.motionWarned) {
+        turn.motionWarned = true;
+        console.warn(`[turn] dropped unknown motion "${next.motion}" (turn ${turn.id})`);
+      }
+      delete next.motion;
+    }
+    turn.pending = next;
     turn.rawKept += ev.text;
     return 'accepted';
   }
@@ -399,8 +446,9 @@ export class TurnRunner {
     turn.usage = null;
   }
 
+  /** I-2: emptiness is a parser fact (no non-whitespace text outside tags); the sanitizer is the fallback. */
   private isEmpty(turn: Turn): boolean {
-    if (turn.rawStream === '') return true;
+    if (!turn.parser.hasText) return true;
     return sanitizeForDisplay(turn.rawStream).trim() === '';
   }
 
@@ -410,11 +458,13 @@ export class TurnRunner {
     if (turn.pending !== null) this.release(turn);
     if (this.abandoned(turn)) return;
     turn.settled = true;
-    await this.commitUser(turn);
     const text = turn.emitted.map((s) => s.text).join('');
+    const writes = [this.commitUser(turn)];
     if (text !== '') {
-      await this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind });
+      writes.push(this.enqueue('assistant row', () =>
+        this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind })));
     }
+    await Promise.all(writes);
     await this.finish(turn, null);
   }
 
@@ -429,8 +479,22 @@ export class TurnRunner {
     this.setState('speaking', turn);
     turn.emitted.push(ev);
     this.emit('sentence', ev);
-    await this.deps.history.append('assistant', text, { turnId: turn.id, kind: 'system' });
+    await this.enqueue('canned line', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: 'system' }));
     await this.finish(turn, 'empty');
+  }
+
+  /**
+   * The ordered "what the user actually saw" write, shared by retire() and fail() (R2 / G-6):
+   * the sentences whose sentenceShown arrived, in seq order, as one interrupted assistant row.
+   * Enqueued synchronously so a superseding turn's barrier already covers it.
+   */
+  private persistShown(turn: Turn): Promise<void> {
+    const shown = turn.emitted.filter((s) => turn.shown.has(s.seq)).sort((a, b) => a.seq - b.seq);
+    if (shown.length === 0) return Promise.resolve();
+    const text = shown.map((s) => s.text).join('');
+    return this.enqueue('interrupted assistant row', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind, interrupted: true }));
   }
 
   /** cancel() and send()-while-busy share this path (§3.11.4). */
@@ -438,28 +502,25 @@ export class TurnRunner {
     const totalMs = this.now() - turn.startedAt;
     this.emitTurnDone(turn, totalMs);
     if (goIdle) this.toIdle(turn);
-    if (commitUser) await this.commitUser(turn);
-    const shown = turn.emitted.filter((s) => turn.shown.has(s.seq)).sort((a, b) => a.seq - b.seq);
-    if (shown.length > 0) {
-      await this.deps.history.append('assistant', shown.map((s) => s.text).join(''), {
-        turnId: turn.id,
-        kind: turn.kind,
-        interrupted: true,
-      });
-    }
+    // Both writes are enqueued before the first await, so they precede anything a new turn does.
+    const writes: Promise<void>[] = [];
+    if (commitUser) writes.push(this.commitUser(turn));
+    writes.push(this.persistShown(turn));
+    await Promise.all(writes);
     await this.record(turn, totalMs, null);
   }
 
   /** A DeepSeekError gets `error` + a MetricsRecord and NO turnDone (§3.11.5). */
   private async fail(turn: Turn, err: unknown): Promise<void> {
     if (err instanceof CancelledError) return;
-    if (this.abandoned(turn)) return;
+    if (turn.settled || this.abandoned(turn)) return;
     turn.settled = true;
     const failure =
       err instanceof DeepSeekError
         ? err
         : new DeepSeekError('network', null, err instanceof Error ? err.message : String(err));
-    await this.commitUser(turn);
+    // G-6: what the user already saw is persisted once, as interrupted, before the error goes out.
+    await Promise.all([this.commitUser(turn), this.persistShown(turn)]);
     const totalMs = this.now() - turn.startedAt;
     this.emit('error', { turnId: turn.id, code: failure.code, message: failure.message });
     this.toIdle(turn);
@@ -489,10 +550,8 @@ export class TurnRunner {
   private commitUser(turn: Turn): Promise<void> {
     if (turn.commit === null) {
       turn.committed = true;
-      turn.commit = this.deps.history.append('user', turn.userText, {
-        turnId: turn.id,
-        kind: turn.kind,
-      });
+      turn.commit = this.enqueue('user row', () =>
+        this.deps.history.append('user', turn.userText, { turnId: turn.id, kind: turn.kind }));
     }
     return turn.commit;
   }
@@ -516,7 +575,11 @@ export class TurnRunner {
       lint: turn.lastLint,
       errorCode,
     };
-    await port.record(entry);
+    try {
+      await port.record(entry);
+    } catch (err) {
+      console.warn('[turn] metrics write failed', err);
+    }
   }
 
   private setState(state: TurnState, turn: Turn): void {

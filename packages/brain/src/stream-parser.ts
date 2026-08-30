@@ -16,6 +16,9 @@ export class StreamParser {
   public complianceMiss = false;
   constructor(turnId: string) { this.turnId = turnId; }
 
+  /** True once any non-whitespace text was seen — the parser fact behind the §3.9.4 empty test (I-2). */
+  get hasText(): boolean { return this.sawText; }
+
   push(chunk: string): SentenceEvent[] {
     const out: SentenceEvent[] = [];
     for (const item of this.tags.push(chunk)) {
