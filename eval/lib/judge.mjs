@@ -30,7 +30,19 @@ export function renderExchange(prompt, reply, name) {
 }
 
 export function buildJudgeUser(prompt, reply, axes, name) {
-  return `【对话】\n${renderExchange(prompt, reply, name)}\n\n【这一条要评的项目】\n${axes.join('、')}\n\n只输出 JSON。`;
+  const condition = typeof prompt.condition === 'string' && prompt.condition !== ''
+    ? `【判定条件】\n${prompt.condition}\n\n`
+    : '';
+  return `【对话】\n${renderExchange(prompt, reply, name)}\n\n${condition}【这一条要评的项目】\n${axes.join('、')}\n\n只输出 JSON。`;
+}
+
+/**
+ * What the judge reads: the RAW reply with protocol tags already stripped by StreamParser, i.e. the
+ * text the user would have seen if sanitizeForDisplay did not exist. The rubric's markdown /
+ * stage-direction clauses only make sense on this text; `t.reply` (sanitized) is what the app shows.
+ */
+export function judgeInput(turn) {
+  return turn.raw;
 }
 
 export function extractJson(text) {

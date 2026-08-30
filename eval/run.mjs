@@ -13,7 +13,7 @@ import { loadFixture, validateFixture } from './lib/fixture.mjs';
 import { RecordedClient } from './lib/recorded.mjs';
 import { runTurn, pool } from './lib/turn.mjs';
 import { aggregate, axesFor } from './lib/aggregate.mjs';
-import { loadJudge, buildJudgeSystem, buildJudgeUser, judgeTurn } from './lib/judge.mjs';
+import { loadJudge, buildJudgeSystem, buildJudgeUser, judgeInput, judgeTurn } from './lib/judge.mjs';
 import { writeReports, stampFrom } from './lib/report.mjs';
 import { runAblation, renderAblationMarkdown } from './lib/ablation.mjs';
 
@@ -141,7 +141,7 @@ async function main() {
       await pool(turns, opts.concurrency, async (t) => {
         const prompt = byId.get(t.promptId);
         const axes = axesFor(prompt);
-        const user = buildJudgeUser(prompt, t.reply, axes, bundle.card.name);
+        const user = buildJudgeUser(prompt, judgeInput(t), axes, bundle.card.name);
         const r = await judgeTurn({ baseUrl: DEEPSEEK_BASE_URL, apiKey, model: opts.judge, system, user, axes });
         if (r.ok) t.judge = r.value;
         else { t.judge = null; t.judgeError = true; console.error(`\n评审失败 ${t.promptId} run ${t.run}：${r.message}`); }

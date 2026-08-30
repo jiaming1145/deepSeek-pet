@@ -23,6 +23,13 @@ export function validateFixture(fx) {
     }
     if (typeof p.text !== 'string' || p.text === '') return { ok: false, message: `${p.id} 缺少 text` };
     if (!Array.isArray(p.axes)) return { ok: false, message: `${p.id} 缺少 axes 数组` };
+    // E-3 trait probes: the judge reads 【判定条件】 from `condition` and answers false without one.
+    if (p.condition !== undefined && (typeof p.condition !== 'string' || p.condition === '')) {
+      return { ok: false, message: `${p.id} 的 condition 必须是非空字符串` };
+    }
+    if (p.axes.includes('trait_hit') && p.condition === undefined) {
+      return { ok: false, message: `${p.id} 评 trait_hit 却没有 condition（【判定条件】）` };
+    }
     if (p.priorTurns !== undefined) {
       if (!Array.isArray(p.priorTurns)) return { ok: false, message: `${p.id} 的 priorTurns 不是数组` };
       for (const t of p.priorTurns) {

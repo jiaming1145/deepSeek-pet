@@ -34,6 +34,7 @@ export const AXIS_LABELS = {
   memory_use: 'A19 记得住', trait_hit: 'E-3 人设特征命中（Phase 2 无样本）',
   emoji_discipline: 'A18 带 emoji 的回复占比', false_disagreement: 'P2 对的也硬抬杠',
   emoji_discipline_sensitive: 'A18 难受话题里带 emoji', judge_error_rate: '评审返回解析失败率',
+  in_character_flips: 'A9 掉出人设（判官打 0：变助手 / 心理咨询师 / 旁白）',
 };
 
 export const SHAPE_SPECS = {
@@ -45,6 +46,8 @@ export const SHAPE_SPECS = {
   repetitionMaxPct:         { cmp: 'lt',  threshold: 0.20, unit: 'pct',   label: 'A7 4-gram 最大重合率' },
   complianceMissPct:        { cmp: 'lt',  threshold: 0.10, unit: 'pct',   label: 'ACT 首句缺标记' },
   cacheHitPct:              { cmp: 'gte', threshold: 0.70, unit: 'pct',   label: 'X1 第3轮起缓存命中' },
+  emojiMultiCount:          { cmp: 'lte', threshold: 0,    unit: 'count', label: 'A18 一条里多于一个 emoji' },
+  markdownLintCount:        { cmp: 'lte', threshold: 0,    unit: 'count', label: 'A4 原始输出命中 markdown lint' },
 };
 
 const round3 = (x) => Math.round(x * 1000) / 1000;
@@ -113,6 +116,18 @@ export function aggregate(turns, { noJudge }) {
       .slice(0, 3).map((t) => ({ promptId: t.promptId, run: t.run, reply: t.reply }));
   }
 
+  // A9's second half (exquisite-bar A9: "0 therapist-flips"): a judge score of 0 on in_character IS
+  // the flip by the rubric's definition, and the mean/pct2 pair alone lets up to 10 % of them through.
+  const icRows = judged.filter((t) => t.judge.in_character !== undefined);
+  if (noJudge || icRows.length === 0) {
+    axes.in_character_flips = { kind: 'countMax', n: 0, skipped: true, pass: true, threshold: 0 };
+  } else {
+    const flips = icRows.filter((t) => t.judge.in_character === 0);
+    const pass = flips.length === 0;
+    axes.in_character_flips = { kind: 'countMax', n: icRows.length, count: flips.length, threshold: 0, skipped: false, pass };
+    if (!pass) worst.in_character_flips = flips.slice(0, 3).map((t) => ({ promptId: t.promptId, run: t.run, reply: t.reply }));
+  }
+
   // How often the judge failed to answer in the required shape.
   const judgeErrors = turns.filter((t) => t.judgeError).length;
   if (noJudge) {
@@ -153,6 +168,9 @@ export function aggregate(turns, { noJudge }) {
     ? null
     : round3(warm.reduce((a, t) => a + t.usage.cacheHit, 0) / warmPrompt);
 
+  const lintRuleCounts = {};
+  for (const t of turns) for (const v of t.lint.violations) lintRuleCounts[v.rule] = (lintRuleCounts[v.rule] ?? 0) + 1;
+
   const shape = {
     shortReplyPct: round3(turns.filter((t) => t.shape.hanzi <= 60 && t.shape.sentences <= 3).length / n),
     questionRatePct: round3(turns.filter((t) => t.shape.endsWithQuestion).length / n),
@@ -162,6 +180,10 @@ export function aggregate(turns, { noJudge }) {
     repetitionMaxPct: round3(repetitionMaxPct),
     complianceMissPct: round3(turns.filter((t) => t.complianceMiss).length / n),
     cacheHitPct,
+    // A18 first half: ≤ 1 emoji per reply (the judge axis is presence-only).
+    emojiMultiCount: turns.filter((t) => t.shape.emojiCount > 1).length,
+    // A4 on the RAW output: the linter sees markdown before the sanitizer strips it (I-12).
+    markdownLintCount: lintRuleCounts.markdown ?? 0,
   };
 
   const shapeGates = {};
@@ -172,8 +194,6 @@ export function aggregate(turns, { noJudge }) {
       skipped, pass: skipped ? true : cmpOk(spec.cmp, value, spec.threshold) };
   }
 
-  const lintRuleCounts = {};
-  for (const t of turns) for (const v of t.lint.violations) lintRuleCounts[v.rule] = (lintRuleCounts[v.rule] ?? 0) + 1;
   const ttfts = turns.map((t) => t.ttftMs).filter((x) => typeof x === 'number').sort((a, b) => a - b);
 
   const informational = {

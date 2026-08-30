@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { loadJudge, buildJudgeSystem, buildJudgeUser, renderExchange, extractJson, validateJudgement } from './judge.mjs';
+import { loadJudge, buildJudgeSystem, buildJudgeUser, renderExchange, extractJson, validateJudgement, judgeInput } from './judge.mjs';
 
 const CARD = { name: '鲸鱼娘', description: '一只化成人形的小小虎鲸娘。', personality: '聪明但懒，傲娇嘴甜。' };
 
@@ -58,6 +58,22 @@ test('buildJudgeUser names every axis it wants back', () => {
   const u = buildJudgeUser({ text: '嗯', priorTurns: [] }, '好。', ['in_character', 'initiative'], '鲸鱼娘');
   assert.ok(u.includes('in_character、initiative'));
   assert.ok(u.includes('只输出 JSON'));
+});
+
+test('buildJudgeUser renders 【判定条件】 only when the prompt carries a condition (M-19)', () => {
+  const without = buildJudgeUser({ text: '嗯', priorTurns: [] }, '好。', ['in_character'], '鲸鱼娘');
+  assert.ok(!without.includes('【判定条件】'));
+  const p = { text: '你饿不饿', priorTurns: [], condition: '她提到想吃米饭，而不是别的食物' };
+  const withIt = buildJudgeUser(p, '想吃饭。', ['in_character', 'trait_hit'], '鲸鱼娘');
+  assert.equal(
+    withIt,
+    '【对话】\n用户：你饿不饿\n鲸鱼娘：想吃饭。\n\n【判定条件】\n她提到想吃米饭，而不是别的食物\n\n【这一条要评的项目】\nin_character、trait_hit\n\n只输出 JSON。',
+  );
+});
+
+test('judgeInput hands the judge the raw reply, not the sanitized one (I-12)', () => {
+  const t = { raw: '- 第一点\n**总结**', reply: '第一点\n总结' };
+  assert.equal(judgeInput(t), t.raw);
 });
 
 test('the shipped rubric is version 1 and has a body', () => {
