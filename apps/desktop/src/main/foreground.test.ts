@@ -168,4 +168,64 @@ describe('startForegroundWatch', () => {
     expect(vi.getTimerCount()).toBe(0);
     watch.stop();
   });
+
+  it('onForegroundChanged fires only when the hwnd actually changed, with no argument', () => {
+    let fg = 2;
+    const onChange = vi.fn();
+    const changed = vi.fn();
+    const watch = startForegroundWatch(fakeWindow(), onChange, {
+      intervalMs: 2000,
+      api: fakeWin32({ GetForegroundWindow: () => fg }),
+    });
+    const off = watch.onForegroundChanged(changed);
+    vi.advanceTimersByTime(2000);            // same hwnd: nothing
+    expect(changed).not.toHaveBeenCalled();
+    fg = 3;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0]).toEqual([]);   // no hwnd, no boolean — nothing to leak
+    fg = 3;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    off();
+    fg = 4;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    watch.stop();
+  });
+
+  it('onForegroundChanged is a no-op unsubscribe when the Win32 bindings are unavailable', () => {
+    const watch = startForegroundWatch(fakeWindow(), vi.fn(), { api: null });
+    const off = watch.onForegroundChanged(vi.fn());
+    expect(typeof off).toBe('function');
+    off();
+    watch.stop();
+  });
+
+  // FIX ROUND 1, finding 2. The fan-out used to sit INSIDE pollOnce's Win32 try block, whose catch
+  // is written for a native-call failure: it logs 'poll failed, fullscreen hiding disabled' and
+  // calls stop(), which nothing re-arms. One throw from Task 14's breakpoint-(a) handler would
+  // therefore have killed fullscreen hiding for the whole session and blamed Win32 for it.
+  it('a throwing onForegroundChanged listener neither disables hiding nor suppresses the others', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let fg = 2;
+    const onChange = vi.fn();
+    const good = vi.fn();
+    const watch = startForegroundWatch(fakeWindow(), onChange, {
+      intervalMs: 2000,
+      api: fakeWin32({ GetForegroundWindow: () => fg }),
+    });
+    watch.onForegroundChanged(() => { throw new Error('breakpoint (a) handler blew up'); });
+    watch.onForegroundChanged(good);
+    fg = 3;
+    vi.advanceTimersByTime(2000);
+    expect(good).toHaveBeenCalledTimes(1);                    // the second listener still ran
+    expect(warn).toHaveBeenCalledWith('[foreground] onForegroundChanged listener threw:', expect.anything());
+    expect(warn).not.toHaveBeenCalledWith('[foreground] poll failed, fullscreen hiding disabled:', expect.anything());
+    fg = 4;
+    vi.advanceTimersByTime(2000);
+    expect(good).toHaveBeenCalledTimes(2);                    // still armed: stop() was never called
+    watch.stop();
+    warn.mockRestore();
+  });
 });
