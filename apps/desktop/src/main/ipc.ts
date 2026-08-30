@@ -100,18 +100,32 @@ export function sendTo<C extends Channel>(win: SendTarget | null, channel: C, pa
 }
 
 /**
+ * §11.2: a window allow-list that can be an array or a getter evaluated at event time. Lazy
+ * windows (chat, key, bubble) are destroyed and recreated, so a list captured at registration
+ * would authenticate a corpse and refuse the live window. `null` entries are the `peek()` of a
+ * window that does not currently exist and are dropped.
+ */
+export type WindowList = ReadonlyArray<BrowserWindow | null> | (() => ReadonlyArray<BrowserWindow | null>);
+
+export function resolveWindows(list: WindowList): BrowserWindow[] {
+  const arr = typeof list === 'function' ? list() : list;
+  return arr.filter((w): w is BrowserWindow => w !== null);
+}
+
+/**
  * Subscribe once to a channel that several windows may legitimately use (`chat:open` comes from the
  * pet, the bubble and the key window). The event is accepted only if `isFromWindow` passes for ONE
- * of `windows`; the matching window is handed to the callback. Untrusted senders and malformed
- * payloads are dropped with a warning, exactly as in `onFromPet`.
+ * of `windows` — resolved per event (§11.2 getter form); the matching window is handed to the
+ * callback. Untrusted senders and malformed payloads are dropped with a warning, exactly as in
+ * `onFromPet`.
  */
 export function onFromAny<C extends Channel>(
-  windows: readonly BrowserWindow[],
+  windows: WindowList,
   channel: C,
   cb: (payload: Payload<C>, from: BrowserWindow) => void,
 ): void {
   ipcMain.on(channel, (event, raw: unknown) => {
-    const from = windows.find((w) => isFromWindow(event, w));
+    const from = resolveWindows(windows).find((w) => isFromWindow(event, w));
     if (!from) {
       console.warn(`[ipc] rejected ${channel}: untrusted sender`);
       return;
