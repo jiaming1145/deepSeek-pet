@@ -9,9 +9,10 @@ export interface Size { width: number; height: number }
 export interface Placement { x: number; y: number; side: Side; arrowOffset: number }
 
 /**
- * addendum C6 offset(12). Kept as the contract's number, but the band geometry below does NOT use
- * it: the band OVERLAPS her body (she stands in its right third), so there is no gap to offset by.
- * The composer's own `CHAT_GAP` in `renderer/shared/chat-metrics.ts` is a separate constant.
+ * addendum C6 offset(12). The band geometry does not use it as a gap to HER — the band overlaps her
+ * body, she stands in its right third — but it is the gap the band leaves when it steps clear of the
+ * composer (`avoid`, below). The composer's own `CHAT_GAP` in `renderer/shared/chat-metrics.ts` is a
+ * separate constant.
  */
 export const BUBBLE_GAP = 12;
 export const BUBBLE_PADDING = 16; // addendum C6 shift({ padding: 16 })
@@ -66,6 +67,10 @@ export function preferredSideFor(pet: Rect, workArea: Rect): Side {
   return roomLeft >= BUBBLE_MIN.width ? 'left' : 'right';
 }
 
+/** True when the two rects share any pixel. */
+const intersects = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
 /**
  * Pure band placement in DIP screen coordinates — the same space `BrowserWindow.getBounds()` and
  * `Display.workArea` use. Both the bubble window and the chat window go through it, so the composer
@@ -74,8 +79,23 @@ export function preferredSideFor(pet: Rect, workArea: Rect): Side {
  * `workArea` MUST come from `screen.getDisplayMatching(petBounds).workArea`, never from the primary
  * display: on a mixed-DPI desktop the primary's work area would clamp the band onto the wrong
  * monitor. That single argument is what makes C14 true (test E).
+ *
+ * `avoid` is a rect this window must not share pixels with — in practice the VISIBLE composer, and
+ * only ever passed for the band. "The composer and the band are one object in two states" is the
+ * ruling, but §6.2 rule 4 keeps the composer open through her whole reply and rule 6 needs it open
+ * to restore the text on an error, so both windows really are on screen at once; without this the
+ * two always-on-top surfaces render two different texts into the same rectangle
+ * (`docs/evidence/phase2/app-placement.png` is that defect). The COMPOSER keeps the band's rect —
+ * it is the anchor the ruling names — and the band steps below it, or above it when the work area
+ * has no room below. Passing `null` reproduces the pre-fix geometry exactly.
  */
-export function placeBubble(pet: Rect, size: Size, workArea: Rect, preferredSide: Side): Placement {
+export function placeBubble(
+  pet: Rect,
+  size: Size,
+  workArea: Rect,
+  preferredSide: Side,
+  avoid: Rect | null = null,
+): Placement {
   const petCx = pet.x + pet.width / 2;
   const bandCy = pet.y + pet.height * BAND_ANCHOR_Y;
   const topFloor = pet.y + pet.height * BAND_TOP_MAX_FRACTION;
@@ -88,7 +108,7 @@ export function placeBubble(pet: Rect, size: Size, workArea: Rect, preferredSide
   // The lowest top edge the work area allows. `max(waT, …)` keeps the range non-negative when the
   // window is taller than the work area, which top-aligns it instead of producing a reversed clamp.
   const yMax = Math.max(waT, waB - size.height);
-  const y = clamp(Math.max(bandCy - size.height / 2, topFloor), waT, yMax);
+  let y = clamp(Math.max(bandCy - size.height / 2, topFloor), waT, yMax);
 
   const xFor = (side: Side): number =>
     side === 'right'
@@ -113,6 +133,19 @@ export function placeBubble(pet: Rect, size: Size, workArea: Rect, preferredSide
   }
   // Neither side fits (a band wider than the room either way): keep the preferred side and shift in.
   if (!fitsX(x)) x = clamp(x, waL, Math.max(waL, waR - size.width));
+
+  // Step clear of the composer, vertically — the same flip-then-shift discipline the horizontal
+  // axis uses. Below first: her line reads under your line, and it keeps the band lower on her body
+  // rather than pushing it back up towards her face.
+  if (avoid !== null && intersects({ x, y, ...size }, avoid)) {
+    const below = avoid.y + avoid.height + BUBBLE_GAP;
+    const above = avoid.y - BUBBLE_GAP - size.height;
+    if (below + size.height <= waB) y = below;
+    else if (above >= waT) y = above;
+    // Neither: this work area cannot hold both windows on this column. C14 outranks the dodge, so
+    // the band keeps its own placement and the two overlap — the pre-fix behaviour, in the one case
+    // where there is nowhere to put it. `bubble-place.test.ts` pins that this is the ONLY such case.
+  }
 
   // The notch sits on the pet-facing vertical edge, at the band's anchor row.
   const arrowOffset = clamp(bandCy - y, ARROW_MARGIN, Math.max(ARROW_MARGIN, size.height - ARROW_MARGIN));

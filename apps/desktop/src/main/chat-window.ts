@@ -89,6 +89,11 @@ function guardChatWebContents(win: BrowserWindow): void {
  *
  * It used to pass a literal `'top'`, which combined with the retired head anchor to open the
  * composer across her face; `docs/evidence/phase2/desktop-chat-over-pet.png` is that defect.
+ *
+ * The composer is the surface that KEEPS this rect, and it never passes `avoid`. §6.2 rule 4 holds
+ * the composer open through her whole reply, so both windows really are on screen at once; the BAND
+ * is the one that steps clear (`placeBubble`'s `avoid`, driven from `brain-service.ts`). Placing
+ * both here would make them chase each other.
  */
 function place(win: BrowserWindow, pet: BrowserWindow): void {
   const petBounds = pet.getBounds();
