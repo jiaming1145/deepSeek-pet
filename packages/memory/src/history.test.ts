@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { ChatMessage, MetricsRecord, Summarize, TrimPlan } from '@ds/brain';
 import { estimateTokens, planTrim } from '@ds/brain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { KV_LAST_TRIM_ID, getKv, openDb } from './db.ts';
+import { KV_LAST_TRIM_ID, getKv, openDb, setKv } from './db.ts';
 import { HISTORY_WINDOW_SAFETY_TOKENS, HistoryStore } from './history.ts';
 import { RunningSummary } from './summary.ts';
 
@@ -173,6 +173,154 @@ describe('HistoryStore', () => {
     expect(getKv(db, KV_LAST_TRIM_ID)).toBe(null);
     expect(await failing.summary()).toBe('');
     expect((await failing.window()).length).toBe(3);
+  });
+
+  it('I-10: a history:delete of a dropped row during the summarize await does not move last_trim_id past kept turns', async () => {
+    await store.append('user', '一', { turnId: 't1' });
+    await store.append('assistant', '二', { turnId: 't1' });
+    await store.append('user', '三', { turnId: 't2' });
+    await store.append('assistant', '四', { turnId: 't2' });
+    await store.append('user', '五', { turnId: 't3' });
+    await store.append('assistant', '六', { turnId: 't3' });
+
+    let release: (s: string) => void = () => {};
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const slow = makeStore({ summarize: () => gate });
+    const plan: TrimPlan = {
+      keep: [
+        { role: 'user', content: '三' },
+        { role: 'assistant', content: '四' },
+        { role: 'user', content: '五' },
+        { role: 'assistant', content: '六' },
+      ],
+      drop: [
+        { role: 'user', content: '一' },
+        { role: 'assistant', content: '二' },
+      ],
+      droppedTokens: 2,
+    };
+
+    const trimming = slow.onTrimNeeded(plan);
+    // The chat window deletes the very turn being summarised while the network call is in flight.
+    expect(slow.deleteTurn('t1')).toBe(2);
+    release('摘要。');
+    await trimming;
+
+    // Bounded by the id resolved BEFORE the await: rows 3..6 stay inside the window.
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('2');
+    expect((await slow.window()).map((m) => m.content)).toEqual(['三', '四', '五', '六']);
+    expect(await slow.summary()).toBe('摘要。');
+  });
+
+  it('G2-3 / CX-4: two overlapping trims resolving in reverse order advance the pointer once and skip no rows', async () => {
+    for (let i = 0; i < 6; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', `第${i}条`);
+    const gates: Array<(s: string) => void> = [];
+    const serial = makeStore({
+      summarize: (old, dropped) => {
+        summarizeCalls.push([old, dropped]);
+        return new Promise<string>((resolve) => gates.push(resolve));
+      },
+    });
+    const plan: TrimPlan = {
+      keep: [2, 3, 4, 5].map((i): ChatMessage => ({ role: i % 2 === 0 ? 'user' : 'assistant', content: `第${i}条` })),
+      drop: [
+        { role: 'user', content: '第0条' },
+        { role: 'assistant', content: '第1条' },
+      ],
+      droppedTokens: 2,
+    };
+
+    // Two turns, both planning the same trim (the superseded one's summarisation is still on the wire).
+    const first = serial.onTrimNeeded(plan);
+    const second = serial.onTrimNeeded(plan);
+    expect(gates).toHaveLength(1); // the second trim is queued, not on the wire
+    gates[0]('第一份摘要');
+    await first;
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('2');
+    expect(await serial.summary()).toBe('第一份摘要');
+
+    // The queued trim now finds the pointer past its plan: a stale plan aborts without a network
+    // call and without writing — the newer summary is never overwritten.
+    await second;
+    expect(gates).toHaveLength(1);
+    expect(summarizeCalls).toHaveLength(1);
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('2');
+    expect(await serial.summary()).toBe('第一份摘要');
+    expect((await serial.window()).map((m) => m.content)).toEqual(['第2条', '第3条', '第4条', '第5条']);
+    await expect(serial.trimSettled()).resolves.toBeUndefined();
+  });
+
+  it('G2-3: a trim whose pointer moved under it during the await aborts inside the transaction without writing', async () => {
+    for (let i = 0; i < 4; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', `第${i}条`);
+    let release: (s: string) => void = () => {};
+    const slow = makeStore({ summarize: () => new Promise<string>((resolve) => { release = resolve; }) });
+    const plan: TrimPlan = {
+      keep: [{ role: 'user', content: '第2条' }, { role: 'assistant', content: '第3条' }],
+      drop: [{ role: 'user', content: '第0条' }, { role: 'assistant', content: '第1条' }],
+      droppedTokens: 2,
+    };
+    const trimming = slow.onTrimNeeded(plan);
+    setKv(db, KV_LAST_TRIM_ID, '3'); // something else moved the pointer while the summary was on the wire
+    release('迟到的摘要');
+    await trimming;
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('3');
+    expect(await slow.summary()).toBe('');
+  });
+
+  it('CX-5: a plan built from a safety-truncated window commits the exact cutoff id, not a length', async () => {
+    // Same shape as the 32_000 safety-net case: 60 rows x 600 tokens; window() starts at id 8.
+    const LINE = '话'.repeat(900);
+    for (let i = 0; i < 60; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', LINE);
+    const win = await store.window();
+    expect(win.length).toBe(53);
+    const plan = planTrim(win);
+    expect(plan.drop.length).toBe(15); // rows 8..22 of the table
+
+    await store.onTrimNeeded(plan);
+
+    // A length-derived pointer would have been 0 + 15 = 15 and left rows 16..22 — which were
+    // summarised — back inside the prompt window.
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('22');
+    expect((await store.window()).length).toBe(plan.keep.length);
+    expect(summarizeCalls[0][1]).toEqual(plan.drop);
+  });
+
+  it('CX-4: a plan that no longer describes the window writes nothing and calls no summariser', async () => {
+    await store.append('user', '一');
+    await store.append('assistant', '二');
+    await store.append('user', '三');
+    await store.onTrimNeeded({
+      keep: [{ role: 'user', content: '三' }],
+      drop: [{ role: 'user', content: '别的' }, { role: 'assistant', content: '二' }],
+      droppedTokens: 2,
+    });
+    expect(summarizeCalls).toEqual([]);
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe(null);
+  });
+
+  it('G2-2: a summariser that resolves after close() touches nothing and rejects nothing', async () => {
+    await store.append('user', '一');
+    await store.append('assistant', '二');
+    await store.append('user', '三');
+    let release: (s: string) => void = () => {};
+    const slow = makeStore({ summarize: () => new Promise<string>((resolve) => { release = resolve; }) });
+    const trimming = slow.onTrimNeeded({
+      keep: [{ role: 'user', content: '三' }],
+      drop: [{ role: 'user', content: '一' }, { role: 'assistant', content: '二' }],
+      droppedTokens: 2,
+    });
+    // The quit's drain timed out on this summariser: the store is fenced and the db closed under it.
+    slow.close();
+    db.close();
+    release('太晚的摘要');
+    await expect(trimming).resolves.toBeUndefined();
+    await expect(slow.trimSettled()).resolves.toBeUndefined();
+    // Nothing was written: reopen and look.
+    db = openDb(join(dir, 'ds.sqlite'));
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe(null);
+    expect(new RunningSummary(db).getSync()).toBe('');
   });
 
   it('deleteTurn removes both rows of a turn and returns 2', async () => {

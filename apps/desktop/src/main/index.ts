@@ -7,20 +7,25 @@ import { parseCharacterBundle, type CharacterBundle } from '@ds/brain';
 import { HistoryStore, MemoryOpenError, RunningSummary, openDb } from '@ds/memory';
 import { registerAppScheme, serveRenderer } from './app-protocol';
 import { BrainService } from './brain-service';
-import { createBubbleWindow, hideBubble, showBubble } from './bubble-window';
+import { createBubbleVisibility } from './bubble-visibility';
+import { createBubbleWindow, type BubbleWindowHooks } from './bubble-window';
+import { decideChatRequest, type ChatRequestSource } from './chat-request';
 import { closeChat, createChatWindow, openChat } from './chat-window';
 import { startCursorPolling, type CursorPolling } from './cursor';
 import { fatal } from './fatal';
 import { startForegroundWatch, type ForegroundWatch } from './foreground';
 import { useFakeBrain } from './fake-client';
 import { onFromAny, onFromPet, sendTo, sendToPet } from './ipc';
+import { createKeyRequest, type KeyRequest } from './key-request';
 import { KeyStore } from './key-store';
 import {
   createKeyWindow, holdWindowOpen, markQuitting, openKeyWindow, type KeyWindowReason,
 } from './key-window';
 import {
   createPetWindow, handleLoadFailure, moveBy, reconcileDisplays, savePetPosition, setClickThrough,
+  type StartupCleanup,
 } from './pet-window';
+import { createBeforeQuit } from './quit';
 import { makeSummarizer } from './summarizer';
 import { createTray } from './tray';
 import { createVisibilityController } from './visibility-state';
@@ -39,6 +44,9 @@ let cursorPolling: CursorPolling | null = null;
 let foreground: ForegroundWatch | null = null;
 let brain: BrainService | null = null;
 let db: DatabaseSync | null = null;
+let history: HistoryStore | null = null;
+/** CX-3: the visibility-aware gate every key-window show goes through; null until ready. */
+let keyRequest: KeyRequest | null = null;
 
 /**
  * The single owner of the pet window's visibility. Four independent reasons she can be off screen,
@@ -64,9 +72,11 @@ const visibility = createVisibilityController({
       // Both edges: hide on hidden, and re-show on the hidden→shown edge when the brain still wants
       // her speaking. Without the second half a first message that landed while the verdict was
       // hidden painted into a window that never became visible (found by T7 on a cold profile).
-      applyBubbleVisibility();
+      bubbleVis.apply();
     }
     if (verdict.hidden && chat) closeChat(chat);
+    // CX-3: a key prompt queued behind a lock screen / fullscreen app is shown once the verdict clears.
+    keyRequest?.onVerdict(verdict.hidden);
   },
   setCursorPaused: (paused) => cursorPolling?.setPaused(paused),
   // Both of these are Phase 1 options and both are load-bearing. `setClickThrough` forces the pet
@@ -81,24 +91,26 @@ const visibility = createVisibilityController({
 });
 
 /**
- * The bubble window's only show path (contracts.md §6.6's `setBubbleVisible`). It loses to
- * VisibilityState by construction: nothing she has to say outranks a locked screen or a fullscreen
- * game, so a `true` while hidden is a no-op rather than a show.
+ * The bubble window's only show path (contracts.md §6.6's `setBubbleVisible` is `bubbleVis.set`).
+ * It loses to VisibilityState by construction: nothing she has to say outranks a locked screen or
+ * a fullscreen game, so a `true` while hidden is a no-op rather than a show. The wish is remembered
+ * even when it cannot be honoured (window not created yet, verdict hidden) and replayed on every
+ * edge that matters. The reconciler itself lives in `bubble-visibility.ts` (G2-5).
  */
-let bubbleWanted = false;
-function setBubbleVisible(on: boolean): void {
-  // Remember the brain's wish even when it cannot be honoured right now (window not created yet,
-  // or the shell verdict hidden); applyBubbleVisibility() replays it on every edge that matters.
-  bubbleWanted = on;
-  applyBubbleVisibility();
-}
-
-/** Idempotent: derives the bubble window's visibility from (brain wants it) AND (shell allows it). */
-function applyBubbleVisibility(): void {
-  if (!bubble || bubble.isDestroyed()) return;
-  if (bubbleWanted && !visibility.verdict.hidden) showBubble(bubble);
-  else hideBubble(bubble);
-}
+const bubbleVis = createBubbleVisibility({
+  window: () => bubble,
+  shellHidden: () => visibility.verdict.hidden,
+  // M-8 / G2-5: EVERY hide — even of a window that was already down — tells the service, which
+  // forces click-through, drops the hover pin and re-arms an owed hide. A hide that lands under
+  // the pointer delivers no `bubble:hover {inside:false}`, and a verdict hide that landed while the
+  // window was down used to leave the pin alive into the next `bubbleWanted` replay.
+  onHidden: () => brain?.bubbleHidden(),
+  // G2-5: the renderer's hover state is stale after a hide; the shell verdict is its resync — on
+  // `{hidden:false}` it recomputes the DOM hit under the pointer and re-emits `bubble:hover`.
+  onShown: () => {
+    if (bubble && !bubble.isDestroyed()) sendTo(bubble, Channels.shellVisibility, visibility.verdict);
+  },
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -137,42 +149,95 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
+    // G2-6 / CX-7: ONE startup failure policy for all four renderer documents. A window whose page
+    // never loads (bad build, dev server down, bad app:// URL) tears the whole startup down and
+    // quits, rather than leaving a half-alive app behind a working tray icon.
+    const startupCleanup: StartupCleanup = {
+      destroyWindow: () => {
+        for (const win of [pet, bubble, chat, keyWin]) if (win && !win.isDestroyed()) win.destroy();
+        pet = null;
+        bubble = null;
+        chat = null;
+        keyWin = null;
+      },
+      stopCursor: () => cursorPolling?.stop(),
+      stopForeground: () => foreground?.stop(),
+      destroyTray: () => {
+        tray?.destroy();
+        tray = null;
+      },
+      quit: () => app.quit(),
+    };
+    const onLoadFailure = (surface: string) => (err: unknown): void => {
+      console.error('[%s] renderer document failed to load', surface);
+      handleLoadFailure(err, startupCleanup);
+    };
+
     const petWin = createPetWindow({
       // Not `showInactive()`: the first paint asks the visibility owner whether she may appear, so
       // a hide that landed during renderer startup is honoured instead of being overridden.
       onReadyToShow: () => visibility.apply(),
-      onLoadFailure: (err) =>
-        handleLoadFailure(err, {
-          destroyWindow: () => {
-            pet?.destroy();
-            pet = null;
-          },
-          stopCursor: () => cursorPolling?.stop(),
-          stopForeground: () => foreground?.stop(),
-          destroyTray: () => {
-            tray?.destroy();
-            tray = null;
-          },
-          quit: () => app.quit(),
-        }),
+      onLoadFailure: onLoadFailure('pet'),
     });
     pet = petWin;
+    /** The `chat:open` allow-list — pet, bubble, key — kept current across recreations (CX-6/7). */
+    const chatOpenSenders: BrowserWindow[] = [petWin];
 
     // All three are created eagerly and kept hidden: that is what makes C8's "opens <= 250 ms"
     // reachable, and C2's zero-white-frame bar depends on backgroundColor '#00000000' + show:false
     // being present on every one of them.
-    const bubbleWin = createBubbleWindow();
+    const bubbleHooks: BubbleWindowHooks = {
+      onLoadFailure: onLoadFailure('bubble'),
+      // CX-6: interrupt the turn and reset the bubble state before the page is reloaded.
+      onCrash: () => brain?.bubbleCrashed(),
+      // The reloaded page is re-placed and told the current verdict (its own `bubble:size`
+      // handshake already sizes it; this closes the gap for a placement it never asked for).
+      onReloaded: () => {
+        brain?.reposition(true);
+        visibility.resend();
+      },
+      // A second death or a failed reload: a fresh window, swapped into the service's allow-lists.
+      // Deferred off the dying webContents' own event.
+      onUnrecoverable: () => setImmediate(recreateBubble),
+    };
+    const recreateBubble = (): void => {
+      const old = bubble;
+      bubble = null;
+      if (old && !old.isDestroyed()) old.destroy();
+      if (!brain) return; // quitting
+      const fresh = createBubbleWindow(bubbleHooks);
+      bubble = fresh;
+      brain.replaceBubble(fresh);
+      if (old) chatOpenSenders.splice(chatOpenSenders.indexOf(old), 1);
+      chatOpenSenders.push(fresh);
+      bubbleVis.apply();
+    };
+    const bubbleWin = createBubbleWindow(bubbleHooks);
     bubble = bubbleWin;
+    chatOpenSenders.push(bubbleWin);
     // A first message can be requested before the window exists (brain service starts on db open).
-    applyBubbleVisibility();
-    const chatWin = createChatWindow();
+    bubbleVis.apply();
+    const chatWin = createChatWindow({
+      onLoadFailure: onLoadFailure('chat'),
+      // G2-6: reloaded once by the window itself; a second death has no recovery — the composer is
+      // the only way to talk to her.
+      onUnrecoverable: () => fatal('聊天窗口崩溃了，重启后也没能恢复。请重新打开小春。'),
+    });
     chat = chatWin;
-    const keyWindow = createKeyWindow();
-    keyWin = keyWindow;
+    // CX-7: a key renderer that died is rebuilt on the next open; the tray item always recovers.
+    let keyCrashed = false;
+    const keyHooks = {
+      onLoadFailure: onLoadFailure('key'),
+      onCrash: () => {
+        keyCrashed = true;
+      },
+    };
+    keyWin = createKeyWindow(keyHooks);
+    chatOpenSenders.push(keyWin);
     // The key renderer closes itself with window.close(), and the focusable chat window can catch a
     // stray Alt+F4. Both are converted to hide() until before-quit calls markQuitting().
     holdWindowOpen(chatWin);
-    holdWindowOpen(keyWindow);
+    holdWindowOpen(keyWin);
 
     const keyStore = new KeyStore();
     const summary = new RunningSummary(database);
@@ -187,29 +252,52 @@ if (!app.requestSingleInstanceLock()) {
         return makeSummarizer(client, bundle.card.name)(oldSummary, dropped);
       },
     });
+    history = store;
 
     // §6.5: `key:status` is pushed once whenever the key window is opened, not only on its one
     // `ready-to-show`, because a hidden-then-reshown window fires no second ready-to-show.
     const showKeyWindow = (reason: KeyWindowReason): void => {
-      openKeyWindow(keyWindow, reason);
+      if (keyCrashed) {
+        keyCrashed = false;
+        const old = keyWin;
+        keyWin = null;
+        if (old && !old.isDestroyed()) old.destroy();
+        const fresh = createKeyWindow(keyHooks);
+        holdWindowOpen(fresh);
+        fresh.once('ready-to-show', () => brain?.refreshKeyStatus());
+        keyWin = fresh;
+        brain?.replaceKey(fresh);
+        if (old) chatOpenSenders.splice(chatOpenSenders.indexOf(old), 1);
+        chatOpenSenders.push(fresh);
+      }
+      if (!keyWin) return;
+      openKeyWindow(keyWin, reason);
       brain?.refreshKeyStatus();
     };
+    // CX-3: every show of the focusable key window — the auth-error path, the tray item, the
+    // first run — is gated on the shell verdict; a prompt refused by a lock screen / suspend /
+    // fullscreen app is queued and shown when the verdict clears.
+    const keyGate = createKeyRequest({
+      visibility: { hidden: () => visibility.verdict.hidden, get: visibility.get },
+      show: showKeyWindow,
+    });
+    keyRequest = keyGate;
 
     const service = new BrainService({
       pet: petWin,
       bubble: bubbleWin,
       chat: chatWin,
-      key: keyWindow,
+      key: keyWin,
       db: database,
       store,
       keyStore,
       bundle,
-      setBubbleVisible,
-      openKeyWindow: showKeyWindow,
+      setBubbleVisible: (on) => bubbleVis.set(on),
+      openKeyWindow: (reason) => keyGate.request(reason),
     });
     brain = service;
     service.start();
-    keyWindow.once('ready-to-show', () => service.refreshKeyStatus());
+    keyWin.once('ready-to-show', () => service.refreshKeyStatus());
 
     cursorPolling = startCursorPolling(petWin);
     foreground = startForegroundWatch(petWin, (hide) => {
@@ -267,11 +355,30 @@ if (!app.requestSingleInstanceLock()) {
     });
     onFromPet(petWin, Channels.stageError, ({ message }) => console.error('[pet] stage error', message));
 
-    // Three windows may legitimately send this one (contracts.md §2.7), so it gets one listener.
-    onFromAny([petWin, bubbleWin, keyWindow], Channels.chatOpen, ({ source, focusComposer }) => {
-      console.log('[chat] open source=%s', source);
-      if (source === 'key' && !keyWindow.isDestroyed()) keyWindow.hide();
+    // I-7: the ONE way into the chat — the pet double-click, the bubble click, the key window's
+    // save, the tray item and the hotkey all land here. A request while VisibilityState hides her
+    // used to stream the reply into a hidden pet and bubble, or pop the focusable composer over a
+    // fullscreen game. The decision is pure (`chat-request.ts`); this applies it.
+    const requestChat = (source: ChatRequestSource, focusComposer: boolean): void => {
+      const decision = decideChatRequest({ hidden: visibility.verdict.hidden, get: visibility.get });
+      console.log('[chat] request source=%s decision=%s', source, decision);
+      if (decision === 'refuse') {
+        console.log('[chat] refused: hidden reason=%s', visibility.verdict.reason);
+        return;
+      }
+      if (decision === 'reveal') {
+        // The same two lines `second-instance` runs: the user asked for her back.
+        visibility.set('user', false);
+        visibility.apply();
+      }
+      if (source === 'key' && keyWin && !keyWin.isDestroyed()) keyWin.hide();
       openChat(chatWin, petWin, focusComposer);
+    };
+
+    // Three windows may legitimately send this one (contracts.md §2.7), so it gets one listener.
+    // A live array, looked up at event time: the bubble and key windows can be recreated (CX-6/7).
+    onFromAny(chatOpenSenders, Channels.chatOpen, ({ source, focusComposer }) => {
+      requestChat(source, focusComposer);
     });
 
     tray = createTray({
@@ -283,12 +390,12 @@ if (!app.requestSingleInstanceLock()) {
         console.log('[tray] debug:toggle');
         sendToPet(petWin, Channels.debugToggle, {});
       },
-      openChat: () => openChat(chatWin, petWin, true),
-      openKey: () => showKeyWindow('user'),
+      openChat: () => requestChat('tray', true),
+      openKey: () => keyGate.request('user'),
       quit: () => app.quit(),
     });
 
-    if (!globalShortcut.register('Control+Shift+Space', () => openChat(chatWin, petWin, true))) {
+    if (!globalShortcut.register('Control+Shift+Space', () => requestChat('hotkey', true))) {
       console.error('[hotkey] Ctrl+Shift+Space is already taken by another app');
     }
 
@@ -305,7 +412,7 @@ if (!app.requestSingleInstanceLock()) {
     // First run with no key at all: the key window is the only door, and Phase 2 has no settings
     // window to send anyone to (C-10). The fake brain needs no key, so it skips this.
     if (!useFakeBrain(app.isPackaged, process.env) && keyStore.get() === null) {
-      showKeyWindow('first-run');
+      keyGate.request('first-run');
     }
   }).catch((err: unknown) => {
     // Without this, a throw in startup only surfaces as an unhandled rejection warning and the
@@ -331,25 +438,44 @@ if (!app.requestSingleInstanceLock()) {
   };
   // The two `screen.on` registrations live inside `app.whenReady()` above — see the comment there.
 
-  app.on('before-quit', () => {
-    screen.removeListener('display-removed', onDisplaysChanged);
-    screen.removeListener('display-metrics-changed', onDisplaysChanged);
-    // Release the close→hide hold first, or destroy() below fights holdWindowOpen.
-    markQuitting();
-    // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
-    if (pet) savePetPosition(pet);
-    globalShortcut.unregisterAll();
-    brain?.dispose();
-    brain = null;
-    cursorPolling?.stop();
-    foreground?.stop();
-    tray?.destroy();
-    tray = null;
-    for (const win of [bubble, chat, keyWin]) win?.destroy();
-    bubble = null;
-    chat = null;
-    keyWin = null;
-    db?.close();
-    db = null;
+  // I-9: `brain.dispose()` is a barrier — the `[中断]` row and the metrics row of a turn cut off
+  // by the quit are written after `TurnRunner.cancel()` returns — so the first `before-quit` is
+  // prevented, the drain awaited, and only then is the db closed and `app.quit()` called again.
+  // The sequence and its re-entry guard live in `quit.ts`, where they are unit-tested.
+  const beforeQuit = createBeforeQuit({
+    teardownSync: () => {
+      screen.removeListener('display-removed', onDisplaysChanged);
+      screen.removeListener('display-metrics-changed', onDisplaysChanged);
+      // Release the close→hide hold first, or destroy() below fights holdWindowOpen.
+      markQuitting();
+      // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
+      if (pet) savePetPosition(pet);
+      globalShortcut.unregisterAll();
+      cursorPolling?.stop();
+      foreground?.stop();
+      tray?.destroy();
+      tray = null;
+    },
+    drain: async () => {
+      const service = brain;
+      brain = null;
+      await service?.dispose();
+    },
+    teardownAfterDrain: () => {
+      for (const win of [bubble, chat, keyWin]) if (win && !win.isDestroyed()) win.destroy();
+      bubble = null;
+      chat = null;
+      keyWin = null;
+    },
+    closeDb: () => {
+      // G2-2: fence the store first — a summariser the drain timed out on must find `closed`
+      // rather than a closed handle.
+      history?.close();
+      history = null;
+      db?.close();
+      db = null;
+    },
+    quit: () => app.quit(),
   });
+  app.on('before-quit', beforeQuit.handler);
 }

@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   KV_FIRST_RUN_DONE,
+  KV_LAST_TRIM_ID,
   KV_SCHEMA_VERSION,
   MemoryOpenError,
   SCHEMA_VERSION,
@@ -119,5 +120,48 @@ describe('openDb / migrate', () => {
     };
     expect(row.value).toBe('2');
     raw.close();
+  });
+
+  describe('G2-7: kv counters are validated as canonical non-negative safe integers at open', () => {
+    const seed = (key: string, value: string): string => {
+      const path = join(dir, 'ds.sqlite');
+      const db = openDb(path);
+      setKv(db, key, value);
+      db.close();
+      return path;
+    };
+
+    it.each([
+      ['non-numeric', 'garbage'],
+      ['negative', '-1'],
+      ['leading zero', '01'],
+      ['exponent form', '1e3'],
+      ['fraction', '1.5'],
+      ['signed', '+2'],
+      ['whitespace', ' 2'],
+      ['beyond safe integer', '9007199254740993'],
+      ['empty', ''],
+    ])('rejects a %s last_trim_id (%s) with MemoryOpenError', (_label, value) => {
+      const path = seed(KV_LAST_TRIM_ID, value);
+      expect(() => openDb(path)).toThrow(MemoryOpenError);
+    });
+
+    it('rejects a garbage schema_version instead of silently overwriting it', () => {
+      const path = seed(KV_SCHEMA_VERSION, 'garbage');
+      expect(() => openDb(path)).toThrow(MemoryOpenError);
+      const raw = new DatabaseSync(path);
+      expect(getKv(raw, KV_SCHEMA_VERSION)).toBe('garbage'); // left as found, not rewritten to 1
+      raw.close();
+    });
+
+    it('accepts canonical values and a missing last_trim_id', () => {
+      const path = seed(KV_LAST_TRIM_ID, '42');
+      const db = openDb(path);
+      expect(getKv(db, KV_LAST_TRIM_ID)).toBe('42');
+      db.close();
+      const fresh = openDb(join(dir, 'fresh.sqlite'));
+      expect(getKv(fresh, KV_LAST_TRIM_ID)).toBe(null);
+      fresh.close();
+    });
   });
 });

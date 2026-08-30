@@ -3,6 +3,7 @@ import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { join } from 'node:path';
 import type { ErrorCode } from '@ds/protocol';
 import { isAllowedPetUrl, rendererUrl } from './app-protocol';
+import { isAbortedLoad } from './pet-window';
 
 export const KEY_SIZE = { width: 440, height: 360 };
 
@@ -28,7 +29,17 @@ export function holdWindowOpen(win: BrowserWindow): void {
   });
 }
 
-export function createKeyWindow(): BrowserWindow {
+/**
+ * CX-7: `onLoadFailure` is the startup policy shared with the pet (a missing key.html used to leave
+ * the only key-entry window blank, unobserved); `onCrash` marks the window for recreation on its
+ * next open — index.ts destroys it and builds a fresh one, so the tray item always recovers.
+ */
+export interface KeyWindowHooks {
+  onLoadFailure(err: unknown): void;
+  onCrash(): void;
+}
+
+export function createKeyWindow(hooks: KeyWindowHooks): BrowserWindow {
   const win = new ElectronBrowserWindow({
     width: KEY_SIZE.width,
     height: KEY_SIZE.height,
@@ -46,8 +57,11 @@ export function createKeyWindow(): BrowserWindow {
       sandbox: true,
     },
   });
-  guardKeyWebContents(win);
-  void win.loadURL(rendererUrl('key'));
+  guardKeyWebContents(win, hooks);
+  win.loadURL(rendererUrl('key')).catch((err: unknown) => {
+    if (isAbortedLoad(err)) return;
+    hooks.onLoadFailure(err);
+  });
   win.once('ready-to-show', () => {
     /* do NOT show here */
   });
@@ -61,7 +75,7 @@ export function createKeyWindow(): BrowserWindow {
  * top-level navigations, so a navigated page would inherit it; unexpected navigation and
  * `window.open` are denied outright, with `ipc.ts isFromWindow` as the second line.
  */
-function guardKeyWebContents(win: BrowserWindow): void {
+function guardKeyWebContents(win: BrowserWindow, hooks: KeyWindowHooks): void {
   const wc = win.webContents;
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   const denyForeign = (details: { url: string; preventDefault: () => void }): void => {
@@ -71,6 +85,11 @@ function guardKeyWebContents(win: BrowserWindow): void {
   };
   wc.on('will-navigate', denyForeign);
   wc.on('will-redirect', denyForeign);
+  wc.on('render-process-gone', (_event, details) => {
+    console.warn('[key] render process gone', details.reason);
+    if (!win.isDestroyed() && win.isVisible()) win.hide();
+    hooks.onCrash();
+  });
 }
 
 export function openKeyWindow(win: BrowserWindow, reason: KeyWindowReason): void {

@@ -33,6 +33,7 @@ export class KeyStore {
   private readonly safeStorage: SafeStoragePort;
   private readonly devKey: string | null;
   private readonly listeners = new Set<(s: { present: boolean; source: KeySource }) => void>();
+  private decryptWarned = false;
 
   constructor(opts: KeyStoreOptions = {}) {
     // Every `??` below short-circuits when the option is supplied, so the unit test never touches
@@ -51,22 +52,34 @@ export class KeyStore {
   }
 
   get(): string | null {
-    if (this.hasStored()) {
-      try {
-        return this.safeStorage.decryptString(readFileSync(this.file));
-      } catch (err) {
-        // A key.bin written by another OS user, or before a credential reset, cannot be decrypted.
-        // Fall through to the dev key rather than bricking the run; the key window can rewrite it.
-        console.error('[key] decrypt failed, ignoring key.bin', err);
-        return this.devKey;
-      }
-    }
-    return this.devKey;
+    return this.resolve().key;
   }
 
   source(): KeySource {
-    if (this.hasStored()) return 'store';
-    return this.devKey ? 'dev-env' : 'none';
+    return this.resolve().source;
+  }
+
+  /**
+   * G-14: the key and its `source` come from ONE decryption attempt, so `key:status` can never say
+   * `store` for a key.bin nobody can read. A key.bin written by another OS user, or before a
+   * credential reset, cannot be decrypted: it is reported as whatever is actually usable (the dev
+   * key, or nothing) and left on disk — the key window's next save overwrites it. Logged once per
+   * file state, not on every status refresh.
+   */
+  private resolve(): { key: string | null; source: KeySource } {
+    if (this.hasStored()) {
+      try {
+        const key = this.safeStorage.decryptString(readFileSync(this.file));
+        this.decryptWarned = false;
+        return { key, source: 'store' };
+      } catch (err) {
+        if (!this.decryptWarned) {
+          this.decryptWarned = true;
+          console.error('[key] decrypt failed, ignoring key.bin', err);
+        }
+      }
+    }
+    return this.devKey ? { key: this.devKey, source: 'dev-env' } : { key: null, source: 'none' };
   }
 
   set(apiKey: string): void {
@@ -79,6 +92,7 @@ export class KeyStore {
 
   clear(): void {
     if (existsSync(this.file)) unlinkSync(this.file);
+    this.decryptWarned = false;
     this.emit();
   }
 

@@ -20,8 +20,18 @@ const SENTENCE_BOUNDARY = /(?<=[。！？!?])/;
  * mid-sentence. An over-cap summary is a bounded, visible cost; a summary sliced
  * mid-clause is silent corruption of the model's memory.
  */
+/**
+ * M-5: memory text is spliced into the prompt next to the card's `【记住】`-style post-history
+ * instructions, so a poisoned summary or fact must not be able to carry a forged instruction line.
+ * Whitespace runs (newlines included) collapse to one space and `【`/`】` become `[`/`]`; the text
+ * stays readable, but nothing in it can start a new line or wear the instruction brackets.
+ */
+export function sanitizeMemoryText(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/【/g, '[').replace(/】/g, ']').trim();
+}
+
 export function capSummary(text: string, maxTokens: number = SUMMARY_TOKEN_CAP): string {
-  const trimmed = text.trim();
+  const trimmed = sanitizeMemoryText(text);
   if (trimmed === '' || estimateTokens(trimmed) <= maxTokens) return trimmed;
   const parts = trimmed.split(SENTENCE_BOUNDARY).filter((s) => s.trim() !== '');
   let kept = '';

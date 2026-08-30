@@ -69,8 +69,9 @@ class FakeWindow {
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
 
+const electronApp = { getPath: () => '/tmp/ds-test-userdata', isPackaged: false };
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/ds-test-userdata' },
+  app: electronApp,
   screen: { getAllDisplays: () => [{ bounds: { x: 0, y: 0, width: 1920, height: 1080 }, workArea }] },
   BrowserWindow: FakeWindow,
 }));
@@ -93,7 +94,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  electronApp.isPackaged = false;
   delete process.env.ELECTRON_RENDERER_URL;
+  delete process.env.DS_DEBUG;
 });
 
 describe('createPetWindow', () => {
@@ -146,6 +149,26 @@ describe('createPetWindow', () => {
     });
     expect(prevented).toBe(false);
     expect(win.calls).toContain('loadURL:http://localhost:5173/pet.html');
+  });
+
+  it('M-9: DS_DEBUG=1 adds ?debug=1 only in an unpackaged run', () => {
+    process.env.DS_DEBUG = '1';
+    expect(build().win.calls).toContain('loadURL:app://local/pet.html?debug=1');
+    electronApp.isPackaged = true;
+    expect(build().win.calls).toContain('loadURL:app://local/pet.html');
+  });
+
+  it('M-9: a packaged build ignores ELECTRON_RENDERER_URL for the load and the navigation guard', () => {
+    electronApp.isPackaged = true;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    const { win } = build();
+    expect(win.calls).toContain('loadURL:app://local/pet.html');
+    let prevented = false;
+    win.emitWebContents('will-navigate', {
+      url: 'http://localhost:5173/pet.html',
+      preventDefault: () => { prevented = true; },
+    });
+    expect(prevented).toBe(true);
   });
 
   it('restores click-through on a main-frame navigation', () => {
