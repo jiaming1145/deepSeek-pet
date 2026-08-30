@@ -92,3 +92,10 @@ Fix wave main: merged 0e254fa, review approved, fix rounds 1
 Fix wave renderer: merged 7abda4a, review approved, fix rounds 1
 Fix wave eval: merged f8e0c6c, review approved, fix rounds 1
 Fix wave integration: d4448ba fix(desktop) brain/main CX-1×CX-6 interaction, 5d1bc33 docs(contracts) A-17..A-36; pnpm test 70 files / 862 passed, 2 skipped (864); pnpm -r typecheck Done (protocol, brain, stage, memory, desktop); pnpm --filter @ds/desktop build ✓ built in 819ms — main HEAD 5d1bc33
+GPT closure 1 of merged wave (main 5d1bc33): block 5 major / 2 minor -> gpt-closure-1.md; RESIDUAL lane launched (fix-residual-brief.md GC-1..GC-7); GPT closure 2 requested for the files GPT could not attach. Reviews committed dec5d67, research ca437f3. Tag phase2-brain waits for the residual lane + closure 2.
+GPT closure 2: block 4 major / 1 minor (quit.ts, index.ts second-instance, speech.ts hidden cancel + complete, chat-window pendingOpened) -> gpt-closure-2.md + fix-residual2-brief.md; launches after RESIDUAL-1 integrates. Closure 3 requested for chat-request.ts/key-request.ts.
+GPT closure 3: 1 major (key-request onVerdict flush) -> gpt-closure-3.md, added to fix-residual2-brief.md.
+Fix wave residual: merged 81ffd6b, review approved, fix rounds 0
+Fix wave integration (2026-08-30): pnpm test 70 files / 885 passed, 2 skipped; typecheck clean (protocol, brain, stage, memory, desktop); @ds/desktop build ok — main at 88b6c21 after amendments A-37..A-41
+Fix wave residual2: merged 17d3fb9, review approved, fix rounds 1
+Fix wave integration 2 (2026-08-30): pnpm test 70 files / 898 passed, 2 skipped; typecheck clean (protocol, brain, stage, memory, desktop); @ds/desktop build ok — main at 08833ae after amendments A-42..A-46
