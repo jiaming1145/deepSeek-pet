@@ -1,5 +1,5 @@
 
-[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds/.claude/worktrees/wf_763d5a61-ab1-2[39m
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds[39m
 
  [32m✓[39m [30m[42m @ds/brain [49m[39m src/persona.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 6[2mms[22m[39m
  [32m✓[39m [30m[42m @ds/brain [49m[39m src/prompt.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 7[2mms[22m[39m

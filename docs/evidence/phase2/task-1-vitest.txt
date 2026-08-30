@@ -1,5 +1,5 @@
 
-[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds/.claude/worktrees/wf_e43c0492-05b-2[39m
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds[39m
 
  [32m✓[39m [30m[45m desktop [49m[39m src/main/window-state.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 17[2mms[22m[39m
  [32m✓[39m [30m[45m desktop [49m[39m src/main/foreground.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 6[2mms[22m[39m

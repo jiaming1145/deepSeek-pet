@@ -1,5 +1,5 @@
 
-[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds/.claude/worktrees/wf_4a01842b-9f1-2[39m
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mD:/ds[39m
 
  [32m✓[39m [30m[43m @ds/memory [49m[39m src/db.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 54[2mms[22m[39m
  [32m✓[39m [30m[43m @ds/memory [49m[39m src/summary.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 53[2mms[22m[39m

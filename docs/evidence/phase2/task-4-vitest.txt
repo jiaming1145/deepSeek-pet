@@ -1,5 +1,5 @@
 
- RUN  v3.2.7 D:/ds/.claude/worktrees/wf_4a01842b-9f1-1
+ RUN  v3.2.7 D:/ds
 
  ✓ |@ds/brain| src/deepseek.test.ts > parseSseLine > ends the stream on the [DONE] sentinel 1ms
  ✓ |@ds/brain| src/deepseek.test.ts > parseSseLine > ignores an SSE comment line 0ms
