@@ -102,9 +102,38 @@ describe('ExpressionLane', () => {
     expect(restored.deadline).toBe(B05.expect.restoredDeadline);
     expect(calls.slice(-3)).toEqual(['weight:F01:1.0000', 'start:F02', `weight:F02:${B05.expect.weightAt3400.toFixed(4)}`]);
     expect(B05.expect.weightAt3400).toBeCloseTo(0.55729375, 8);
-    lane.tick(11_000);
-    expect(log).toEqual(['touch:preempted', 'llm:completed']);
+    // Fix round 1 (finding 2): B-05's `llmResultAt` / `llmResult` are READ here, so the fixture can
+    // no longer carry an outcome the curve cannot reach. 11 000 = issuedAt + hold(3 000) + decay(8 000).
+    expect(B05.expect.llmResultAt).toBe(EXPR_HOLD_AFTER_UTTERANCE_MS + EXPR_DECAY_MS);
+    lane.tick(B05.expect.llmResultAt - 1);
+    expect(log).toEqual([...B05.expect.resultsByOverlayEnd]);
+    lane.tick(B05.expect.llmResultAt);
+    expect(log).toEqual(['touch:preempted', `llm:${B05.expect.llmResult}`]);
     expect(calls.slice(-2)).toEqual(['weight:F02:1.0000', 'start:null']);
+  });
+
+  // Fix round 1 (finding 4): `clampExpressionWeight` maps NaN/negative to 0, and a granted weight-0
+  // lease showed one frame of a weight-0 expression, swapped away from the mood baseline, and ended
+  // `completed` on the next tick with a spurious trace.
+  it('refuses a payload whose weight is not positive, without touching the holder or the model', () => {
+    const { s, calls } = sink();
+    const lane = new ExpressionLane(s);
+    const log: string[] = [];
+    const live = lane.request({ lane: 'expression', source: 'llm', generation: 0, ttlMs: 5_000,
+      payload: { name: 'F02', weight: 0.6, utteranceEndAt: null }, onResult: (r) => log.push(`llm:${r}`) }, 0)!;
+    const before = calls.length;
+    const bad = lane.request({ lane: 'expression', source: 'touch', generation: 0, ttlMs: 1_400,
+      payload: { name: 'F01', weight: clampExpressionWeight('happy', Number.NaN), utteranceEndAt: null },
+      onResult: (r) => log.push(`bad:${r}`) }, 100);
+    expect(bad).toBeNull();
+    expect(log).toEqual(['bad:cancelled']);
+    expect(lane.holder.current).toBe(live);      // the touch never displaced (nor covered) the LLM lease
+    expect(lane.coveredLease).toBeNull();
+    expect(calls).toHaveLength(before);          // no setExpression / setExpressionWeight at all
+    lane.tick(200);
+    expect(log).toEqual(['bad:cancelled']);      // and no spurious `completed` on the next tick
+    expect(lane.request({ lane: 'expression', source: 'llm', generation: 0, ttlMs: 5_000,
+      payload: { name: 'F02', weight: -0.2, utteranceEndAt: null } }, 300)).toBeNull();
   });
 
   it('a covered lease that expires while covered reports expired and is not restored', () => {

@@ -113,7 +113,8 @@ export class GazeLane {
   private eyes: Point = { x: 0, y: 0 };
   private head: Point = { x: 0, y: 0 };
   private body: Point = { x: 0, y: 0 };
-  private jump: { at: number; deg: number; from: Point; headDone: boolean; bodyDone: boolean } | null = null;
+  /** The open head/body recruitment window of the last supra-threshold gaze shift (see `setEyes`). */
+  private jump: { at: number; headDone: boolean } | null = null;
 
   constructor(private readonly deps: GazeLaneDeps, nowMs: number) {
     this.cursorMovedAt = nowMs;
@@ -182,7 +183,16 @@ export class GazeLane {
       this.brk = null;
       target = lease.payload.followCursor ? this.cursor : lease.payload;
     } else {
-      if (this.st === 'sleep') this.st = 'follow';
+      if (this.st === 'sleep') {
+        // FIX ROUND 1 (finding 1). Waking RESCHEDULES the saccade. Nothing advanced `nextBreakAt`
+        // while asleep, so after a sleep longer than the pending interval the guard three lines down
+        // was already satisfied and the FIRST awake tick fired a break: an interval of 0 ms relative
+        // to wake, which is not D3's "broken every 8-20 s", plus a spurious `gazeBreak` record in
+        // Task 17's D16 trace. Same (suppressUntil, nextBreakAt) pair `afterLease`/`endBreak` use.
+        this.st = 'follow';
+        this.suppressUntil = nowMs + SACCADE_SUPPRESS_MS;
+        this.nextBreakAt = Math.max(nowMs + drawSaccadeInterval(this.meanMs, this.deps.rng), this.suppressUntil);
+      }
       if (this.st !== 'saccadeBreak' && nowMs - this.cursorMovedAt >= CURSOR_REST_MS) this.st = 'restDrift';
       const base = this.st === 'restDrift' ? REST_DRIFT_GAZE : this.cursor;
       if (this.st !== 'saccadeBreak' && nowMs >= this.nextBreakAt && nowMs >= this.suppressUntil) this.startBreak(nowMs);
@@ -239,26 +249,45 @@ export class GazeLane {
     return base;
   }
 
+  /**
+   * FIX ROUND 1 (finding 5). A head/body recruitment window is armed ONLY by a shift at or above
+   * EYES_ONLY_THRESHOLD_DEG (research §5: below it the shift is eyes-only). Re-arming on every
+   * non-zero move -- which is what this did -- meant that during continuous cursor motion the window
+   * restarted every frame and `lag()`'s `elapsed >= GAZE_HEAD_DELAY_MS` was never true, so the head
+   * and body never moved at all. A second large shift while a window is still OPEN and the head has
+   * not landed yet re-targets it without restarting the clock, so the head always lands within
+   * GAZE_HEAD_DELAY_MS of the first large shift.
+   */
   private setEyes(t: Point, nowMs: number): void {
     const deg = Math.hypot(t.x - this.eyes.x, t.y - this.eyes.y) * GAZE_DEG_FULL_SCALE;
-    if (deg > 0) this.jump = { at: nowMs, deg, from: { ...this.eyes }, headDone: false, bodyDone: false };
     this.eyes = { x: t.x, y: t.y };
+    if (deg < EYES_ONLY_THRESHOLD_DEG) return;
+    const open = this.jump !== null && nowMs - this.jump.at <= GAZE_BODY_DELAY_MS;
+    if (open && !this.jump!.headDone) return;
+    this.jump = { at: nowMs, headDone: false };
   }
 
-  /** Research §5 lag model: below EYES_ONLY_THRESHOLD_DEG only the eyes move; above it the head
-   *  takes GAZE_HEAD_FRACTION of the residual after GAZE_HEAD_DELAY_MS and the body GAZE_BODY_FRACTION
-   *  after GAZE_BODY_DELAY_MS. Advisory outputs for Task 13 (Phase 1's CubismLook drives head+eyes
-   *  from the eyes target; see Concerns). */
+  /** Research §5 lag model: below EYES_ONLY_THRESHOLD_DEG only the eyes move (`setEyes` arms no
+   *  window); above it the head takes GAZE_HEAD_FRACTION of the residual to the LIVE eyes target once
+   *  GAZE_HEAD_DELAY_MS has passed and the body GAZE_BODY_FRACTION once GAZE_BODY_DELAY_MS has. The
+   *  window is `[at, at + GAZE_BODY_DELAY_MS]` and belongs to ONE shift for its whole length (fix
+   *  round 1); a tick landing after it means the frame loop missed the shift entirely, so head and
+   *  body stay where they are rather than snapping to a target that is two shifts old. The fractions
+   *  are positions, not rates: §5.6 gives no tween duration, so each lands in one step at its delay.
+   *  Advisory outputs for Task 13 (Phase 1's CubismLook drives head+eyes from the eyes target alone;
+   *  §5.14 / Task 13 decides whether a real head/body updater is wired -- see Concerns C-5). */
   private lag(nowMs: number): void {
     const j = this.jump;
-    if (!j || j.deg < EYES_ONLY_THRESHOLD_DEG) return;
-    if (!j.headDone && nowMs - j.at >= GAZE_HEAD_DELAY_MS) {
+    if (!j) return;
+    const elapsed = nowMs - j.at;
+    if (elapsed > GAZE_BODY_DELAY_MS) { this.jump = null; return; }
+    if (!j.headDone && elapsed >= GAZE_HEAD_DELAY_MS) {
       this.head = { x: lerp(this.head.x, this.eyes.x, GAZE_HEAD_FRACTION), y: lerp(this.head.y, this.eyes.y, GAZE_HEAD_FRACTION) };
       j.headDone = true;
     }
-    if (!j.bodyDone && nowMs - j.at >= GAZE_BODY_DELAY_MS) {
+    if (elapsed >= GAZE_BODY_DELAY_MS) {
       this.body = { x: lerp(this.body.x, this.eyes.x, GAZE_BODY_FRACTION), y: lerp(this.body.y, this.eyes.y, GAZE_BODY_FRACTION) };
-      j.bodyDone = true;
+      this.jump = null;
     }
   }
 }
