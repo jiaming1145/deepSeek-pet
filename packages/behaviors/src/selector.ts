@@ -162,6 +162,10 @@ export class BehaviorSelector {
       // gap, and it is the only rule the fallback may not relax. With two or more base-eligible
       // behaviours the fallback always yields one, so this costs nothing outside a pack that has
       // gated all but one of its >= 12 behaviours out at the same instant.
+      // UNRATIFIED DEVIATION from §4.4's literal text ("relax the exclusion — and only the
+      // exclusion", then "the least-recently-started eligible behaviour is chosen"): escalated to
+      // the controller as fix-round-2 finding 2. If §4.4 is ratified as written instead, the change
+      // is this one filter plus the two `toBeNull()` expectations in the D1/hold test.
       candidates = base.filter((b) => b.id !== justStarted);
       if (candidates.length === 0) return null;
       chosen = this.leastRecentlyStarted(candidates);
