@@ -11,11 +11,16 @@ export interface AppProps {
   bridge: DsInvokeBridge;
 }
 
+// M-17: closeChat only hides the window, so a draft survives Escape. Re-opening puts the caret at
+// the END of it; select-all is the RESTORED text's affordance and lives in Composer.restore()
+// (§6.2 rule 6). Contract §2.3's "C (focus + select)" is amended accordingly — see
+// fix-renderer-report.md "Amendments proposed".
 function focusComposer(): void {
   const el = document.querySelector<HTMLTextAreaElement>('.composer__input');
   if (el === null) return;
   el.focus();
-  el.select();
+  const end = el.value.length;
+  el.setSelectionRange(end, end);
 }
 
 export function App({ bridge }: AppProps): JSX.Element {
