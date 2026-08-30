@@ -1,0 +1,294 @@
+/* ADV band — contracts.md §5.2/§5.5/§5.8 and Task 0's direction contract. Every colour, radius,
+   duration and font size is a token from shared/tokens.css; none may be written literally here. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+/* The window is click-through by default; only the band and the hint take the pointer. */
+body {
+  pointer-events: none;
+  font-family: var(--font-sans);
+  /* C-4: Chromium disables LCD sub-pixel AA on a transparent compositing surface. Accepted — the
+     bar is crisp grayscale AA at the 300 % crop, not colour fringing. */
+  -webkit-font-smoothing: auto;
+}
+
+.content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  /* Both caps come from `bubble:place` via Bubble.place(), which writes them on :root (contracts.md
+     §5.2's owner table) — they reach this element by inheritance. The band is this element's CHILD,
+     so writing them on the band root would leave both of these unresolved and the R3 cap inert. */
+  max-width: var(--bubble-max-w);
+  max-height: var(--bubble-max-h);
+  display: flex;
+  flex-direction: column;
+  /* == HINT_GAP in speech.ts. Swap to column-reverse if the controller ever moves the hint above
+     the band (contracts.md §5.5, §8.6 row 10). */
+  gap: var(--sp-2);
+}
+
+/* Harness only (no preload bridge, OR the dev-only ?test=1 flag — contract addition 10): the band
+   is inset so the pointer can be moved off it and pointerleave can re-arm the linger. Never on in a
+   packaged build: TEST compiles to false there and the real window always has a bridge. */
+body.browser .content {
+  top: var(--sp-6);
+  left: var(--sp-6);
+}
+
+/* --- band ------------------------------------------------------------------------------------ */
+
+.bubble {
+  --notch: var(--sp-3);
+  --plate-h: calc(var(--lh-caption) + var(--sp-1));
+  position: relative;
+  display: block;
+  /* transparent room for the plate (top), the C5 shadow (sides/bottom) and the anchor notch. */
+  padding: calc(var(--plate-h) + var(--sp-1)) var(--sp-3) var(--sp-6);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(var(--sp-2));
+  transition:
+    opacity var(--dur-overlay) var(--ease-enter),
+    transform var(--dur-overlay) var(--ease-enter);
+}
+
+.bubble[hidden] {
+  display: none;
+}
+
+.bubble.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* idle-dissolve: fade + drift down --sp-1 */
+.bubble.is-exiting {
+  opacity: 0;
+  transform: translateY(var(--sp-1));
+  transition-duration: var(--dur-exit);
+  transition-timing-function: var(--ease-exit);
+}
+
+.bubble[data-side='left'] {
+  padding-right: calc(var(--sp-3) + var(--notch));
+}
+.bubble[data-side='right'] {
+  padding-left: calc(var(--sp-3) + var(--notch));
+}
+.bubble[data-side='top'] {
+  padding-bottom: calc(var(--sp-6) + var(--notch));
+}
+.bubble[data-side='bottom'] {
+  padding-top: calc(var(--plate-h) + var(--sp-1) + var(--notch));
+}
+
+.bubble__surface {
+  position: relative;
+  z-index: 1;
+  background: var(--c-bubble-surface);
+  color: var(--c-bubble-text);
+  border: 1px solid var(--c-bubble-border);
+  border-top-color: var(--c-border-strong); /* the direction's hairline top rule */
+  border-radius: var(--r-bubble);
+  box-shadow: var(--shadow-bubble);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.bubble__text {
+  margin: 0;
+  font-size: var(--fs-bubble);
+  line-height: var(--lh-bubble);
+  /* --fw-line is raised to --fw-medium by three of the nine [data-emotion] rules in tokens.css. */
+  font-weight: var(--fw-line);
+  /* == MAX_HANZI_PER_LINE in speech.ts; .content's --bubble-max-w wins on the widest lines. */
+  max-width: calc(24 * 1em);
+  /* == MAX_LINES in speech.ts. Overflow is the signal Bubble.overflowing() reads. */
+  max-height: calc(6 * var(--lh-bubble));
+  overflow: hidden;
+  text-autospace: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* thinking: CSS-only breathing dots on the empty band, no text (contracts.md §5.2) */
+.bubble__text:empty::after {
+  content: '•••';
+  letter-spacing: 0.12em;
+  color: var(--c-text-3);
+  animation: bubble-breathe calc(var(--dur-blink) * 1.4) var(--ease-enter) infinite;
+}
+
+@keyframes bubble-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* --- left-edge run: a skewed rail, not a clip-path (a clip would also cut --shadow-bubble) ----- */
+
+.bubble__rail {
+  position: absolute;
+  /* The skew's horizontal reach grows with the rail, so the rail has to be inset by at least that
+     reach or `body { overflow: hidden }` cuts it: the band root sits flush against the window
+     origin, and `Bubble.measure()` reads that root's own rect, which a transform-overflowing child
+     never widens — so main cannot size the window to fit an escaping rail either. The original
+     `left: calc(--sp-1 - 1px)` plus `translateX(--adv-cut * -0.5)` put the rail at x = -7.7..2.7 and
+     the harness's `body.browser` inset was the only reason it ever drew in full.
+     Tallest case: 6 lines. The rail is 6 * --lh-bubble + 26 - 2 * --r-bubble = 154px, so
+     skewX(--adv-skew) about its centre reaches 77 * tan(8deg) = 10.8px each side — inside
+     --adv-cut's 14px, which is why the cut token doubles as the left inset. Measured x = 3.2..27.8
+     at 6 lines and 12.3..18.7 at one, both inside a band root that starts at x = 0. */
+  left: var(--adv-cut);
+  /* Inset one --r-bubble at each end so the cut runs the surface's STRAIGHT left edge and crosses
+     neither corner arc — C3's corner peep has to photograph the radius, not this rail. */
+  top: calc(var(--plate-h) + var(--sp-1) + var(--r-bubble));
+  bottom: calc(var(--sp-6) + var(--r-bubble));
+  width: 3px;
+  background: var(--c-plate);
+  transform: skewX(var(--adv-skew));
+  z-index: 2;
+}
+
+/* --- name plate: skewed parallelogram hanging above the band ---------------------------------- */
+
+.bubble__plate {
+  position: absolute;
+  top: 0;
+  left: var(--sp-3);
+  height: var(--plate-h);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-3);
+  background: var(--c-plate);
+  color: var(--c-accent-text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  border-radius: var(--r-tooltip);
+  transform: skewX(var(--adv-skew));
+  z-index: 3;
+}
+
+.bubble__plate[hidden] {
+  display: none;
+}
+
+/* --- advance mark: 1 Hz blink at the bottom-right while she is not painting -------------------- */
+
+.bubble__advance {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: var(--sp-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--c-advance, var(--c-warn));
+  opacity: 0;
+  transition: opacity var(--dur-feedback) var(--ease-enter);
+}
+
+.bubble__advance[data-on='1'] {
+  opacity: 1;
+  animation: bubble-advance var(--dur-blink) steps(1, end) infinite;
+}
+
+@keyframes bubble-advance {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+/* --- anchor notch: the ADV replacement for a tail, at --arrow-offset on the pet-facing edge ----
+   contracts.md §5.8: a 3 px --c-bubble-tail notch. The ADV form renders no triangle. */
+
+.bubble__anchor {
+  position: absolute;
+  background: var(--c-bubble-tail);
+  border-radius: var(--r-tooltip);
+  z-index: 2;
+}
+
+.bubble[data-side='left'] .bubble__anchor {
+  right: var(--sp-2);
+  top: calc(var(--arrow-offset) - var(--sp-3));
+  width: 3px;
+  height: var(--sp-6);
+}
+.bubble[data-side='right'] .bubble__anchor {
+  left: var(--sp-2);
+  top: calc(var(--arrow-offset) - var(--sp-3));
+  width: 3px;
+  height: var(--sp-6);
+}
+.bubble[data-side='top'] .bubble__anchor {
+  bottom: var(--sp-3);
+  left: calc(var(--arrow-offset) - var(--sp-3));
+  width: var(--sp-6);
+  height: 3px;
+}
+.bubble[data-side='bottom'] .bubble__anchor {
+  top: var(--sp-3);
+  left: calc(var(--arrow-offset) - var(--sp-3));
+  width: var(--sp-6);
+  height: 3px;
+}
+
+/* --- hint surface: the app's own voice, never hers (contracts.md §5.5) ------------------------- */
+
+.hint {
+  align-self: flex-start;
+  margin: 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  max-width: calc(24 * 1em);
+  pointer-events: auto;
+  background: var(--c-surface-hint);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-popover);
+  box-shadow: var(--shadow-hint);
+  color: var(--c-hint-text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.hint[hidden] {
+  display: none;
+}
+
+.hint[data-level='warn'] {
+  color: var(--c-warn-text);
+}
+
+.hint[data-level='error'] {
+  color: var(--c-danger-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble,
+  .bubble.is-exiting {
+    /* C5: <= 80 ms crossfade, no movement. */
+    transition-duration: calc(var(--dur-exit) / 2);
+    transform: none;
+  }
+  .bubble__text:empty::after,
+  .bubble__advance[data-on='1'] {
+    animation: none;
+  }
+}

@@ -1,5 +1,6 @@
 import { Live2DStage, pickIndex, type Rng } from '@ds/stage';
 import { Channels } from '@ds/protocol';
+import { fpsFor } from '../bubble/fps';
 import { bridge } from './bridge';
 import { HoverTracker } from './hover';
 import { PressTracker, tapCandidates } from './press';
@@ -23,6 +24,8 @@ export interface StageTestHook {
   setExpression(n: string | null): void;
   playMotion(g: string, i: number): boolean;
   hitTest(x: number, y: number): string | null;
+  /** ParamMouthOpenY right now. Polled by tests/mouth-sync.spec.ts (D8). */
+  mouth(): number;
   pixels(): { opaque: number; hash: number };
   /** Every tap the PressTracker emitted, in order, with the motion the seeded rng chose for it. */
   taps: { hit: string; motion: [string, number] | null }[];
@@ -91,9 +94,14 @@ async function main(): Promise<void> {
   const overPanel = (x: number, y: number): boolean => overDebugPanel(debugRoot, x, y);
 
   // hover → click-through toggle (main decides), tap → motion, drag → move window
+  // D7: one policy (fpsFor), one writer (applyFps). Hover and speech both flow through it, so
+  // un-hovering mid-reveal can no longer drop the stage to 30 Hz.
+  const fpsState = { hovering: false, speaking: false };
+  const applyFps = (): void => stage.setFps(fpsFor(fpsState));
   const hover = new HoverTracker((inside) => {
     bridge?.send(Channels.avatarHover, { inside });
-    stage.setFps(inside ? 60 : 30);
+    fpsState.hovering = inside;
+    applyFps();
   });
   /** Accumulated pointer travel a press may have and still count as a tap rather than a drag. */
   const TAP_SLOP_PX = 4;
@@ -134,7 +142,6 @@ async function main(): Promise<void> {
     hover.sample(stage.hitTestClient(x, y) !== null || overPanel(x, y), performance.now());
     stage.gazeClient(x, y);
   });
-  bridge?.on(Channels.stageSetFps, ({ fps }) => stage.setFps(fps));
   bridge?.on(Channels.debugExpression, ({ name }) => stage.model.setExpression(name));
   bridge?.on(Channels.debugMotion, ({ group, index }) => stage.playMotion([group, index]));
   // Hidden means nobody can see her: stop the render loop entirely rather than idling at 30 fps
@@ -150,6 +157,35 @@ async function main(): Promise<void> {
     hover.reset();
   });
   bridge?.on(Channels.debugToggle, () => toggleDebugPanel());
+
+  // Poses and mouth follow the turn; the reveal itself lives in the bubble window (R3).
+  bridge?.on(Channels.brainState, ({ state }) => {
+    fpsState.speaking = state !== 'idle';
+    applyFps();
+    if (state === 'thinking') {
+      stage.setEmotion('think');
+      const think = stage.config.motionMap.think;
+      if (think) stage.playMotion(think);
+    } else if (state === 'idle') {
+      stage.setEmotion('neutral');
+    }
+  });
+  bridge?.on(Channels.brainSentence, (ev) => {
+    stage.setEmotion(ev.emotion);
+    const motion = ev.motion ? stage.config.motionMap[ev.motion] : undefined;
+    if (motion) stage.playMotion(motion);
+  });
+  bridge?.on(Channels.speechMouth, ({ on }) => (on ? stage.mouth.start() : stage.mouth.stop()));
+  bridge?.on(Channels.avatarListening, ({ on }) => {
+    if (on) stage.setEmotion('curious');
+    stage.mouth.stop();
+  });
+
+  // C-12: a single tap stays a reaction (Phase 1, unchanged). Double-clicking her opens the chat.
+  window.addEventListener('dblclick', (e) => {
+    if (stage.hitTestClient(e.clientX, e.clientY) === null) return;
+    bridge?.send(Channels.chatOpen, { source: 'pet', focusComposer: true });
+  });
 
   if (DEBUG) toggleDebugPanel();
 
@@ -171,6 +207,7 @@ async function main(): Promise<void> {
       setExpression: (n: string | null) => stage.model.setExpression(n),
       playMotion: (g: string, i: number) => stage.playMotion([g, i]),
       hitTest: (x: number, y: number) => stage.hitTestClient(x, y),
+      mouth: () => stage.mouth.getParameter(),
       pixels,
       taps,
       get lastMotion() { return lastMotion; },
