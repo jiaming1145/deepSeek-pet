@@ -3,6 +3,7 @@ import { Channels } from '@ds/protocol';
 import { fpsFor } from '../bubble/fps';
 import { bridge } from './bridge';
 import { HoverTracker } from './hover';
+import { lookupMotion } from './motion-lookup';
 import { PressTracker, tapCandidates } from './press';
 import { createDebugToggle, inDebugPanel, overDebugPanel } from './debug-panel';
 
@@ -172,7 +173,8 @@ async function main(): Promise<void> {
   });
   bridge?.on(Channels.brainSentence, (ev) => {
     stage.setEmotion(ev.emotion);
-    const motion = ev.motion ? stage.config.motionMap[ev.motion] : undefined;
+    // M-25: own-property lookup, so `constructor` / `__proto__` from the model never reach playMotion.
+    const motion = lookupMotion(stage.config.motionMap, ev.motion);
     if (motion) stage.playMotion(motion);
   });
   bridge?.on(Channels.speechMouth, ({ on }) => (on ? stage.mouth.start() : stage.mouth.stop()));
