@@ -278,4 +278,147 @@ describe('SpeechController', () => {
     expect(h.bubble.visible).toBe(false); // Bubble.hide() ran, so the --dur-exit exit plays
     expect(h.sent.filter((s) => s.channel === 'playback:turnDone')).toHaveLength(1);
   });
+  // CX-2: the bubble window sets backgroundThrottling:false, so a hidden window's timers keep
+  // running. Without an explicit visible state the reveal, its acknowledgements and the mouth all
+  // carry on for text nobody can see, and a short hide never brings the band back (I-6).
+  describe('pause/resume (CX-2 / I-6)', () => {
+    const acks = (sent: Sent[]) => sent.filter((s) => s.channel === 'playback:sentenceDone').length;
+
+    it('hide mid-sentence sends no sentenceDone, closes the mouth and hides the band', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev({ text: '一二三四五' }));
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(140); // '一二' painted, mouth open
+      expect(mouths(h.sent).at(-1)).toEqual({ on: true });
+      h.speech.pause();
+      expect(h.bubble.visible).toBe(false);
+      expect(mouths(h.sent).at(-1)).toEqual({ on: false });
+      expect(h.speech.visible).toBe(false);
+      h.clock.advance(10_000);
+      expect(h.text.textContent).toBe('一二');
+      expect(acks(h.sent)).toBe(0);
+      expect(h.sent.some((s) => s.channel === 'playback:turnDone')).toBe(false);
+    });
+
+    it('show re-shows the band and the reveal continues from where it stopped, then acks', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev({ text: '一二三四五' }));
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(140);
+      h.speech.pause();
+      h.clock.advance(10_000);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      expect(h.speech.visible).toBe(true);
+      expect(h.text.textContent).toBe('一二');
+      h.clock.advance(1000);
+      expect(h.text.textContent).toBe('一二三四五');
+      expect(acks(h.sent)).toBe(1);
+      expect(h.sent.filter((s) => s.channel === 'playback:turnDone')).toHaveLength(1);
+      expect(mouths(h.sent).at(-1)).toEqual({ on: false });
+    });
+
+    it('a pause beat pauses with its remaining time and resumes with it', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev({ text: '嗯', pause: 0.5 }));
+      h.clock.advance(200); // 300 ms of the beat left
+      h.speech.pause();
+      h.clock.advance(5000);
+      h.speech.resume();
+      h.clock.advance(299 + 70 - 1);
+      expect(h.text.textContent).toBe('');
+      h.clock.advance(2);
+      expect(h.text.textContent).toBe('嗯');
+    });
+
+    it('hide across the whole reply: turnDone only after show + completion', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.pause();
+      h.speech.onSentence(ev({ seq: 0, text: '你好' }));
+      h.speech.onSentence(ev({ seq: 1, text: '早啊' }));
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(60_000);
+      expect(h.bubble.visible).toBe(false);
+      expect(acks(h.sent)).toBe(0);
+      expect(h.sent.some((s) => s.channel === 'playback:turnDone')).toBe(false);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      expect(h.sent.some((s) => s.channel === 'playback:turnDone')).toBe(false);
+      h.clock.advance(1000);
+      expect(h.text.textContent).toBe('你好早啊');
+      expect(acks(h.sent)).toBe(2);
+      expect(h.sent.map((s) => s.channel).filter((c) => c.startsWith('playback:'))).toEqual([
+        'playback:sentenceDone',
+        'playback:sentenceDone',
+        'playback:turnDone',
+      ]);
+    });
+
+    it('a turn that ends while hidden with nothing left to paint sends turnDone on show', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev());
+      h.clock.advance(140); // fully painted, sentenceDone sent, turn still open
+      h.speech.pause();
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(60_000);
+      expect(h.sent.some((s) => s.channel === 'playback:turnDone')).toBe(false);
+      h.speech.resume();
+      expect(h.sent.filter((s) => s.channel === 'playback:turnDone')).toHaveLength(1);
+      expect(h.bubble.visible).toBe(true);
+      h.clock.advance(LINGER_MS - 1);
+      expect(h.bubble.visible).toBe(true);
+      h.clock.advance(1);
+      expect(h.bubble.visible).toBe(false);
+    });
+
+    it('hide during the linger: the linger restarts in full from the show', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev());
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(140);
+      h.clock.advance(LINGER_MS - 500);
+      h.speech.pause();
+      expect(h.bubble.visible).toBe(false);
+      h.clock.advance(60_000);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      expect(h.speech.active).toBe(true);
+      h.clock.advance(LINGER_MS - 1);
+      expect(h.bubble.visible).toBe(true);
+      h.clock.advance(1);
+      expect(h.bubble.visible).toBe(false);
+      expect(h.sent.filter((s) => s.channel === 'playback:turnDone')).toHaveLength(1);
+    });
+
+    it('show with nothing on the band does not re-show it; a new turn begun while hidden shows on resume', () => {
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(false);
+      h.speech.pause();
+      h.speech.onState({ state: 'thinking', turnId: 't2' });
+      expect(h.bubble.visible).toBe(false);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      expect(h.text.textContent).toBe('');
+    });
+
+    it('idle echo while hidden does not consume the linger; onError while hidden clears the turn', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev());
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(140);
+      h.speech.pause();
+      h.speech.onState({ state: 'idle', turnId: 't1' });
+      h.clock.advance(60_000);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      h.clock.advance(LINGER_MS);
+      expect(h.bubble.visible).toBe(false);
+      h.speech.pause();
+      h.speech.onState({ state: 'thinking', turnId: 't2' });
+      h.speech.onError({ code: 'network', message: 'x' });
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(false);
+      expect(h.speech.active).toBe(false);
+    });
+  });
 });
