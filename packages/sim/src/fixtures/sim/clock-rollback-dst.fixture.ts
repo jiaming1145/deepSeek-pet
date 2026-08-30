@@ -23,3 +23,26 @@ export function run() {
   step(start + 4 * H);                 // forward again to the original day: counters NOT reset (lastCountedDate rule) — see Concern C-7
   return { log, state: s };
 }
+
+/**
+ * B-03, second leg: a wall-clock OSCILLATION across one phase boundary inside a single `localDate`
+ * (an NTP correction, a DST-back nudge or a manual set). §3.9: "`phaseChanged` and `mealCue` effects
+ * fire at most once per `localDate` per marker" — so the night marker must fire exactly once even
+ * though the boundary is crossed forward twice.
+ */
+export function runNightOscillation() {
+  const at = (h: number, m: number, sec: number) => new Date(2026, 8, 1, h, m, sec).getTime();
+  let s: SimState = { ...initialSimState(0, at(21, 59, 0)), mealJitterMs: { breakfast: 0, lunch: 0, dinner: 0 } };
+  const phaseChanged: string[] = [];
+  const dates = new Set<string>([s.localDate]);
+  let mono = 0;
+  for (const wall of [at(21, 59, 0), at(22, 0, 1), at(21, 59, 59), at(22, 0, 2)]) {
+    mono += 500;
+    const r = reduceWithEffects(s, tickEv(0), mono, wall);
+    s = r.state;
+    dates.add(s.localDate);
+    for (const f of r.effects)
+      if (f.kind === 'simEvent' && f.payload.kind === 'phaseChanged') phaseChanged.push(String(f.payload.phase));
+  }
+  return { phaseChanged, dates, phase: s.phase, nightEntry: s.firedToday.nightEntry };
+}

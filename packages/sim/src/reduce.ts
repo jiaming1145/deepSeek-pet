@@ -3,13 +3,21 @@ import type { Emotion, SimEventPayload } from '@ds/protocol';
 import { SIM_DEFAULTS, type SimState } from './state.ts';
 import type { ReduceResult, SimEffect, SimEvent } from './events.ts';
 import { grantAffection } from './affection.ts';
-import { decayToward, moodNudge } from './mood.ts';
+// §3.7.1/§3.7.3/§3.7.4 arithmetic has ONE home — Task 3's mood.ts. The reducer calls it; it never
+// re-implements it (fix round 1, finding 2: the inline copies had already diverged from `neglectTick`).
+import { decayToward, moodNudge, moodTick, neglectTick, settleOnReturn } from './mood.ts';
 import { localDateString, localHour, mealJitter, phaseOf } from './phases.ts';
 import { isPresent } from './presence.ts';   // Task 3 owns the ONE definition (§3.3)
 import { backoffDelay } from './proactive.ts';
 
 const D = SIM_DEFAULTS;
-const MEALS = ['breakfast', 'lunch', 'dinner'] as const;
+/**
+ * The three meals, in day order. Declared HERE and imported by `proactive.ts`, so the reducer's
+ * meal window and `bucketFor`'s can never drift (fix round 1, finding 9; §5.13 allows no fifth
+ * duplicated pair). `proactive.ts` importing this module is a benign ES cycle: neither module
+ * touches the other's bindings at module-evaluation time, only inside function bodies.
+ */
+export const MEALS = ['breakfast', 'lunch', 'dinner'] as const;
 const AWAY_MAX_MS = 604_800_000;
 /** A meal cue fires only inside this window after its jittered time (§3.9 "forward jump skips"; §3.10.5's 20 min). */
 export const MEAL_CUE_WINDOW_MS = 1_200_000;
@@ -48,9 +56,9 @@ function applyPresence(s: SimState, nowMono: number, fx: SimEffect[]): SimState 
     fx.push(ev({ kind: 'returned', tsMain: nowMono, awayMs }), { kind: 'proactiveEvaluate' });
     next.absentSinceMono = null;
     if (awayMs > D.RETURN_SETTLE_AFTER_MS) {                       // §3.7.3 — ONLY the adverse component moves
-      const base = s.valenceBase + s.neglect;
-      next.valence = s.valence < base ? s.valence + (base - s.valence) * D.RETURN_SETTLE_FRACTION : s.valence;
-      next.arousal = s.arousal + (s.arousalBase - s.arousal) * D.RETURN_SETTLE_FRACTION;
+      const settled = settleOnReturn(s);                           // mood.ts owns the formula (one home)
+      next.valence = settled.valence;
+      next.arousal = settled.arousal;
     }
   }
   return next;
@@ -69,9 +77,19 @@ function applyClock(s: SimState, nowMono: number, nowWall: number, fx: SimEffect
       n = { ...n, gate: { ...n.gate, displayedToday: 0, unansweredToday: 0, lastCountedDate: localDate } };
   }
   if (phase !== n.phase) {
+    // §3.9: "`phaseChanged` and `mealCue` effects fire at most once per `localDate` per marker."
+    // The `night` marker has a `firedToday` slot and is therefore EXACTLY once per localDate.
+    // The other three markers have no slot in Task 3's `firedToday` schema (BLOCKED — see the
+    // report's C-12), so they are guarded by forward wall-clock motion: a backwards nudge across a
+    // boundary re-computes `phase` (the field must stay truthful) but emits nothing.
+    const dateChanged = localDate !== s.localDate;
+    const wentBack = nowWall < s.lastWall;
+    const alreadyFiredToday = phase === 'night' && n.firedToday.nightEntry;
     n = { ...n, phase };
-    fx.push(ev({ kind: 'phaseChanged', tsMain: nowMono, phase }));
-    if (phase === 'night' && !n.firedToday.nightEntry) n = { ...n, firedToday: { ...n.firedToday, nightEntry: true } };
+    if (!alreadyFiredToday && (dateChanged || !wentBack)) {
+      fx.push(ev({ kind: 'phaseChanged', tsMain: nowMono, phase }));
+      if (phase === 'night') n = { ...n, firedToday: { ...n.firedToday, nightEntry: true } };
+    }
   }
   const dayMs = localHour(nowWall) * 3_600_000;
   for (const meal of MEALS) {
@@ -88,36 +106,43 @@ function applyTick(s: SimState, e: Extract<SimEvent, { type: 'TICK' }>, nowMono:
   const delta = clamp(num(nowMono - s.lastMono), 0, D.TICK_DELTA_CAP_MS);
   let n: SimState = { ...s, inputAgeMs: clamp(num(e.inputAgeMs), 0, AWAY_MAX_MS),
     cursorNear: !!e.cursorNear, onFloor: !!e.onFloor, nearEdge: !!e.nearEdge };
-  // 1 presence  2 phase/localDate
-  n = applyClock(n, nowMono, nowWall, fx);
-  n = applyPresence(n, nowMono, fx);
+  // §3.3 item 3's fixed order: presence -> phase/localDate -> mood -> energy -> neglect -> typing
+  // -> one-shots (meal/greeting/battery/return) -> gate bookkeeping. Steps 1-2 compute state here;
+  // their EFFECTS are queued and flushed at step 7, which is where §3.3 puts them.
+  const presenceFx: SimEffect[] = [];   // 1 presence  (the `returned` one-shot)
+  const clockFx: SimEffect[] = [];      // 2 phase/localDate  (the phaseChanged/mealCue one-shots)
+  n = applyPresence(n, nowMono, presenceFx);
+  n = applyClock(n, nowMono, nowWall, clockFx);
   const pd = isPresent(n) ? delta : 0;
   if (pd > 0) {
     if (n.presentMsToday === 0) { n = grant(n, D.AFFECTION_PER_NEW_DAY); n.distinctDaysSeen += 1; }   // §3.3 item 4
     n.presentMsToday += pd;
-    // 3 mood  4 energy
-    n.valence = clamp(decayToward(n.valence, n.valenceBase + n.neglect, pd, D.MOOD_HALF_LIFE_PRESENT_MS), -1, 1);
-    n.arousal = clamp(decayToward(n.arousal, n.arousalBase, pd, D.MOOD_HALF_LIFE_PRESENT_MS), 0, 1);
+    // 3 mood (§3.7.1, mood.ts owns the arithmetic)  4 energy
+    const m = moodTick(n, pd);
+    n.valence = m.valence;
+    n.arousal = m.arousal;
     n.expenditure = clamp(decayToward(n.expenditure, 0, pd, D.ENERGY_EXPENDITURE_HALF_LIFE_PRESENT_MS), 0, D.ENERGY_EXPENDITURE_MAX);
-    // 5 neglect (§3.7.4)
-    n.sinceInteractionMs += pd;
-    while (n.sinceInteractionMs >= D.NEGLECT_WINDOW_MS) {
-      n.sinceInteractionMs -= D.NEGLECT_WINDOW_MS;
-      n.neglect = Math.max(D.NEGLECT_FLOOR, n.neglect + D.NEGLECT_STEP);
-    }
+    // 5 neglect (§3.7.4, mood.ts's O(1) window count — never a `while` over a corrupted value)
+    const ng = neglectTick(n.sinceInteractionMs, n.neglect, pd);
+    n.sinceInteractionMs = ng.sinceInteractionMs;
+    n.neglect = ng.neglect;
   }
   // 6 typing (§10.4 predicate over the tick's sample)
   const typingSample = n.inputAgeMs < D.TYPING_INPUT_AGE_MAX_MS && num(e.cursorDeltaDip) < D.TYPING_CURSOR_DELTA_MAX_DIP;
   if (typingSample) { n.typingSamples += 1; n.typingIdleSamples = 0; }
   else { n.typingSamples = 0; n.typingIdleSamples = n.probableTyping ? n.typingIdleSamples + 1 : 0; }   // §3.1: idle samples count only while typing
   if (!n.probableTyping && n.typingSamples >= D.TYPING_ENTER_SAMPLES) {
-    n.probableTyping = true; n.typingStreakStartedMono = nowMono - D.TYPING_ENTER_SAMPLES * D.TICK_MS;
+    // clamped at 0: SimStateSchema declares this `.nonnegative()`, and the first samples of a run
+    // can start before TYPING_ENTER_SAMPLES * TICK_MS of monotonic time has elapsed.
+    n.probableTyping = true; n.typingStreakStartedMono = Math.max(0, nowMono - D.TYPING_ENTER_SAMPLES * D.TICK_MS);
     fx.push(ev({ kind: 'typingGlance', tsMain: nowMono }));                           // C-4: cooldown is the adapter's
   } else if (n.probableTyping && n.typingIdleSamples >= D.TYPING_EXIT_SAMPLES) {
     n.probableTyping = false;
     if (nowMono - (n.typingStreakStartedMono ?? nowMono) >= D.TYPING_CHEER_MIN_STREAK_MS) fx.push(ev({ kind: 'cheer', tsMain: nowMono }));
     n.typingStreakStartedMono = null;
   }
+  // 7 one-shots: `returned` first (presence), then phaseChanged/mealCue (clock) — §3.3's order.
+  fx.push(...presenceFx, ...clockFx);
   // 8 gate bookkeeping: nothing per tick beyond the local-day reset in applyClock.
   if (Math.floor(nowWall / PERSIST_EVERY_MS) !== Math.floor(s.lastWall / PERSIST_EVERY_MS)) fx.push({ kind: 'persist' });
   return n;
@@ -202,6 +227,14 @@ function sameState(a: unknown, b: unknown): boolean {
   return true;
 }
 
+/**
+ * CONCERN C-12 (fix round 1, finding 6) — §3.2's "structurally shared where nothing changed (so
+ * `SimService` can compare by reference before broadcasting)" is only true for NON-tick events. A
+ * `TICK` must always stamp `lastMono`/`lastWall` (the next delta depends on them), so at 2 Hz the
+ * returned object is always a fresh reference and `prev === next` is always false.
+ * **Task 12 must gate the `sim:state` broadcast on the `snapshotDirty` effect, never on reference
+ * identity** — an idle tick deliberately emits no `snapshotDirty` (pinned by reduce.test.ts).
+ */
 export function reduceWithEffects(state: SimState, event: SimEvent, nowMono: number, nowWall: number): ReduceResult {
   const fx: SimEffect[] = [];
   const mono = Math.max(0, num(nowMono, state.lastMono));

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PROACTIVE_VERDICTS } from '@ds/protocol';
 import { initialSimState, SIM_DEFAULTS, type SimState } from './state.ts';
 import { nextLocalMidnight } from './phases.ts';
-import { GATE_REASONS, shouldSpeak, bucketFor, backoffDelay, sensorsUnknown, type GateInput } from './proactive.ts';
+import { GATE_REASONS, GATE_VERDICTS, shouldSpeak, bucketFor, backoffDelay, sensorsUnknown,
+  type GateInput, type GateVerdict } from './proactive.ts';
 
 const D = SIM_DEFAULTS;
 const WALL = new Date(2026, 8, 1, 14, 0, 0).getTime();          // local 14:00 -> phase 'day'
@@ -18,9 +19,14 @@ describe('§3.10.1 shape', () => {
       'chat-open', 'asleep', 'plain-mode', 'sensor-unknown', 'liveliness-roll']);
   });
   it('GateVerdict verdicts are a strict subset of ProactiveVerdict (§3.10.5)', () => {
-    const gate = ['eligible', 'rateLimited', 'unansweredCap', 'personaCap', 'suppressed', 'muted'];
-    for (const v of gate) expect(PROACTIVE_VERDICTS).toContain(v);
-    expect(PROACTIVE_VERDICTS.length).toBeGreaterThan(gate.length);
+    // GATE_VERDICTS is the SOLE source of GateVerdict's `verdict` arms (proactive.ts derives the
+    // union from it), so a seventh arm cannot be added to the type without appearing here — and
+    // adding it here fails to compile unless PROACTIVE_VERDICTS carries it. Both halves asserted:
+    const arms: readonly GateVerdict['verdict'][] = GATE_VERDICTS;         // type -> list
+    const back: readonly (typeof GATE_VERDICTS)[number][] = arms;          // list -> type
+    expect(back.every(v => (PROACTIVE_VERDICTS as readonly string[]).includes(v))).toBe(true);
+    for (const v of GATE_VERDICTS) expect(PROACTIVE_VERDICTS).toContain(v);
+    expect(PROACTIVE_VERDICTS.length).toBeGreaterThan(GATE_VERDICTS.length);
   });
 });
 

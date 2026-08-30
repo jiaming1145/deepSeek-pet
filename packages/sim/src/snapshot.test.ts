@@ -52,6 +52,13 @@ describe('§3.12 persisted snapshot', () => {
     expect(restoreSim('garbage', 1, T0).discarded).not.toBeNull();
     expect(restoreSim(null, 1, T0, { seed: 7 }).state).toEqual(initialSimState(1, T0, { seed: 7 }));
   });
+  it('absence is not corruption: no snapshot yet returns a fresh state with discarded === null', () => {
+    // §3.12's caller logs `console.warn('[sim] snapshot discarded:', reason)`; first launch and any
+    // kv reset hand restoreSim null/undefined, which must NOT produce a warning.
+    expect(restoreSim(null, 1, T0).discarded).toBeNull();
+    expect(restoreSim(undefined, 1, T0).discarded).toBeNull();
+    expect(restoreSim(undefined, 1, T0, { seed: 7 }).state).toEqual(initialSimState(1, T0, { seed: 7 }));
+  });
 });
 
 describe('§2.4 SimSnapshot builder', () => {

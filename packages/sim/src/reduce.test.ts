@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EMOTIONS, HIT_PARTS, SimEventSchema, type SimEventPayload } from '@ds/protocol';
-import { initialSimState, SIM_DEFAULTS, type SimState } from './state.ts';
+import { initialSimState, SIM_DEFAULTS, SimStateSchema, type SimState } from './state.ts';
 import { reduce, reduceWithEffects, EMOTION_NUDGES } from './reduce.ts';
 import { isPresent } from './presence.ts';   // Task 3 owns it; reduce.ts imports it too
-import { MOOD_NUDGES } from './mood.ts';     // the one nudge table (Task 3)
+import { MOOD_NUDGES, neglectTick, settleOnReturn } from './mood.ts';   // the one nudge table + arithmetic (Task 3)
 import { SIM_EVENT_TYPES, type ReduceResult, type SimEvent, type SimEffect } from './events.ts';
 import { nextRandom } from './rng.ts';
 
@@ -59,6 +59,27 @@ describe('§3.3 tick contract', () => {
     expect(idle.effects.find(f => f.kind === 'snapshotDirty')).toBeUndefined();
     expect(idle.state.lastMono).toBe(1_001);
     expect(tick(s, 501, T0 + 501).effects).toContainEqual({ kind: 'snapshotDirty' });
+  });
+  it('§3.3 item 3: one-shots follow the typing step, and `returned` precedes phaseChanged/mealCue', () => {
+    const away = tick(fresh(), 500, T0 + 500, 1_800_000);                 // -> absent
+    expect(away.state.presence).toBe('absent');
+    const back = tick(away.state, 1_000, new Date(2026, 8, 1, 22, 0, 0).getTime(), 0);
+    expect(kinds(back.effects)).toEqual(['returned', 'phaseChanged']);    // presence (1) before clock (2)
+  });
+  it('§3.3 item 3: presence is computed BEFORE the phase, so sleep needs the tick after the boundary', () => {
+    // A tick that both crosses into `night` and reports >= 15 min idle sees the PREVIOUS phase in
+    // the presence step, so it lands on `nap`; the next tick, with phase already `night`, sleeps.
+    const night = new Date(2026, 8, 1, 22, 0, 0).getTime();
+    const a = tick(fresh(), 500, night, 900_000);
+    expect(a.state.phase).toBe('night'); expect(a.state.presentationMode).toBe('nap');
+    expect(tick(a.state, 1_000, night + 500, 900_000).state.presentationMode).toBe('sleep');
+  });
+  it('typingStreakStartedMono is never negative (SimStateSchema declares it .nonnegative())', () => {
+    let r = tick(fresh(), 400, T0 + 400, 100, 0);
+    for (const m of [800, 1_200, 1_600]) r = tick(r.state, m, T0 + m, 100, 0);
+    expect(r.state.probableTyping).toBe(true);
+    expect(r.state.typingStreakStartedMono).toBe(0);                      // 1_600 - 4 * 500 = -400, clamped
+    expect(SimStateSchema.safeParse(r.state).success).toBe(true);
   });
   it('persist effect once per 60-s wall boundary', () => {
     const s = fresh();
@@ -137,6 +158,24 @@ describe('§3.9 phases, meals, §3.2 one-shots', () => {
     const r = tick(s, 10, new Date(2026, 8, 1, 22, 0, 0).getTime());
     expect(kinds(r.effects)).toEqual(['phaseChanged']); expect(r.state.firedToday.nightEntry).toBe(true);
     expect(kinds(tick(r.state, 20, new Date(2026, 8, 1, 22, 0, 1).getTime()).effects)).toEqual([]);
+  });
+  it('§3.9 "at most once per localDate per marker": a clock oscillation across 22:00 fires night once', () => {
+    // Repro from fix round 1, finding 1: 21:59 -> 22:00:01 -> 21:59:59 -> 22:00:02, one localDate.
+    const at = (h: number, m: number, sec: number) => new Date(2026, 8, 1, h, m, sec).getTime();
+    const seen: string[] = [];
+    let s = fresh();
+    let mono = 10;
+    for (const w of [at(21, 59, 0), at(22, 0, 1), at(21, 59, 59), at(22, 0, 2)]) {
+      const r = tick(s, (mono += 10), w);
+      s = r.state;
+      for (const f of r.effects)
+        if (f.kind === 'simEvent' && f.payload.kind === 'phaseChanged') seen.push(f.payload.phase!);
+    }
+    expect(s.localDate).toBe('2026-09-01');                       // one localDate throughout
+    expect(seen.filter(p => p === 'night')).toEqual(['night']);   // the night marker fired ONCE
+    expect(seen).toEqual(['evening', 'night']);                   // and each other marker at most once
+    expect(s.phase).toBe('night');                                // the field still follows the wall clock
+    expect(s.firedToday.nightEntry).toBe(true);
   });
   it('mealCue fires inside its 20-min window, once per day; a forward jump past the window skips it', () => {
     const s = { ...fresh(), mealJitterMs: { breakfast: 0, lunch: 0, dinner: 0 } };
@@ -276,6 +315,33 @@ describe('§3.6 fuzz: 10 000 random events never decrease affection (R3-8)', () 
       expect(s.valence).toBeGreaterThanOrEqual(-1); expect(s.valence).toBeLessThanOrEqual(1);
       expect(s.arousal).toBeGreaterThanOrEqual(0); expect(s.arousal).toBeLessThanOrEqual(1);
       expect(s.neglect).toBeGreaterThanOrEqual(-0.2); expect(s.expenditure).toBeLessThanOrEqual(40);
+      // The reducer's own state invariants, not just the four scalars: every field must still
+      // satisfy §3.1's schema (this is what caught the negative typingStreakStartedMono).
+      if (i % 10 === 0) expect(SimStateSchema.safeParse(s).success, `iteration ${i}`).toBe(true);
     }
+    expect(SimStateSchema.safeParse(s).success).toBe(true);
+  });
+});
+
+describe('§3.7 the reducer calls mood.ts — no second copy of the arithmetic (§5.13)', () => {
+  it('the return settle is settleOnReturn(s), bit-identical', () => {
+    // > RETURN_SETTLE_AFTER_MS away, with an ADVERSE valence so both axes move.
+    const s0 = { ...fresh(), valence: -0.6, arousal: 0.9 };
+    const away = tick(s0, 500, T0 + 500, 1_800_000);
+    const wall = T0 + 500 + 3 * 3_600_000;
+    const back = reduceWithEffects(away.state, { type: 'USER_INPUT' }, 500 + 3 * 3_600_000, wall);
+    const expected = settleOnReturn(away.state);
+    expect(back.state.valence).toBe(expected.valence);
+    expect(back.state.arousal).toBe(expected.arousal);
+    expect(back.state.valence).not.toBe(away.state.valence);       // it really did settle
+  });
+  it('the neglect accumulator is neglectTick(...), and is O(1) in sinceInteractionMs', () => {
+    const s0 = { ...fresh(), sinceInteractionMs: 9e9 };            // schema is only .min(0)
+    const t0 = Date.now();
+    const r = tick(s0, s0.lastMono + 2_000, T0 + 2_000);
+    const expected = neglectTick(9e9, s0.neglect, D.TICK_DELTA_CAP_MS);
+    expect(r.state.sinceInteractionMs).toBe(expected.sinceInteractionMs);
+    expect(r.state.neglect).toBe(expected.neglect);
+    expect(Date.now() - t0).toBeLessThan(1_000);                   // the old `while` span ~3 333 turns
   });
 });

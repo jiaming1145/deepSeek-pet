@@ -18,6 +18,10 @@ describe('§3.2 SimEvent union', () => {
       { type: 'PROACTIVE_OUTCOME', reservationId: 'r', outcome: 'displayed' },
     ];
     const fx: SimEffect[] = [{ kind: 'snapshotDirty' }, { kind: 'persist' }, { kind: 'proactiveEvaluate' }];
-    expect(evs.length + fx.length).toBe(6);
+    // The type annotations are the tsc half; these are the runtime half, so the case can actually
+    // fail in the vitest lane (which does not typecheck) if a discriminant is renamed.
+    expect(evs.map(e => e.type)).toEqual(['TICK', 'TOUCH', 'PROACTIVE_OUTCOME']);
+    expect(fx.map(f => f.kind)).toEqual(['snapshotDirty', 'persist', 'proactiveEvaluate']);
+    for (const e of evs) expect(SIM_EVENT_TYPES).toContain(e.type);
   });
 });
