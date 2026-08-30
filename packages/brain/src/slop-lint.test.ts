@@ -224,3 +224,22 @@ describe('a clean reply', () => {
     expect(lintReply('回来啦。今天累不累？', ctx(['好。'])).severity).toBe('none');
   });
 });
+
+describe('M-2 — tag questions are ordinary speech, not rhetorical templates', () => {
+  it.each(['主人今天又熬夜了对吧？', '这不是很好吗？', '你说是不是？'])('does not flag %s', (text) => {
+    expect(lintSentence(text, { recent: [], sensitiveTurn: false }).violations.map((v) => v.rule)).not.toContain('rhetorical');
+  });
+  it('still flags 难道…吗 and 你觉得呢', () => {
+    expect(lintSentence('难道不是吗？', { recent: [], sensitiveTurn: false }).violations.map((v) => v.rule)).toContain('rhetorical');
+    expect(lintSentence('你觉得呢？', { recent: [], sensitiveTurn: false }).violations.map((v) => v.rule)).toContain('rhetorical');
+  });
+});
+
+describe('M-4 — 被打 as a prefix is not a sensitive turn', () => {
+  it.each(['我的电脑被打开了', '刚才被打断了', '文件被打印了', '我方案又被打回来了', '被打扰了'])('%s is not sensitive', (text) => {
+    expect(isSensitive(text)).toBe(false);
+  });
+  it.each(['我昨天被打了', '他被打得很惨', '被打骂'])('%s is sensitive', (text) => {
+    expect(isSensitive(text)).toBe(true);
+  });
+});

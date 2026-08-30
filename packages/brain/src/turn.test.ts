@@ -524,3 +524,51 @@ describe('TurnRunner — failure paths and bookkeeping', () => {
     expect(typeof record.totalMs).toBe('number');
   });
 });
+
+describe('TurnRunner — review fixes (M-1 / I-3)', () => {
+  it('M-1: strips the injected leading number only from the first sentence of an attempt', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>12 今天不错。', '2 加 2 等于 4。', '3 个小时吧。'] }]);
+    await h.runner.send('算一下。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences.map((s) => s.text)).toEqual(['今天不错。', '2 加 2 等于 4。', '3 个小时吧。']);
+  });
+
+  it('I-3: a reply-scope tail violation (emoji-rate) does not delete the innocent pending sentence', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>主人回来啦😀。', '今天吃了吗。'] }], { recent: ['刚吃完饭😀'] });
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.client.requests).toHaveLength(1);
+    expect(h.sentences.map((s) => s.text)).toEqual(['主人回来啦😀。', '今天吃了吗。']);
+    expect(h.history.rows[1].content).toBe('主人回来啦😀。今天吃了吗。');
+    expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('emoji-rate');
+    expect(h.metrics.records[0].lint.violations.map((v) => v.rule)).toContain('emoji-rate');
+  });
+
+  it('I-3: ellipsis-rate carried by a painted sentence keeps the correction that follows', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=neutral|>好麻烦哦……这句不对。', '你改出来的是新对象。'] }], { recent: ['好麻烦哦……', '嗯。'] });
+    await h.runner.send('这样对吗？');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences.map((s) => s.text)).toEqual(['好麻烦哦……', '这句不对。', '你改出来的是新对象。']);
+    expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('ellipsis-rate');
+  });
+
+  it('I-3: the stripped sentence is the one carrying a last-sentence violation', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>回来啦。', '饭吃了没。', '总之早点睡。'] }]);
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    const painted = h.sentences.map((s) => s.text);
+    expect(painted).toEqual(['回来啦。', '饭吃了没。']);
+    const stripped = ['回来啦。', '饭吃了没。', '总之早点睡。'].filter((s) => !painted.includes(s));
+    expect(stripped).toEqual(['总之早点睡。']);
+    expect(stripped[0]).toMatch(/总之/);
+    expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('closing-moral');
+  });
+
+  it('I-3: question-streak still strips the pending final question', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>回来啦。', '饭吃了没？'] }], { recent: ['今天累不累？'] });
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences.map((s) => s.text)).toEqual(['回来啦。']);
+    expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('question-streak');
+  });
+});

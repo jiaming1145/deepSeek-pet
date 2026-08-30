@@ -49,3 +49,13 @@ describe('sanitizeForDisplay', () => {
     expect(sanitizeForDisplay('ok, fine.')).toBe('ok, fine.');
   });
 });
+
+describe('M-1 — the A23 leading-number strip is opt-out for later sentences', () => {
+  it('keeps a leading number when the caller says this is not the first sentence', () => {
+    expect(sanitizeForDisplay('2 加 2 等于 4。', { leadingNumber: false })).toBe('2 加 2 等于 4。');
+    expect(sanitizeForDisplay('3 个小时吧。', { leadingNumber: false })).toBe('3 个小时吧。');
+  });
+  it('strips it by default (first sentence / whole-reply emptiness check)', () => {
+    expect(sanitizeForDisplay('2 加 2 等于 4。')).toBe('加 2 等于 4。');
+  });
+});

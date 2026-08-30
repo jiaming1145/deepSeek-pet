@@ -7,7 +7,15 @@ const HALF_TO_FULL: Record<string, string> = { ',': '，', '.': '。', '!': '！
  * Emoji are preserved on purpose: A18 is a linter rule, not a sanitizer rule.
  * No grapheme segmentation here — that lives in RevealPlan (T7, the bubble renderer; D1).
  */
-export function sanitizeForDisplay(input: string): string {
+export interface SanitizeOptions {
+  /**
+   * Item 6 (the A23 leading-number strip) is a reply-level artefact at the start of the completion.
+   * TurnRunner passes `false` for every sentence after the first of an attempt (M-1); default `true`.
+   */
+  leadingNumber?: boolean;
+}
+
+export function sanitizeForDisplay(input: string, options: SanitizeOptions = {}): string {
   // 1. carriage returns
   let t = input.replace(/\r/g, '');
   // 2. fenced code blocks out, inline backticks unwrapped
@@ -24,7 +32,7 @@ export function sanitizeForDisplay(input: string): string {
   // 5. long dot runs
   t = t.replace(/\.{3,}|。{3,}/g, '……').replace(/…{3,}/g, '……');
   // 6. the V4 leading-number injection (A23)
-  t = t.replace(/^\s*\d{1,3}\s+(?=\S)/, '');
+  if (options.leadingNumber !== false) t = t.replace(/^\s*\d{1,3}\s+(?=\S)/, '');
   // 7. half-width -> full-width, only when a CJK char is adjacent
   t = t.replace(
     /([\s\S])([,.!?:;])(?=([\s\S]|$))/g,
