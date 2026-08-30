@@ -9,8 +9,14 @@
  */
 import type { BrowserWindow } from 'electron';
 import type { Landing, WindowMotion } from '@ds/protocol';
+import type { TracePayloads } from '../../../src/main/trace';
 import { WindowMotionController } from '../../../src/main/window-motion';
 import type { Rect } from '../../../src/main/window-state';
+
+/** The two §12.2 records `WindowMotionController` is the Source of. */
+export type MotionTrace =
+  | { t: 'motion'; payload: TracePayloads['motion'] }
+  | { t: 'landing'; payload: TracePayloads['landing'] };
 
 export interface MotionHarnessOptions {
   pos: [number, number];
@@ -30,6 +36,8 @@ export interface MotionHarness {
   suspend: boolean[];
   persisted: [number, number][];
   positions: [number, number][];
+  /** Every §12.2 record the controller wrote, in order (the `trace` dep Task 15 wires to TraceWriter). */
+  traces: MotionTrace[];
   frame(n?: number): void;
   setCursor(x: number, y: number): void;
   cursor(): { x: number; y: number };
@@ -37,6 +45,8 @@ export interface MotionHarness {
   setAreas(areas: Rect[]): void;
   motions(): WindowMotion[];
   landings(): Landing[];
+  /** The `motion` trace records alone — the only place `clamped` is observable (B-07). */
+  motionTraces(): TracePayloads['motion'][];
 }
 
 export function createMotionHarness(opts: MotionHarnessOptions): MotionHarness {
@@ -51,6 +61,7 @@ export function createMotionHarness(opts: MotionHarnessOptions): MotionHarness {
     suspend: [],
     persisted: [],
     positions: [],
+    traces: [],
     frame(n = 1) {
       for (let i = 0; i < n; i++) {
         clock.t += opts.frameMs;
@@ -63,6 +74,7 @@ export function createMotionHarness(opts: MotionHarnessOptions): MotionHarness {
     setAreas(areas) { state.areas = areas; },
     motions: () => h.sends.filter((s) => s.channel === 'sim:windowMotion').map((s) => s.payload as WindowMotion),
     landings: () => h.sends.filter((s) => s.channel === 'sim:landing').map((s) => s.payload as Landing),
+    motionTraces: () => h.traces.flatMap((r) => (r.t === 'motion' ? [r.payload] : [])),
   };
   const pet = { isDestroyed: () => state.destroyed, getPosition: () => [...state.position] as [number, number] };
   h.ctl = new WindowMotionController({
@@ -75,6 +87,7 @@ export function createMotionHarness(opts: MotionHarnessOptions): MotionHarness {
     suspendHoverSwitching: (s) => { h.suspend.push(s); },
     send: (channel, payload) => { h.sends.push({ channel, payload }); },
     persist: (x, y) => { h.persisted.push([x, y]); },
+    trace: (t, payload) => { h.traces.push({ t, payload } as MotionTrace); },
     now: () => clock.t,
   });
   return h;

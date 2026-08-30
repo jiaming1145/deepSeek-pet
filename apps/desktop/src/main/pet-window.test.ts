@@ -209,7 +209,23 @@ describe('createPetWindow', () => {
     const { win } = build({ onRendererReset });
     win.emitWebContents('did-start-navigation', { isMainFrame: false, url: 'app://local/frame.html' });
     expect(onRendererReset).not.toHaveBeenCalled();
+    // The pet document's own load. The guard is registered before loadURL, so this navigation
+    // arrives while Task 15's `const motion` is still in its temporal dead zone — resetting here
+    // would throw a ReferenceError inside an Electron listener at startup (fix round 1, finding 5).
     win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).not.toHaveBeenCalled();
+    expect(win.ignoreMouse.at(-1)).toEqual({ ignore: true, forward: true }); // still recovered
+    // A reload (or any later top-level navigation) is a real reset.
+    win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).toHaveBeenCalledTimes(1);
+    win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).toHaveBeenCalledTimes(2);
+  });
+
+  it('§7.7: a crash before the document ever loaded still resets the motion episode', () => {
+    const onRendererReset = vi.fn();
+    const { win } = build({ onRendererReset });
+    win.emitWebContents('render-process-gone', {}, { reason: 'crashed' });
     expect(onRendererReset).toHaveBeenCalledTimes(1);
   });
 

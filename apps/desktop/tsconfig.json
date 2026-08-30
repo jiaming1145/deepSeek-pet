@@ -1,9 +1,25 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["node"], "lib": ["ES2022"], "allowImportingTsExtensions": true },
-  // tests/fixtures/motion and tests/fixtures/arbiter are MAIN-side fixtures (§12.7 B-06/B-07/B-09):
-  // they construct `WindowMotionController`, so they belong to this program and are excluded from
+  // The three §12.7 fixtures below are MAIN-side (B-06/B-07/B-09): they construct
+  // `WindowMotionController`, so they belong to this program and are excluded from
   // tsconfig.renderer.json, whose three Cubism relaxations (strictNullChecks: false above all)
   // cannot compile src/main. Everything else under tests/ stays in the renderer program.
-  "include": ["src/main", "src/preload", "tests/fixtures/motion", "tests/fixtures/arbiter", "electron.vite.config.ts", "vite.browser.config.ts", "playwright.config.ts", "vitest.config.ts", "playwright.electron.config.ts"]
+  //
+  // They are listed BY FILE, not by directory: tests/fixtures/motion and tests/fixtures/arbiter are
+  // the natural home for renderer-side fixtures too, and a directory rule would silently drag one
+  // into this program — no DOM lib, no @framework/* mapping — failing with errors that point at the
+  // wrong config (fix round 1, finding 6). A new fixture picks its program by being named here.
+  "include": [
+    "src/main",
+    "src/preload",
+    "tests/fixtures/motion/stale-generation.fixture.ts",
+    "tests/fixtures/motion/display-unplug.fixture.ts",
+    "tests/fixtures/arbiter/renderer-reload.fixture.ts",
+    "electron.vite.config.ts",
+    "vite.browser.config.ts",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "playwright.electron.config.ts"
+  ]
 }

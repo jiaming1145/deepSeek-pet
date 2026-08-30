@@ -313,8 +313,14 @@ describe('rebase / cancel / dispose (§7.7)', () => {
     const r = runDisplayUnplug(h);
     expect(r.dragGenerationKept).toBe(true);
     expect(r.dragClamped).toBe(true);
+    // B-07's "emitted" column, observable through WindowMotionDeps.trace: the `motion` records that
+    // follow the unplug keep the generation and carry `clamped: true` (fix round 1, finding 4).
+    expect(r.dragClampedTraced).toBe(true);
     expect(r.flingGenerationKept).toBe(true);
     expect(r.flingVelocityKept).toBe(true);
+    // The fixture throws if no snapshot was published after the fling rebase, so the two booleans
+    // above compare two genuinely different records (fix round 1, finding 1).
+    expect(r.flingGenerationTraced).toBe(true);
     expect(r.finalGrabbable).toBe(true);
   });
 
@@ -367,6 +373,13 @@ describe('B-06 stale generation (§12.7)', () => {
     expect(r.positionsFromGen8Only).toBe(true);
   });
 });
+
+// Type-level guard: Task 15 wires `WindowMotionDeps.trace` straight to the TraceWriter, so the dep's
+// signature must accept `TraceWriter.write` narrowed to the two kinds §12.2 gives this class.
+declare const _writer: import('./trace').TraceWriter;
+declare const _deps: import('./window-motion').WindowMotionDeps;
+const _traceDep: NonNullable<typeof _deps.trace> = (t, p) => { _writer.write(t, p); };
+void _traceDep;
 
 // Type-level guard: the payloads the motor sends are exactly the protocol types.
 const _wm: WindowMotion = { generation: 0, tsMain: 0, phase: 'rest', vx: 0, vy: 0, lagX: 0, lagY: 0, contact: null };
