@@ -110,6 +110,12 @@ export type ForegroundWatch = {
   stop(): void;
   /** Polls now instead of waiting out the interval — for `resume` and `unlock-screen`. */
   recheck(): void;
+  /**
+   * §10.3: the coarse breakpoint (a) the proactive deferral waits for. Fires with NO argument,
+   * only when the foreground hwnd differs from the previous poll's. The hwnd is compared and then
+   * dropped: it is never stored beyond the comparison, logged, or traced.
+   */
+  onForegroundChanged(cb: () => void): () => void;
 };
 
 /**
@@ -126,13 +132,22 @@ export function startForegroundWatch(
 ): ForegroundWatch {
   const { intervalMs = 2000 } = options;
   const api = options.api === undefined ? loadWin32() : options.api;
-  if (!api) return { stop: () => { /* hiding disabled */ }, recheck: () => { /* hiding disabled */ } };
+  if (!api) {
+    return {
+      stop: () => { /* hiding disabled */ },
+      recheck: () => { /* hiding disabled */ },
+      onForegroundChanged: () => () => { /* hiding disabled */ },
+    };
+  }
 
   const handle = win.getNativeWindowHandle();
   // 8 bytes on x64/arm64, 4 on ia32.
   const selfHwnd = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
 
   let lastHide = false;
+  /** The previous poll's hwnd, kept ONLY to detect a change; nothing reads it but the comparison. */
+  let lastFgHwnd: bigint | null = null;
+  const fgSubs = new Set<() => void>();
   let timer: ReturnType<typeof setInterval> | null = null;
   // Cleared by `stop()` — whether that came from shutdown, a destroyed window or a failed poll.
   // Nothing re-arms afterwards, so a hard failure cannot come back as a 0.5 Hz error stream.
@@ -157,6 +172,8 @@ export function startForegroundWatch(
     }
     try {
       const fgHwnd = toHwnd(api.GetForegroundWindow());
+      if (lastFgHwnd !== null && fgHwnd !== lastFgHwnd) for (const cb of fgSubs) cb();
+      lastFgHwnd = fgHwnd;
       const out: RectOut = { left: 0, top: 0, right: 0, bottom: 0 };
       const ok = fgHwnd !== 0n && api.GetWindowRect(fgHwnd, out);
       const rect: Rect | null = ok
@@ -193,5 +210,12 @@ export function startForegroundWatch(
   pollOnce();
   // A poll that failed hard (or a window already gone) called stop(); do not arm the interval.
   if (armed) timer = setInterval(pollOnce, intervalMs);
-  return { stop, recheck: () => { if (armed) pollOnce(); } };
+  return {
+    stop,
+    recheck: () => { if (armed) pollOnce(); },
+    onForegroundChanged: (cb) => {
+      fgSubs.add(cb);
+      return () => { fgSubs.delete(cb); };
+    },
+  };
 }

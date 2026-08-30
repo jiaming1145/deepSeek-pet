@@ -168,4 +168,37 @@ describe('startForegroundWatch', () => {
     expect(vi.getTimerCount()).toBe(0);
     watch.stop();
   });
+
+  it('onForegroundChanged fires only when the hwnd actually changed, with no argument', () => {
+    let fg = 2;
+    const onChange = vi.fn();
+    const changed = vi.fn();
+    const watch = startForegroundWatch(fakeWindow(), onChange, {
+      intervalMs: 2000,
+      api: fakeWin32({ GetForegroundWindow: () => fg }),
+    });
+    const off = watch.onForegroundChanged(changed);
+    vi.advanceTimersByTime(2000);            // same hwnd: nothing
+    expect(changed).not.toHaveBeenCalled();
+    fg = 3;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls[0]).toEqual([]);   // no hwnd, no boolean — nothing to leak
+    fg = 3;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    off();
+    fg = 4;
+    vi.advanceTimersByTime(2000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    watch.stop();
+  });
+
+  it('onForegroundChanged is a no-op unsubscribe when the Win32 bindings are unavailable', () => {
+    const watch = startForegroundWatch(fakeWindow(), vi.fn(), { api: null });
+    const off = watch.onForegroundChanged(vi.fn());
+    expect(typeof off).toBe('function');
+    off();
+    watch.stop();
+  });
 });
