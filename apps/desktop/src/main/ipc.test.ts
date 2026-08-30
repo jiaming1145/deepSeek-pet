@@ -270,3 +270,58 @@ describe('handleInvoke', () => {
     ).resolves.toEqual({ ok: true, deleted: 2 });
   });
 });
+
+describe('§11.2 getter form — the window list is looked up at event time', () => {
+  beforeEach(() => {
+    listeners.clear();
+    handlers.clear();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('onFromAny accepts a getter, evaluates it per event, and drops nulls (a destroyed lazy window)', () => {
+    const a = fakePet();
+    const b = fakePet();
+    let current: Array<unknown> = [a.pet, null];
+    const cb = vi.fn();
+    onFromAny(() => current as never, Channels.bubbleHover, cb);
+    const deliverFrom = (f: ReturnType<typeof fakePet>): void => {
+      listeners.get(Channels.bubbleHover)?.({ sender: f.webContents, senderFrame: f.mainFrame }, { inside: true });
+    };
+    deliverFrom(b);
+    expect(cb).not.toHaveBeenCalled();
+    current = [null, b.pet]; // the bubble was recreated: same listener, new window
+    deliverFrom(b);
+    expect(cb).toHaveBeenCalledWith({ inside: true }, b.pet);
+  });
+
+  it('handleInvoke accepts a getter and re-resolves it per call, so a recreated chat window is trusted', async () => {
+    const first = fakePet();
+    const second = fakePet();
+    let chat: unknown = null;
+    handleInvoke(InvokeChannels.historyDelete, () => [chat].filter(Boolean) as never, async () => ({ ok: true as const, deleted: 1 }));
+    const call = (f: ReturnType<typeof fakePet>) => handlers.get(InvokeChannels.historyDelete)?.(
+      { sender: f.webContents, senderFrame: f.mainFrame },
+      { turnId: 't1' },
+    );
+    await expect(call(first)).rejects.toThrow(/untrusted sender/);   // no chat window exists yet
+    chat = first.pet;
+    await expect(call(first)).resolves.toEqual({ ok: true, deleted: 1 });
+    chat = second.pet;                                               // destroyed on close, recreated on open
+    await expect(call(first)).rejects.toThrow(/untrusted sender/);
+    await expect(call(second)).resolves.toEqual({ ok: true, deleted: 1 });
+  });
+
+  it('the array form still works and tolerates a null entry', async () => {
+    const owner = fakePet();
+    handleInvoke(InvokeChannels.historyDelete, [null, owner.pet] as never, async () => ({ ok: true as const, deleted: 3 }));
+    await expect(
+      handlers.get(InvokeChannels.historyDelete)?.(
+        { sender: owner.webContents, senderFrame: owner.mainFrame },
+        { turnId: 't1' },
+      ),
+    ).resolves.toEqual({ ok: true, deleted: 3 });
+  });
+});
