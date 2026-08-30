@@ -177,6 +177,10 @@ export function closeChat(win: BrowserWindow): void {
   // `closeChat` on an already hidden window fires no `hide` event, and a hide driven by
   // VisibilityState never goes through `closeChat`.
   setChatComposing(false);
+  // GC2-5: a close during the initial load must also cancel the `chat:opened` that open armed, or
+  // `did-finish-load` later focuses the composer of a window the user already dismissed. Done
+  // even when the window is already hidden — the pending send is the stale state, not the hide.
+  clearPendingOpened();
   if (!win.isDestroyed() && win.isVisible()) win.hide();
 }
 

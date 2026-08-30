@@ -211,7 +211,7 @@ vi.mock('@ds/brain', async (importOriginal) => {
 const { parseCharacterBundle } = await import('@ds/brain');
 const { KV_FIRST_RUN_DONE, getKv, openDb, setKv } = await import('@ds/memory');
 const { BUBBLE_HIDE_DELAY_MS, BUBBLE_LINGER_MS } = await import('./bubble-window');
-const { BrainService, HINT_TTL_MS, STORAGE_HINT_TEXT } = await import('./brain-service');
+const { BrainService, HINT_TTL_MS, STORAGE_HINT_TEXT, USER_ROW_LABEL } = await import('./brain-service');
 
 const bundle = parseCharacterBundle(
   JSON.parse(readFileSync(join(__dirname, '../../../../characters/haru/character.json'), 'utf8')),
@@ -445,7 +445,7 @@ describe('BrainService', () => {
     await service.dispose();
   });
 
-  it('GC-3: a persistFailed from the runner warns and shows the storage hint; idle -> the hint owns the hide', async () => {
+  it('GC-3 / A-38: a persistFailed from the runner warns, sends brain:error{code:storage} to the chat and shows the storage hint; idle -> the hint owns the hide', async () => {
     vi.useFakeTimers();
     setKv(db, KV_FIRST_RUN_DONE, '1');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -464,6 +464,13 @@ describe('BrainService', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0])).not.toContain(secret);
     expect(String(warn.mock.calls[0])).toContain('assistant row');
+    // A-38: the chat window gets the error code; the payload carries the hint copy, never the raw error.
+    const errs = chat.payloads(Channels.brainError) as Array<{ turnId?: string; code: string; message: string }>;
+    expect(errs).toEqual([{ turnId: 't1', code: 'storage', message: STORAGE_HINT_TEXT }]);
+    expect(JSON.stringify(errs)).not.toContain('SQLITE_FULL');
+    // The bubble renderer's brain:error handler drops the live reveal; a storage failure must not.
+    expect(bubble.payloads(Channels.brainError)).toHaveLength(0);
+    expect(openKeyWindow).not.toHaveBeenCalled();
     vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
     expect(bubbleVisible.at(-1)).toBe(false);
     // Mid-turn (speaking): the hint is shown, but the turn's own playback keeps the hide.
@@ -471,8 +478,37 @@ describe('BrainService', () => {
     r.emit('state', { state: 'thinking', turnId: 't2' });
     r.emit('persistFailed', { turnId: 't2', label: 'user row', message: 'SQLITE_FULL' });
     expect(bubble.payloads(Channels.hintShow)).toHaveLength(2);
+    // Fix round 1: the user row is hint-only — the chat still holds only the assistant-row error.
+    expect(chat.payloads(Channels.brainError)).toHaveLength(1);
     vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS + 1);
     expect(bubbleVisible.at(-1)).toBe(true);
+    await service.dispose();
+  });
+
+  it('RESIDUAL2 fix round 1: a failed USER row is hint-only — no brain:error reaches the chat while its send is still pending; assistant-side rows still do', async () => {
+    vi.useFakeTimers();
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = makeService();
+    service.start();
+    const r = runner();
+    r.state = 'speaking';
+    r.emit('state', { state: 'thinking', turnId: 't1' });
+    // The user row fails early, while the reply is still streaming and the composer holds the send.
+    r.emit('persistFailed', { turnId: 't1', label: USER_ROW_LABEL, message: 'SQLITE_FULL (user)' });
+    expect(chat.payloads(Channels.brainError)).toHaveLength(0);
+    expect(bubble.payloads(Channels.brainError)).toHaveLength(0);
+    const hints = bubble.payloads(Channels.hintShow) as Array<{ text: string; level: string }>;
+    expect(hints).toEqual([{ text: STORAGE_HINT_TEXT, level: 'warn', ttlMs: HINT_TTL_MS }]);
+    // Assistant-side rows are reported after turnDone/error cleared the pending send: chat is told.
+    for (const label of ['assistant row', 'interrupted assistant row', 'canned line']) {
+      r.emit('persistFailed', { turnId: 't1', label, message: 'SQLITE_FULL' });
+    }
+    const errs = chat.payloads(Channels.brainError) as Array<{ turnId?: string; code: string; message: string }>;
+    expect(errs).toHaveLength(3);
+    for (const e of errs) expect(e).toEqual({ turnId: 't1', code: 'storage', message: STORAGE_HINT_TEXT });
+    expect(bubble.payloads(Channels.brainError)).toHaveLength(0);
+    expect(bubble.payloads(Channels.hintShow)).toHaveLength(4);
     await service.dispose();
   });
 

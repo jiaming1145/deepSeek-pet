@@ -103,6 +103,15 @@ export class SpeechController {
         this.scheduleHide();
         return;
       }
+      // GC2-3: hidden (paused) and unfinished. finishTurn() would return on `!isVisible` and leave
+      // the controller wedged — `finished` false, `current` null, no continuation for resume() to
+      // take, the band re-shown empty on the next `shell:visibility`. The turn is over and nobody
+      // saw its end, so it is cancelled outright: no playback:turnDone (that ack is only ever sent
+      // for a reply somebody could have seen), no linger, nothing left for resume() to show.
+      if (!this.isVisible) {
+        this.cancelTurn();
+        return;
+      }
       this.cancelPending();
       this.queue = [];
       this.current = null;
@@ -141,6 +150,10 @@ export class SpeechController {
 
   /** Instantly finish the sentence being revealed and drain the queue's reveal timers. */
   complete(): void {
+    // GC2-4: while paused nothing may be committed — `commitSentence` sends playback:sentenceDone
+    // and CX-1 would persist text nobody saw as shown. The request is dropped, not deferred: the
+    // click that produces it cannot happen on a hidden band, and resume() carries the reveal on.
+    if (!this.isVisible) return;
     if (!this.current && this.queue.length === 0) return;
     this.cancelPending();
     if (this.current) {
@@ -313,6 +326,30 @@ export class SpeechController {
       this.shownText.shift();
       this.bubble.setText(this.shownText.join('') + this.partial);
     }
+  }
+
+  /**
+   * GC2-3: the cancellation finaliser, distinct from `finishTurn()`. Every timer and token is
+   * invalidated, the queue, the sentence in flight and the beat are dropped, the turn is marked
+   * finished and inactive, the band hidden, and the waiters resolved — WITHOUT `playback:turnDone`.
+   */
+  private cancelTurn(): void {
+    this.cancelPending();
+    this.hideArm += 1;
+    this.queue = [];
+    this.current = null;
+    this.beatDeadline = null;
+    this.beatLeft = 0;
+    this.partial = '';
+    this.shownText = [];
+    this.turnId = null;
+    this.turnEnded = false;
+    this.finished = true;
+    this.hideAt = null;
+    this.setMouth(false);
+    this.bubble.setAwaiting(false);
+    this.bubble.hide();
+    this.resolveWaiters();
   }
 
   private finishTurn(): void {
