@@ -42,7 +42,7 @@ function mount(): {
 } {
   document.body.innerHTML = `
     <div id="bubble" class="bubble" data-side="left" data-emotion="neutral" hidden>
-      <div class="bubble__plate" data-bubble-plate hidden></div>
+      <div class="bubble__plate" data-bubble-plate hidden><span class="bubble__plate-text" data-bubble-plate-text></span></div>
       <div class="bubble__surface">
         <p class="bubble__text" data-bubble-text></p>
         <span class="bubble__advance" data-bubble-advance>▼</span>
