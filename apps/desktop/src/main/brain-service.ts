@@ -33,6 +33,11 @@ export const HINT_TTL_MS = 6000;
  * `storage` row; kept under this name for the callers that read it.
  */
 export const STORAGE_HINT_TEXT: string = ERROR_HINTS.storage.text;
+/**
+ * The `persistFailed.label` TurnRunner uses for the user's own line (packages/brain turn.ts). It is
+ * the one write that fails while the composer still holds the send as pending — see reportPersistFailed.
+ */
+export const USER_ROW_LABEL = 'user row';
 /** §6.6: a pause between characters must not flicker the listening pose. */
 const LISTENING_OFF_DEBOUNCE_MS = 250;
 /** §6.6's first message uses a turnId no TurnRunner ever issues; its playback echoes are dropped. */
@@ -549,13 +554,23 @@ export class BrainService {
    * is NOT sent the error: its `brain:error` handler drops the reveal in flight, and A-26/A-38
    * keep turnDone / idle unaffected by a failed write. During a turn the playback still owns the
    * window-level hide (the hint rides along); when idle the hint owns it, as reportError's.
+   *
+   * Fix round 1: the chat window is NOT sent `brain:error` for the USER row. That write fails
+   * early in the turn while the composer still holds the send as pending, and the chat's only
+   * `brain:error` consumer (Composer's restore effect) would put the user's text back, selected,
+   * as if the send had failed while the reply is still streaming — a re-send would then duplicate
+   * a line TurnRunner already carries forward (A-38). Until the A-44 consumer rule
+   * (`code:'storage'` is informational) lands in Composer, the user row stays hint-only, as on
+   * main. Every assistant-side row is reported after `turnDone` / `error` cleared the pending send.
    */
   private reportPersistFailed(runner: TurnRunner, p: { turnId: string; label: string; message: string }): void {
     if (this.disposed) return;
     console.warn('[brain] history write failed (%s) turn=%s detail=%s', p.label, p.turnId, boundedDetail(p.message));
     const { bubble, chat } = this.deps;
     const hint = ERROR_HINTS.storage;
-    sendTo(chat, Channels.brainError, { turnId: p.turnId, code: 'storage', message: hint.text });
+    if (p.label !== USER_ROW_LABEL) {
+      sendTo(chat, Channels.brainError, { turnId: p.turnId, code: 'storage', message: hint.text });
+    }
     if (runner.state === 'idle') {
       this.cancelBubbleHide();
       this.showBubble();
