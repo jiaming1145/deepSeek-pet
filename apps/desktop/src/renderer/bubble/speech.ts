@@ -58,7 +58,18 @@ export class SpeechController {
   private gen = 0;
   private handle: number | null = null;
   private hideAt: number | null = null;
+  /** Bumped every time the linger is (re)armed; a stale hide callback compares it and returns. */
+  private hideArm = 0;
   private waiters: Array<() => void> = [];
+  /**
+   * CX-2: false between `pause()` and `resume()` (the pet is hidden). The bubble window runs with
+   * `backgroundThrottling: false`, so nothing else stops its timers: while false no grapheme is
+   * painted, no `playback:*` acknowledgement leaves, the mouth is closed and the band is hidden.
+   */
+  private isVisible = true;
+  /** The `<|PAUSE n|>` beat in flight: its deadline while armed, its remainder while paused. */
+  private beatDeadline: number | null = null;
+  private beatLeft = 0;
 
   constructor(deps: SpeechDeps) {
     this.bubble = deps.bubble;
@@ -149,6 +160,58 @@ export class SpeechController {
     if (this.turnEnded) this.finishTurn();
   }
 
+  /**
+   * True while there is something on the band: a turn that is still revealing, or one that has
+   * finished and is lingering. bubble/main.ts reads it on a hidden->shown `shell:visibility` edge
+   * to decide whether the band element must be re-shown (I-6).
+   */
+  get active(): boolean {
+    return this.turnId !== null && (!this.finished || this.hideAt !== null);
+  }
+
+  /** False while paused (pet hidden). */
+  get visible(): boolean {
+    return this.isVisible;
+  }
+
+  /**
+   * `shell:visibility {hidden:true}`: stop the reveal where it stands, close the mouth, hide the
+   * band and hold every acknowledgement. Nothing is dropped — the queue, the sentence in flight and
+   * the turn's end all wait for `resume()`.
+   */
+  pause(): void {
+    if (!this.isVisible) return;
+    this.isVisible = false;
+    this.cancelPending();
+    if (this.beatDeadline !== null) {
+      this.beatLeft = Math.max(0, this.beatDeadline - this.now());
+      this.beatDeadline = null;
+    }
+    this.setMouth(false);
+    this.bubble.hide();
+  }
+
+  /**
+   * `shell:visibility {hidden:false}`: re-show the band if a turn is still on it and carry on. A
+   * paused beat keeps its remainder; the grapheme in flight restarts its own delay; a turn that
+   * ended while hidden is acknowledged now; a linger restarts in full from the show (I-6).
+   */
+  resume(): void {
+    if (this.isVisible) return;
+    this.isVisible = true;
+    if (!this.active) return;
+    this.bubble.show();
+    if (this.current) {
+      if (this.beatLeft > 0) this.armBeat();
+      else this.step();
+    } else if (this.turnEnded && !this.finished) {
+      this.finishTurn();
+    } else if (this.hideAt !== null) {
+      this.hideAt = this.now() + LINGER_MS;
+      this.scheduleHide();
+    }
+  }
+
   /** Pointer state from bubble/main.ts: hover only defers the hide. */
   setPinned(inside: boolean): void {
     this.bubble.pinned = inside;
@@ -186,7 +249,7 @@ export class SpeechController {
     this.bubble.setEmotion('neutral');
     this.bubble.setAwaiting(false);
     this.bubble.setText('');
-    this.bubble.show();
+    if (this.isVisible) this.bubble.show();
   }
 
   private next(): void {
@@ -197,12 +260,23 @@ export class SpeechController {
     }
     this.current = { ev, steps: new RevealPlan(ev.text).steps(), i: 0 };
     this.partial = '';
-    const wait = Math.round((ev.pause ?? 0) * 1000);
-    if (wait > 0) this.schedule(wait, () => this.step());
+    this.beatLeft = Math.round((ev.pause ?? 0) * 1000);
+    if (!this.isVisible) return; // resume() starts it
+    if (this.beatLeft > 0) this.armBeat();
     else this.step();
   }
 
+  private armBeat(): void {
+    this.beatDeadline = this.now() + this.beatLeft;
+    this.schedule(this.beatLeft, () => {
+      this.beatDeadline = null;
+      this.beatLeft = 0;
+      this.step();
+    });
+  }
+
   private step(): void {
+    if (!this.isVisible) return; // resume() calls step() again
     const cur = this.current;
     if (!cur) return;
     const s = cur.steps[cur.i];
@@ -244,6 +318,9 @@ export class SpeechController {
   private finishTurn(): void {
     const turnId = this.turnId;
     if (this.finished || turnId === null) return;
+    // Hidden: the turn stays open (queue drained, `turnEnded` set) and resume() finishes it, so
+    // playback:turnDone is only ever sent for a reply somebody could have seen.
+    if (!this.isVisible) return;
     this.finished = true;
     this.bridge?.send(Channels.playbackTurnDone, { turnId });
     this.setMouth(false);
@@ -254,9 +331,14 @@ export class SpeechController {
   }
 
   private scheduleHide(): void {
-    if (this.hideAt === null) return;
+    if (this.hideAt === null || !this.isVisible) return;
+    // Each arm invalidates the previous one. `setPinned(false)` re-arms without going through
+    // `cancelPending()` (that would also kill an in-flight reveal), so without this token the
+    // ORIGINAL hide timer still fires at the original deadline and the re-armed linger is ignored.
+    const armed = ++this.hideArm;
     const left = Math.max(0, this.hideAt - this.now());
     this.schedule(left, () => {
+      if (armed !== this.hideArm) return;
       if (this.hideAt === null || this.bubble.pinned) return;
       this.hideAt = null;
       this.bubble.setAwaiting(false);

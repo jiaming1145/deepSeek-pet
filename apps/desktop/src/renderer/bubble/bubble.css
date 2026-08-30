@@ -9,7 +9,8 @@ body {
   overflow: hidden;
 }
 
-/* The window is click-through by default; only the band and the hint take the pointer. */
+/* The window is click-through by default; only the band's painted parts and the hint take the
+   pointer. */
 body {
   pointer-events: none;
   font-family: var(--font-sans);
@@ -52,7 +53,10 @@ body.browser .content {
   display: block;
   /* transparent room for the plate (top), the C5 shadow (sides/bottom) and the anchor notch. */
   padding: calc(var(--plate-h) + var(--sp-1)) var(--sp-3) var(--sp-6);
-  pointer-events: auto;
+  /* M-16: this padding is transparent desktop, so it must not pin the band or open the chat. The
+     pointer belongs to the surface and the plate below; pointerenter/leave still fire on this root
+     because enter/leave are delivered to ancestors too, so main.ts keeps its listeners here. */
+  pointer-events: none;
   opacity: 0;
   transform: translateY(var(--sp-2));
   transition:
@@ -90,6 +94,11 @@ body.browser .content {
   padding-top: calc(var(--plate-h) + var(--sp-1) + var(--notch));
 }
 
+.bubble__surface,
+.bubble__plate {
+  pointer-events: auto;
+}
+
 .bubble__surface {
   position: relative;
   z-index: 1;
@@ -99,7 +108,9 @@ body.browser .content {
   border-top-color: var(--c-border-strong); /* the direction's hairline top rule */
   border-radius: var(--r-bubble);
   box-shadow: var(--shadow-bubble);
-  padding: var(--sp-3) var(--sp-4);
+  /* M-12: the bottom strip is the advance mark's own row, so ▼ never sits on the last glyph of
+     a full 24-hanzi line — the ADV box puts the marker under the line, not over it. */
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + var(--sp-3));
 }
 
 .bubble__text {
@@ -147,10 +158,10 @@ body.browser .content {
      never widens — so main cannot size the window to fit an escaping rail either. The original
      `left: calc(--sp-1 - 1px)` plus `translateX(--adv-cut * -0.5)` put the rail at x = -7.7..2.7 and
      the harness's `body.browser` inset was the only reason it ever drew in full.
-     Tallest case: 6 lines. The rail is 6 * --lh-bubble + 26 - 2 * --r-bubble = 154px, so
-     skewX(--adv-skew) about its centre reaches 77 * tan(8deg) = 10.8px each side — inside
-     --adv-cut's 14px, which is why the cut token doubles as the left inset. Measured x = 3.2..27.8
-     at 6 lines and 12.3..18.7 at one, both inside a band root that starts at x = 0. */
+     Tallest case: 6 lines. The rail is 6 * --lh-bubble + 38 - 2 * --r-bubble = 166px (38 = the
+     surface's 12 + 24 vertical padding since M-12's ▼ strip, plus its 2px border), so
+     skewX(--adv-skew) about its centre reaches 83 * tan(8deg) = 11.7px each side — inside
+     --adv-cut's 14px, which is why the cut token doubles as the left inset. */
   left: var(--adv-cut);
   /* Inset one --r-bubble at each end so the cut runs the surface's STRAIGHT left edge and crosses
      neither corner arc — C3's corner peep has to photograph the radius, not this rail. */
@@ -171,6 +182,7 @@ body.browser .content {
   height: var(--plate-h);
   display: flex;
   align-items: center;
+  box-sizing: border-box;
   padding: 0 var(--sp-3);
   background: var(--c-plate);
   color: var(--c-accent-text);
@@ -178,6 +190,8 @@ body.browser .content {
   line-height: var(--lh-caption);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.04em;
+  /* DESIGN.md adv-plate: the outline is what makes the shape read on the paler tints (happy). */
+  border: 1px solid var(--c-border-strong);
   border-radius: var(--r-tooltip);
   transform: skewX(var(--adv-skew));
   z-index: 3;
@@ -187,12 +201,34 @@ body.browser .content {
   display: none;
 }
 
+/* M-16 (fix round 1): the --sp-1 gap between the plate and the surface is transparent, so without
+   this bridge a pointer crossing it leaves and re-enters #bubble — an `inside:false/true` pair,
+   a click-through flip and a linger re-arm for a pointer that never left the band. Invisible;
+   pointer only. */
+.bubble__plate::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--sp-1);
+  pointer-events: auto;
+}
+
+/* M-13: counter-skew derived from the same token as chat's .plate__text, so the name stands
+   upright inside the slanted box instead of rendering italic. */
+.bubble__plate-text {
+  display: inline-block;
+  transform: skewX(calc(-1 * var(--adv-skew)));
+}
+
 /* --- advance mark: 1 Hz blink at the bottom-right while she is not painting -------------------- */
 
 .bubble__advance {
   position: absolute;
   right: var(--sp-3);
-  bottom: var(--sp-2);
+  /* Inside the surface's reserved bottom strip (M-12). */
+  bottom: var(--sp-1);
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
   color: var(--c-advance, var(--c-warn));
@@ -217,7 +253,9 @@ body.browser .content {
 }
 
 /* --- anchor notch: the ADV replacement for a tail, at --arrow-offset on the pet-facing edge ----
-   contracts.md §5.8: a 3 px --c-bubble-tail notch. The ADV form renders no triangle. */
+   contracts.md §5.8: a 3 px --c-bubble-tail notch. The ADV form renders no triangle.
+   M-11: each offset is the root's padding on that side minus the notch's own 3px thickness, so the
+   notch sits flush against the surface edge and protrudes outward — never a detached tick. */
 
 .bubble__anchor {
   position: absolute;
@@ -227,25 +265,25 @@ body.browser .content {
 }
 
 .bubble[data-side='left'] .bubble__anchor {
-  right: var(--sp-2);
+  right: calc(var(--sp-3) + var(--notch) - 3px);
   top: calc(var(--arrow-offset) - var(--sp-3));
   width: 3px;
   height: var(--sp-6);
 }
 .bubble[data-side='right'] .bubble__anchor {
-  left: var(--sp-2);
+  left: calc(var(--sp-3) + var(--notch) - 3px);
   top: calc(var(--arrow-offset) - var(--sp-3));
   width: 3px;
   height: var(--sp-6);
 }
 .bubble[data-side='top'] .bubble__anchor {
-  bottom: var(--sp-3);
+  bottom: calc(var(--sp-6) + var(--notch) - 3px);
   left: calc(var(--arrow-offset) - var(--sp-3));
   width: var(--sp-6);
   height: 3px;
 }
 .bubble[data-side='bottom'] .bubble__anchor {
-  top: var(--sp-3);
+  top: calc(var(--plate-h) + var(--sp-1) + var(--notch) - 3px);
   left: calc(var(--arrow-offset) - var(--sp-3));
   width: var(--sp-6);
   height: 3px;

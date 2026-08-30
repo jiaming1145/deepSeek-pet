@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { USER_TEXT_MAX } from '@ds/protocol';
 import { Composer, type ComposerProps, type SendResult } from './Composer';
 
 // vitest runs with `globals: false`, so @testing-library/react cannot find a global `afterEach`
@@ -116,6 +117,35 @@ describe('Composer', () => {
     await tick();
     expect(ta.value).toBe('在吗');
     expect(document.activeElement).toBe(ta);
+  });
+
+  // Final review I-4: `user:text` is z.string().max(USER_TEXT_MAX) and main's handleInvoke THROWS on
+  // a schema miss, so the renderer sees a rejected promise, not {ok:false}. The text must survive.
+  it('restores the text when the send promise rejects (I-4)', async () => {
+    const p = props({ onSend: vi.fn(() => Promise.reject(new Error('[ipc] rejected user:text'))) });
+    render(<Composer {...p} />);
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    const long = '字'.repeat(USER_TEXT_MAX);
+    fireEvent.change(ta, { target: { value: long } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    await tick();
+    expect(ta.value).toBe(long);
+    expect(document.activeElement).toBe(ta);
+  });
+
+  it('caps the textarea at USER_TEXT_MAX and shows a quiet counter only near the cap (I-4)', () => {
+    render(<Composer {...props()} />);
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(ta.maxLength).toBe(USER_TEXT_MAX);
+    expect(document.querySelector('.composer__count')).toBeNull();
+    fireEvent.change(ta, { target: { value: '字'.repeat(USER_TEXT_MAX - 200) } });
+    expect(document.querySelector('.composer__count')?.textContent).toBe('还能写 200 字');
+    fireEvent.change(ta, { target: { value: '字'.repeat(USER_TEXT_MAX) } });
+    const count = document.querySelector('.composer__count') as HTMLElement;
+    expect(count.textContent).toBe('到 2000 字了');
+    expect(count.dataset.at).toBe('cap');
+    fireEvent.change(ta, { target: { value: '字' } });
+    expect(document.querySelector('.composer__count')).toBeNull();
   });
 
   it('drops the pending text once the turn finishes', async () => {

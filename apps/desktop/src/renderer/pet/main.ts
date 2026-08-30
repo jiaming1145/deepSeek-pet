@@ -3,6 +3,8 @@ import { Channels } from '@ds/protocol';
 import { fpsFor } from '../bubble/fps';
 import { bridge } from './bridge';
 import { HoverTracker } from './hover';
+import { lookupMotion } from './motion-lookup';
+import { PoseTracker } from './pose';
 import { PressTracker, tapCandidates } from './press';
 import { createDebugToggle, inDebugPanel, overDebugPanel } from './debug-panel';
 
@@ -159,25 +161,28 @@ async function main(): Promise<void> {
   bridge?.on(Channels.debugToggle, () => toggleDebugPanel());
 
   // Poses and mouth follow the turn; the reveal itself lives in the bubble window (R3).
+  // CX-10: one tracker owns the pose so a listening edge can restore the turn's base pose.
+  const pose = new PoseTracker((e) => stage.setEmotion(e));
   bridge?.on(Channels.brainState, ({ state }) => {
     fpsState.speaking = state !== 'idle';
     applyFps();
     if (state === 'thinking') {
-      stage.setEmotion('think');
+      pose.setBase('think');
       const think = stage.config.motionMap.think;
       if (think) stage.playMotion(think);
     } else if (state === 'idle') {
-      stage.setEmotion('neutral');
+      pose.setBase('neutral');
     }
   });
   bridge?.on(Channels.brainSentence, (ev) => {
-    stage.setEmotion(ev.emotion);
-    const motion = ev.motion ? stage.config.motionMap[ev.motion] : undefined;
+    pose.setBase(ev.emotion);
+    // M-25: own-property lookup, so `constructor` / `__proto__` from the model never reach playMotion.
+    const motion = lookupMotion(stage.config.motionMap, ev.motion);
     if (motion) stage.playMotion(motion);
   });
   bridge?.on(Channels.speechMouth, ({ on }) => (on ? stage.mouth.start() : stage.mouth.stop()));
   bridge?.on(Channels.avatarListening, ({ on }) => {
-    if (on) stage.setEmotion('curious');
+    pose.setListening(on);
     stage.mouth.stop();
   });
 

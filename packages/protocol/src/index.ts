@@ -246,8 +246,16 @@ export const InvokeChannels = {
 } as const;
 export type InvokeChannel = (typeof InvokeChannels)[keyof typeof InvokeChannels];
 
+/**
+ * Cap on one user message. The composer's textarea `maxLength` and its counter count UTF-16 code
+ * units; zod 4's `.max` counts UTF-16 units too but falls back to code points when that length is
+ * over the cap (astral characters count once), so it is never stricter than the composer. The
+ * renderer therefore can never hand main a message the schema below rejects (final review I-4).
+ */
+export const USER_TEXT_MAX = 2000;
+
 export const InvokeRequest = {
-  [InvokeChannels.userText]: z.object({ text: z.string().min(1).max(2000) }),
+  [InvokeChannels.userText]: z.object({ text: z.string().min(1).max(USER_TEXT_MAX) }),
   [InvokeChannels.keySet]: z.object({ apiKey: z.string().min(8).max(200) }),
   [InvokeChannels.keyTest]: z.object({ apiKey: z.string().min(8).max(200).optional() }),
   [InvokeChannels.keyClear]: z.object({}),

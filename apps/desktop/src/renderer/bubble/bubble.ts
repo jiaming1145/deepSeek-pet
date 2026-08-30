@@ -19,6 +19,8 @@ export class Bubble {
   private readonly root: HTMLElement;
   private readonly textEl: HTMLElement;
   private readonly plateEl: HTMLElement;
+  /** The counter-skewed span inside the plate; the name goes here, never on the skewed box. */
+  private readonly plateTextEl: HTMLElement;
   private readonly advanceEl: HTMLElement;
   private shown = false;
   private exitHandle: number | null = null;
@@ -29,13 +31,17 @@ export class Bubble {
   constructor(root: HTMLElement) {
     const text = root.querySelector<HTMLElement>('[data-bubble-text]');
     const plate = root.querySelector<HTMLElement>('[data-bubble-plate]');
+    const plateText = root.querySelector<HTMLElement>('[data-bubble-plate-text]');
     const advance = root.querySelector<HTMLElement>('[data-bubble-advance]');
-    if (!text || !plate || !advance) {
-      throw new Error('bubble root needs [data-bubble-text], [data-bubble-plate], [data-bubble-advance]');
+    if (!text || !plate || !plateText || !advance) {
+      throw new Error(
+        'bubble root needs [data-bubble-text], [data-bubble-plate] > [data-bubble-plate-text], [data-bubble-advance]',
+      );
     }
     this.root = root;
     this.textEl = text;
     this.plateEl = plate;
+    this.plateTextEl = plateText;
     this.advanceEl = advance;
     this.advanceEl.dataset.on = '0';
   }
@@ -95,7 +101,7 @@ export class Bubble {
   }
 
   setName(name: string): void {
-    this.plateEl.textContent = name;
+    this.plateTextEl.textContent = name;
     this.plateEl.hidden = name.length === 0;
   }
 

@@ -98,10 +98,16 @@ bridge?.on(Channels.hintShow, (h) => {
   scheduleReport();
 });
 // The bubble follows the pet's visibility state (§5.4 rule 5): hidden means nobody can see her.
+// CX-2 / I-6: the controller owns the visible state — pause() stops the reveal, the acks and the
+// mouth and hides the band; resume() re-shows the band if a turn is still on it and carries on.
 bridge?.on(Channels.shellVisibility, ({ hidden }) => {
-  if (!hidden) return;
-  hint.dismiss();
-  bubble.hide();
+  if (hidden) {
+    hint.dismiss();
+    speech.pause();
+    return;
+  }
+  speech.resume();
+  scheduleReport();
 });
 
 const setInside = (inside: boolean): void => {
