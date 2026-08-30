@@ -99,9 +99,17 @@ bridge?.on(Channels.hintShow, (h) => {
 });
 // The bubble follows the pet's visibility state (§5.4 rule 5): hidden means nobody can see her.
 bridge?.on(Channels.shellVisibility, ({ hidden }) => {
-  if (!hidden) return;
-  hint.dismiss();
-  bubble.hide();
+  if (hidden) {
+    hint.dismiss();
+    bubble.hide();
+    return;
+  }
+  // I-6: main re-shows the WINDOW on this edge while she is still speaking; the band ELEMENT was
+  // hidden above and Bubble.show() otherwise only runs from beginTurn(), so the rest of the reply
+  // (and its linger) would paint into nothing. Re-show it whenever the controller still has a turn.
+  if (!speech.active) return;
+  bubble.show();
+  scheduleReport();
 });
 
 const setInside = (inside: boolean): void => {
