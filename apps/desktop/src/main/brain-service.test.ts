@@ -179,6 +179,30 @@ vi.mock('./chat-window', () => ({
   setChatComposing: () => {},
 }));
 
+/** GC-5 / GC-6: one controllable probe, shared by the stored-key client and literal-key probes. */
+interface ProbeCall { apiKey: string | null; signal: AbortSignal | undefined; resolve: (r: unknown) => void }
+const probeCalls: ProbeCall[] = [];
+let probeAutoResolveOnAbort = true;
+function controllableClient(apiKey: string | null): unknown {
+  return {
+    stream: () => { throw new Error('not used'); },
+    complete: () => Promise.reject(new Error('not used')),
+    testKey: (signal?: AbortSignal) =>
+      new Promise((resolve) => {
+        const call: ProbeCall = { apiKey, signal, resolve };
+        probeCalls.push(call);
+        signal?.addEventListener('abort', () => {
+          if (probeAutoResolveOnAbort) resolve({ ok: false, code: 'network', message: 'aborted' });
+        }, { once: true });
+      }),
+  };
+}
+
+vi.mock('./fake-client', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('./fake-client')>();
+  return { ...orig, createFakeClient: () => controllableClient(null) };
+});
+
 vi.mock('@ds/brain', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@ds/brain')>();
   return { ...orig, TurnRunner: FakeTurnRunner };
@@ -187,7 +211,7 @@ vi.mock('@ds/brain', async (importOriginal) => {
 const { parseCharacterBundle } = await import('@ds/brain');
 const { KV_FIRST_RUN_DONE, getKv, openDb, setKv } = await import('@ds/memory');
 const { BUBBLE_HIDE_DELAY_MS, BUBBLE_LINGER_MS } = await import('./bubble-window');
-const { BrainService, HINT_TTL_MS } = await import('./brain-service');
+const { BrainService, HINT_TTL_MS, STORAGE_HINT_TEXT } = await import('./brain-service');
 
 const bundle = parseCharacterBundle(
   JSON.parse(readFileSync(join(__dirname, '../../../../characters/haru/character.json'), 'utf8')),
@@ -226,6 +250,7 @@ function makeService(): InstanceType<typeof BrainService> {
       bubble.visible = on;
     },
     openKeyWindow,
+    probeClient: (apiKey: string) => controllableClient(apiKey) as never,
   });
 }
 
@@ -241,6 +266,8 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'ds-brain-service-'));
   db = openDb(join(dir, 'ds.sqlite'));
   calls = [];
+  probeCalls.length = 0;
+  probeAutoResolveOnAbort = true;
   ipcHandlers.clear();
   invokeHandlers.clear();
   bubbleVisible.length = 0;
@@ -297,7 +324,10 @@ describe('BrainService', () => {
     // A completed key:test on the stored client sets lastTest.
     const keyTest = invokeHandlers.get(InvokeChannels.keyTest);
     expect(keyTest).toBeDefined();
-    await keyTest!({});
+    const pending = keyTest!({});
+    await Promise.resolve();
+    probeCalls[0].resolve({ ok: true });
+    await pending;
     const afterTest = key.payloads(Channels.keyStatus).at(-1) as { lastTest: unknown };
     expect(afterTest.lastTest).toEqual({ ok: true, at: expect.any(Number) });
 
@@ -307,6 +337,93 @@ describe('BrainService', () => {
     expect(afterClear).toEqual({ present: true, source: 'store', lastTest: null });
     expect(chat.payloads(Channels.keyStatus).at(-1)).toEqual(afterClear);
     await service.dispose();
+  });
+
+  it('GC-5: a delayed test of literal key A, then a rotation to B, then A resolving -> B\'s status is untouched', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    const keyTest = invokeHandlers.get(InvokeChannels.keyTest)!;
+    const A = 'sk-' + 'a'.repeat(32);
+    const B = 'sk-' + 'b'.repeat(32);
+    const pending = keyTest({ apiKey: A });
+    await Promise.resolve();
+    expect(probeCalls).toHaveLength(1);
+    expect(probeCalls[0].apiKey).toBe(A);
+    // Rotation: the store now holds B and KeyStore.onChange fires.
+    keyStore.get = () => B;
+    for (const cb of keyListeners) cb({ present: true, source: 'store' });
+    expect(probeCalls[0].signal?.aborted).toBe(true); // an in-flight test of the old generation is aborted
+    const statusesBefore = key.payloads(Channels.keyStatus).length;
+    probeCalls[0].resolve({ ok: false, code: 'auth', message: 'HTTP 401: the API key was rejected' });
+    const res = await pending;
+    expect(res).toMatchObject({ ok: false }); // the invoke caller still gets ITS result
+    expect(key.payloads(Channels.keyStatus)).toHaveLength(statusesBefore); // no broadcast for a stale test
+    const last = key.payloads(Channels.keyStatus).at(-1) as { lastTest: unknown };
+    expect(last.lastTest).toBeNull();
+    await service.dispose();
+  });
+
+  it('GC-5: testing an unsaved literal key never updates the stored key\'s status', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    const keyTest = invokeHandlers.get(InvokeChannels.keyTest)!;
+    const A = 'sk-' + 'a'.repeat(32); // the store holds sk-test-key-… (a different key)
+    const pending = keyTest({ apiKey: A });
+    await Promise.resolve();
+    const statusesBefore = key.payloads(Channels.keyStatus).length;
+    probeCalls[0].resolve({ ok: true });
+    expect(await pending).toEqual({ ok: true });
+    expect(key.payloads(Channels.keyStatus)).toHaveLength(statusesBefore);
+    expect((key.payloads(Channels.keyStatus).at(-1) as { lastTest: unknown }).lastTest).toBeNull();
+    // The literal key that IS the stored key does describe the stored key.
+    const same = keyTest({ apiKey: 'sk-test-key-000000000000000000000' });
+    await Promise.resolve();
+    probeCalls[1].resolve({ ok: true });
+    await same;
+    expect((key.payloads(Channels.keyStatus).at(-1) as { lastTest: unknown }).lastTest).toEqual({ ok: true, at: expect.any(Number) });
+    await service.dispose();
+  });
+
+  it('GC-5: a stored-key test that resolves after a rotation does not stamp the new key', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    const keyTest = invokeHandlers.get(InvokeChannels.keyTest)!;
+    const pending = keyTest({});
+    await Promise.resolve();
+    keyStore.get = () => 'sk-' + 'c'.repeat(32);
+    for (const cb of keyListeners) cb({ present: true, source: 'store' });
+    probeCalls[0].resolve({ ok: true });
+    await pending;
+    expect((key.payloads(Channels.keyStatus).at(-1) as { lastTest: unknown }).lastTest).toBeNull();
+    await service.dispose();
+  });
+
+  it('GC-6: dispose() aborts a pending key:test, waits for it to settle and sends no key:status afterwards', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    probeAutoResolveOnAbort = false;
+    const service = makeService();
+    service.start();
+    const keyTest = invokeHandlers.get(InvokeChannels.keyTest)!;
+    const pending = keyTest({});
+    await Promise.resolve();
+    expect(probeCalls).toHaveLength(1);
+    const held = probeCalls[0];
+    let disposed = false;
+    const disposing = service.dispose().then(() => { disposed = true; });
+    await Promise.resolve();
+    expect(held.signal?.aborted).toBe(true);
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    expect(disposed).toBe(false); // the drain includes the in-flight key test
+    const statuses = key.payloads(Channels.keyStatus).length;
+    held.resolve({ ok: true });
+    await pending;
+    await disposing;
+    expect(disposed).toBe(true);
+    expect(key.payloads(Channels.keyStatus)).toHaveLength(statuses); // no post-dispose refresh
+    expect(chat.payloads(Channels.keyStatus)).toHaveLength(statuses);
   });
 
   it('G-7: an error before the first sentence keeps its hint up for HINT_TTL_MS even though idle follows', async () => {
@@ -325,6 +442,37 @@ describe('BrainService', () => {
     expect(bubbleVisible.at(-1)).toBe(true); // the idle fallback must NOT have replaced the hint timer
     vi.advanceTimersByTime(1);
     expect(bubbleVisible.at(-1)).toBe(false);
+    await service.dispose();
+  });
+
+  it('GC-3: a persistFailed from the runner warns and shows the storage hint; idle -> the hint owns the hide', async () => {
+    vi.useFakeTimers();
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = makeService();
+    service.start();
+    const r = runner();
+    r.state = 'idle';
+    const secret = 'sk-' + 'b'.repeat(32);
+    r.emit('persistFailed', { turnId: 't1', label: 'assistant row', message: `SQLITE_FULL ${secret}` });
+    const hints = bubble.payloads(Channels.hintShow) as Array<{ text: string; level: string; ttlMs: number }>;
+    expect(hints).toHaveLength(1);
+    expect(hints[0].level).toBe('warn');
+    expect(hints[0].text).toBe(STORAGE_HINT_TEXT);
+    expect(hints[0].ttlMs).toBe(HINT_TTL_MS);
+    expect(bubbleVisible.at(-1)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0])).not.toContain(secret);
+    expect(String(warn.mock.calls[0])).toContain('assistant row');
+    vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
+    expect(bubbleVisible.at(-1)).toBe(false);
+    // Mid-turn (speaking): the hint is shown, but the turn's own playback keeps the hide.
+    r.state = 'speaking';
+    r.emit('state', { state: 'thinking', turnId: 't2' });
+    r.emit('persistFailed', { turnId: 't2', label: 'user row', message: 'SQLITE_FULL' });
+    expect(bubble.payloads(Channels.hintShow)).toHaveLength(2);
+    vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS + 1);
+    expect(bubbleVisible.at(-1)).toBe(true);
     await service.dispose();
   });
 

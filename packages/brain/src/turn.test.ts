@@ -160,6 +160,7 @@ function harness(
   const sentences: SentenceEvent[] = [];
   const turnDone: TurnEvents['turnDone'][] = [];
   const errors: TurnEvents['error'][] = [];
+  const persistFailed: TurnEvents['persistFailed'][] = [];
   const stateSpy = vi.fn((): StatePreamble => STATE);
   let clock = 1_000;
   let ids = 0;
@@ -186,8 +187,9 @@ function harness(
   runner.on('sentence', (p) => { sentences.push(p); });
   runner.on('turnDone', (p) => { turnDone.push(p); });
   runner.on('error', (p) => { errors.push(p); });
+  runner.on('persistFailed', (p) => { persistFailed.push(p); });
 
-  return { runner, client, history, metrics, states, sentences, turnDone, errors, stateSpy };
+  return { runner, client, history, metrics, states, sentences, turnDone, errors, persistFailed, stateSpy };
 }
 
 async function until(predicate: () => boolean, label: string): Promise<void> {
@@ -509,6 +511,12 @@ describe('TurnRunner — failure paths and bookkeeping', () => {
     expect(h.turnDone[0].regenerated).toBe(false);
     expect(h.turnDone[0].lint.severity).toBe('none');
     expect(h.metrics.records[0].errorCode).toBe('empty');
+    // GC-2: like every reply, the canned row is written only once the bubble acknowledged it.
+    expect(h.history.rows).toEqual([{ role: 'user', content: '在吗？', meta: { turnId: 't1', kind: 'chat' } }]);
+    expect(h.runner.state).toBe('speaking');
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    await until(() => h.history.rows.length === 2, 'the canned row');
     expect(h.history.rows).toEqual([
       { role: 'user', content: '在吗？', meta: { turnId: 't1', kind: 'chat' } },
       { role: 'assistant', content: '……脑子空白了一下，主人再说一遍。', meta: { turnId: 't1', kind: 'system' } },
@@ -882,6 +890,154 @@ describe('TurnRunner — stream finished but playback not acknowledged (CX-1)', 
     open();
     await until(() => h.turnDone.length === 2, 'both turns done');
     expect(h.client.requests[1].messages.map((m) => m.content)).toContain('回来啦。今天怎么样。');
+  });
+});
+
+describe('TurnRunner — the canned reply follows the normal lifecycle (GC-2)', () => {
+  const CANNED = '……脑子空白了一下，主人再说一遍。';
+
+  /** Two empty completions -> the canned sentence is out, turnDone is out, nothing acknowledged yet. */
+  async function cannedUnacknowledged(extra: Script[] = []) {
+    const h = harness([{ chunks: [] }, { chunks: [] }, ...extra]);
+    await h.runner.send('在吗？');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences.map((s) => s.text)).toEqual([CANNED]);
+    expect(h.runner.state).toBe('speaking');
+    await until(() => h.history.rows.length === 1, 'the user row');
+    return h;
+  }
+
+  it('GC-2: send() after the canned sentence but before turnShown -> no full row; nothing shown -> no assistant row', async () => {
+    const h = await cannedUnacknowledged([{ chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    const second = await h.runner.send('那你先睡吧。');
+    expect(h.turnDone).toHaveLength(1); // already reported: never a second turnDone for t1
+    await until(() => h.turnDone.length === 2, 'the second turn');
+    h.runner.turnShown(second);
+    await until(() => h.history.rows.length === 3, 'the second assistant row');
+    expect(h.history.rows).toEqual([
+      { role: 'user', content: '在吗？', meta: { turnId: 't1', kind: 'chat' } },
+      { role: 'user', content: '那你先睡吧。', meta: { turnId: 't2', kind: 'chat' } },
+      { role: 'assistant', content: '好吧。', meta: { turnId: 't2', kind: 'chat' } },
+    ]);
+    expect(h.metrics.records.map((r) => [r.turnId, r.errorCode])).toEqual([['t1', 'empty'], ['t2', null]]);
+    h.runner.turnShown('t1'); // a late acknowledgement of the superseded turn writes nothing
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.history.rows).toHaveLength(3);
+  });
+
+  it('GC-2: cancel() after the canned sentence was acknowledged but before turnShown -> the sentence as interrupted, kind system', async () => {
+    const h = await cannedUnacknowledged();
+    h.runner.sentenceShown('t1', 0);
+    await h.runner.cancel();
+    expect(h.runner.state).toBe('idle');
+    expect(h.turnDone).toHaveLength(1);
+    expect(h.history.rows).toEqual([
+      { role: 'user', content: '在吗？', meta: { turnId: 't1', kind: 'chat' } },
+      { role: 'assistant', content: CANNED, meta: { turnId: 't1', kind: 'system', interrupted: true } },
+    ]);
+    expect(h.metrics.records).toHaveLength(1);
+    expect(h.metrics.records[0].errorCode).toBe('empty');
+  });
+
+  it('GC-2: cancel() while the canned path awaits a delayed user append resolves only after the retire writes settle', async () => {
+    const h = harness([{ chunks: [] }, { chunks: [] }]);
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    await h.runner.send('在吗？');
+    await until(() => h.sentences.length === 1, 'the canned sentence'); // emitted while the user row is still in flight
+    expect(h.history.rows).toHaveLength(0);
+    h.runner.sentenceShown('t1', 0);
+    let resolved = false;
+    const done = h.runner.cancel().then(() => { resolved = true; });
+    expect(h.runner.state).toBe('idle');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(resolved).toBe(false);
+    open();
+    await done;
+    expect(h.history.rows.map((r) => [r.role, r.meta?.interrupted ?? false])).toEqual([['user', false], ['assistant', true]]);
+    expect(h.metrics.records).toHaveLength(1);
+  });
+
+  it('GC-2: cancel() of an unacknowledged canned turn writes no assistant row and reports once', async () => {
+    const h = await cannedUnacknowledged();
+    await h.runner.cancel();
+    expect(h.history.rows.map((r) => r.role)).toEqual(['user']);
+    expect(h.turnDone).toHaveLength(1);
+    expect(h.metrics.records).toHaveLength(1);
+  });
+});
+
+describe('TurnRunner — the write chain keeps success and failure (GC-3)', () => {
+  const quiet = () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  };
+  const HANGING: Script = {
+    chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'],
+    hang: true,
+  };
+
+  it('GC-3: a pending user append that fails, then a supersede -> the text is carried into the new turn, not lost', async () => {
+    quiet();
+    const h = harness([HANGING, { chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    let fail = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { fail = resolve; });
+    h.history.rejectRole = 'user';
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    expect(h.history.appendsStarted).toBe(1); // the user row is in flight
+    const second = await h.runner.send('那你先睡吧。');
+    fail(); // the in-flight user append now rejects …
+    await h.history.gate;
+    h.history.rejectRole = null; // … and only that one: the superseding turn's row must land
+    await until(() => h.turnDone.length === 2, 'both turns');
+    h.runner.turnShown(second);
+    await until(() => h.history.rows.length === 2, 'the second turn rows');
+    expect(h.history.rows[0]).toEqual({
+      role: 'user', content: '我回来了。\n那你先睡吧。', meta: { turnId: 't2', kind: 'chat' },
+    });
+    expect(h.client.requests[1].messages.map((m) => m.content).join('\n')).toContain('我回来了。\n那你先睡吧。');
+    expect(h.persistFailed).toEqual([{ turnId: 't1', label: 'user row', message: 'SQLITE_FULL (user)' }]);
+  });
+
+  it('GC-3: a pending user append that SUCCEEDS, then a supersede -> the text is not duplicated', async () => {
+    const h = harness([HANGING, { chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    const second = await h.runner.send('那你先睡吧。');
+    open();
+    await until(() => h.turnDone.length === 2, 'both turns');
+    h.runner.turnShown(second);
+    await until(() => h.history.rows.length === 3, 'all rows');
+    expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '那你先睡吧。', '好吧。']);
+    expect(h.persistFailed).toEqual([]);
+  });
+
+  it('GC-3: a failed assistant append is reported through persistFailed, never as a silent success', async () => {
+    quiet();
+    const h = harness([{ chunks: GREETING }]);
+    h.history.rejectRole = 'assistant';
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    h.runner.turnShown('t1');
+    await until(() => h.persistFailed.length === 1, 'the persistence failure');
+    expect(h.persistFailed[0]).toEqual({ turnId: 't1', label: 'assistant row', message: 'SQLITE_FULL (assistant)' });
+    expect(h.history.rows.map((r) => r.role)).toEqual(['user']);
+    expect(h.runner.state).toBe('idle');
+    expect(h.errors).toHaveLength(0); // §3.11.5: not a DeepSeek error, the reply WAS spoken
+  });
+
+  it('GC-3: a failed interrupted row on cancel() is reported too', async () => {
+    quiet();
+    const h = harness([HANGING]);
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    h.runner.sentenceShown('t1', 0);
+    h.history.rejectRole = 'assistant';
+    await h.runner.cancel();
+    expect(h.persistFailed.map((p) => p.label)).toEqual(['interrupted assistant row']);
   });
 });
 
