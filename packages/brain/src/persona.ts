@@ -67,6 +67,12 @@ export const CharacterBundleSchema = z.looseObject({
   cannedLines: z.object({
     offline: z.array(z.string()).min(1),
     empty: z.array(z.string()).min(1),
+    remember: z.array(z.string()).min(1).default(['嗯，记下了。']),
+    forget: z.array(z.string()).min(1).default(['那就当没听过。']),
+    mode: z.object({
+      toPlain: z.array(z.string()).min(1).default(['好，接下来正常回答。']),
+      toCharacter: z.array(z.string()).min(1).default(['嗯，回来了。']),
+    }).default({ toPlain: ['好，接下来正常回答。'], toCharacter: ['嗯，回来了。'] }),
   }),
 });
 export type CharacterBundle = z.infer<typeof CharacterBundleSchema>;
@@ -95,6 +101,11 @@ const PLAIN_RULES = `【当前模式】
 不要用 markdown，不要列点，不要写标题，不要加粗。
 答案要准确、直接、简短；不知道就说不知道，不确定就说不确定。`;
 
+/** NEW in Phase 3 (§9.2). Byte-stable; any edit is a cache reset and needs an Amendment. */
+const PLAIN_OUTPUT = `【输出格式】
+不要写任何标记：不要写 <|ACT ...|>，不要写 <|PAUSE n|>，不要用尖括号或方括号包起来的控制符。
+直接输出正文。`;
+
 function tagGrammar(motionKeys: readonly string[]): string {
   return `【标记语法】
 每句话前面可以加一个标记表示情绪：<|ACT emotion=happy|>，也可以同时带一个动作：<|ACT emotion=happy motion=nod|>。
@@ -113,12 +124,15 @@ interface Section {
 /**
  * The single ordered section list. Both renderers below read it; there is no second template.
  * character: [marker?, HARD_RULES, 我是谁, 性格, 此刻?, 说话方式?, tagGrammar, 示例?]
- * plain:     [PLAIN_RULES, tagGrammar]
+ * plain:     [PLAIN_RULES, PLAIN_OUTPUT]   (byte-stable, motionKeys ignored)
  * An empty optional field drops its WHOLE section, heading included.
  */
 function sections(card: CharacterCard, motionKeys: readonly string[], mode: PersonaMode): Section[] {
+  if (mode === 'plain') return [
+    { owner: 'engine', text: PLAIN_RULES },
+    { owner: 'engine', text: PLAIN_OUTPUT },     // was: tagGrammar(motionKeys) — R3-12
+  ];
   const grammar: Section = { owner: 'engine', text: tagGrammar(motionKeys) };
-  if (mode === 'plain') return [{ owner: 'engine', text: PLAIN_RULES }, grammar];
   const out: Section[] = [];
   if (card.marker) out.push({ owner: 'persona', text: card.marker });
   out.push({ owner: 'engine', text: HARD_RULES });
