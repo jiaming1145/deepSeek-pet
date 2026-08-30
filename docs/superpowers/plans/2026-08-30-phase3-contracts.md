@@ -14,6 +14,52 @@ negative — and **every RESIDUAL-2 item is merged**, so no section carries a
 
 ---
 
+## Amendments (controller rulings after the plan was generated — these override the sections below)
+
+Every entry cites the ruling that produced it (`rulings.md` v2.3, R3-35..R3-43, 2026-08-30) and is
+binding on the section it names. Precedence is unchanged: rulings → this file → the specs; an
+Amendment here **is** a ruling, so where an Amendment and a section disagree, the Amendment wins.
+
+- **A3-1 (R3-35, 2026-08-30) — §2.4 `SimSnapshot` gains two UI booleans, so §5.9's work-mode fade and §5.12's mute are reachable end to end.** The plan self-review found the §5.9 fade unbuildable: `HoverAckMachine` (renderer), the 工作模式 / 静音 tray checkboxes (main) and the `ui_work_mode` / `ui_sfx_muted` kv writes (main) all ship, but §2.2/§2.3/§2.5 define **no channel** and `SimSnapshotSchema` carried **no field** that could relay either flag to the pet renderer — and §2 may be edited only once, before batch 2, by the protocol task. `SimSnapshotSchema` therefore gains, in that one edit:
+  ```ts
+    /** R3-35: the 工作模式 tray checkbox (kv `ui_work_mode`). Arms §5.9's rest>3 s fade. */
+    uiWorkMode: z.boolean(),
+    /** R3-35: the 静音 tray checkbox (kv `ui_sfx_muted`). Drives §5.12's SfxPlayer.setMuted. */
+    uiSfxMuted: z.boolean(),
+  ```
+  Both default to `false` and are present in **every** `sim:state` broadcast. They are **not** reducer state: §3.1's `SimState` gains no field, `packages/sim`'s snapshot builder emits the two defaults, and `SimService` (§3.11) overlays the live pair through a new `setUiFlags({workMode, sfxMuted})` that `main/index.ts` calls once from kv at startup and once in each tray setter. kv stays the durable home and `index.ts` stays its writer; the snapshot is a broadcast mirror. **No channel is added** — the shared-protocol exception in §1.5 is untouched. Consumers: §5.9's machine reads `uiWorkMode` through its existing `workMode()` getter **at tick time** (a toggle mid-hover takes effect on the next tick, both directions); §5.12's `SfxPlayer.setMuted` is called from the same relay. §1.5 gains two rows: `apps/desktop/src/renderer/pet/stage/ui-flags.ts + .test.ts` — CREATE, T3-B — the tested relay module (`pet/main.ts` runs on import and has no test, so an inline relay would be the one unpinned link in the chain).
+- **A3-2 (R3-36, 2026-08-30) — §10.4's cursor-wiggle predicate gets an owner, a field and ratified constants; its five draft constants are superseded.** §10.4 described the D11 predicate "computed from signal 3 alone" but named no module, and neither `ActivityDerived` nor the `TICK` event carried the direction history reversal-counting needs (`TICK` has a scalar `cursorDeltaDip`). The predicate is owned by **`apps/desktop/src/main/activity-sensor.ts` (T3-A)**, and §10.4's block
+  ```
+  WIGGLE_WINDOW_MS = 1_500 · WIGGLE_MIN_REVERSALS = 3 · WIGGLE_MIN_TRAVEL_DIP = 24
+  WIGGLE_MAX_NET_DIP = 40 · WIGGLE_COOLDOWN_MS = 45_000
+  ```
+  is **replaced** by:
+  ```
+  WIGGLE_NEAR_DIP        = 240      // radius around the pet window CENTRE
+  WIGGLE_FAST_TICK_MS    = 100      // 10 Hz cursor sampling inside that radius (2 Hz outside)
+  WIGGLE_RING            = 15       // 15 x 100 ms == one WIGGLE_WINDOW_MS of history
+  WIGGLE_MIN_DX_DIP      = 6        // below this an x-delta is not a stroke
+  WIGGLE_MIN_REVERSALS   = 4        // sign changes of the x-delta inside the window
+  WIGGLE_WINDOW_MS       = 1_500
+  WIGGLE_COOLDOWN_MS     = 20_000
+  ```
+  A *reversal* is a sign change of the **x**-delta where `|dx| >= WIGGLE_MIN_DX_DIP` (one axis, not "either axis": a diagonal shake double-counted). `ActivityDerived` gains `wiggle: boolean`, true for the one sub-tick the predicate fires; `ActivitySensor` gains `onWiggle(cb): () => void` and `ActivitySensorDeps` gains `petCentre?(): {x, y} | null` (supplied by `main/index.ts`; absent ⇒ no radius, no wiggle, 2 Hz). §10.3's *one timer* survives as a **self-rescheduling `setTimeout`** whose period follows the cursor; the full 500 ms sample (signals 1, 4, 6 and the typing predicate) still runs at exactly `SENSOR_TICK_MS` at either rate. `SimService` fans the edge out as `sim:event {kind:'cursorWiggle'}` to the pet **without** a reducer round trip — it changes no sim state — and §5.10's arbiter answers it with the §10.4 curiosity lease (gaze `cursorLock` + `F06` 0.4, 1 200 ms, no motion), unchanged.
+- **A3-3 (R3-37, 2026-08-30) — §1.5 gains the renderer consumers, owned by T3-B.** §9.5's chat 普通模式 plate, §9.4/§2.3's bubble `data-mode="plain"` and proactive band styling, §2.3's chat status line for `proactive:gate`, and X5's History badge all name files under `apps/desktop/src/renderer/chat/**` and `apps/desktop/src/renderer/bubble/**` that §1.5 omitted, so every producer shipped with no consumer. §1.5 gains:
+  ```
+  apps/desktop/src/renderer/chat/App.tsx          + .test.tsx  MODIFY  §2.7, §2.8, §9.5   T3-B
+  apps/desktop/src/renderer/chat/Composer.tsx     + .test.tsx  MODIFY  §9.5, §2.3         T3-B
+  apps/desktop/src/renderer/chat/History.tsx      + .test.tsx  MODIFY  X5, §2.7           T3-B
+  apps/desktop/src/renderer/chat/chat.css         + chat-css.test.ts   MODIFY  §9.5       T3-B
+  apps/desktop/src/renderer/bubble/bubble.ts      + .test.ts   MODIFY  §9.4, §2.3         T3-B
+  apps/desktop/src/renderer/bubble/bubble.css     + bubble-css.test.ts MODIFY  §9.4, §2.3 T3-B
+  apps/desktop/src/renderer/bubble/main.ts                     MODIFY  §2.7, §2.8         T3-B
+  ```
+  `apps/desktop/src/renderer/bubble/fps.ts` keeps its existing §1.5 row (§5.8, T3-B, the stage task) and is **not** part of this grant. Two things the sections do not state and the consumer task therefore invents, recorded here so they are reviewable: the **copy of the `proactive:gate` status line** (a Chinese line per §3.10.1 reason code, prefixed `主动说话：`, silent while the verdict is `eligible` or `displayed`), and the **proactive band's marker** (the band's left rail takes the advance-mark colour — no badge, no icon, no copy, because R3-19 forbids her name in a Phase 3 string and A14 forbids anything that reads as a demand).
+- **A3-4 (R3-39, 2026-08-30) — §1.5 preamble: package barrels are append-only, and `turn.ts` has an owner.** `packages/brain/src/index.ts` and `packages/memory/src/index.ts` are **shared, append-only** files: any task may append **its own** `export * from './<file>.ts';` line at the end and may edit no other line; the integrator resolves a conflict there by **keeping both sides**; a barrel line is never a reason to report `BLOCKED`. (Three tasks append to the brain barrel and two to the memory barrel; without this rule §1.5's one-owner rule would have blocked all but one of them.) `packages/brain/src/turn.ts` is owned by **T3-C** for Phase 3, with one documented exception already in flight — the memory-v2 task's `history.setQuery` call and `metrics.envelope` writer (§8.6, §8.8), which lands in batch 1, before the T3-C work. Any other task needing a change there stops with `BLOCKED: turn.ts is owned by Task 14`.
+- **A3-5 (R3-43, 2026-08-30) — §5.13 exception list: the extraction bounds stay two homes.** `FACT_MAX_CHARS = 120` (`packages/memory/src/facts.ts`, §8.2) and `EXTRACT_VALUE_MAX = 120` / `EXTRACT_ALIAS_MAX = 24` (`packages/brain/src/extract-prompt.ts`, §8.5) are the same numbers in two packages, because §1.2 forbids `@ds/brain` importing `@ds/memory`. They **stay two homes**; the identity is pinned from `apps/desktop`, which can see both, by `apps/desktop/src/main/fact-extractor.test.ts`'s `expect(FACT_MAX_CHARS).toBe(EXTRACT_VALUE_MAX)`. Moving them into `@ds/protocol` is **refused**: it would make the memory task depend on the protocol task inside the same batch for no user-visible gain. §5.13's permitted-duplication list is therefore exactly four pairs — `SIM_DEFAULTS`' mirror of the three touch constants, `NEAR_DUPLICATE_JACCARD`/`FACT_MERGE_JACCARD`, the two `proactive_log` constants against `SIM_DEFAULTS`, and this one — each with an identity assertion in the earliest file that can see both sides. `nextLocalMidnight` is **not** on that list: R3-38 moved the T3-C surface task to batch 3 so `main/tray.ts` imports `packages/sim/src/phases.ts`'s (§3.9) instead of declaring a second one.
+
+---
+
 ## §0 Precedence, environment, and the baseline-interface list
 
 ### 0.1 Precedence (binding order)
@@ -300,7 +346,9 @@ packages/behaviors/src/bind.ts      + .test.ts bindResources(pack, catalogue) ->
 
 ### 1.5 Every file Phase 3 touches — with its one owner
 
-**This table is exhaustive.** If a section names a file that is not below, that is a defect in this
+**This table is exhaustive**, *as amended* — the Amendments block at the top of this file adds rows
+(A3-1, A3-3) and two rules the table cannot express (A3-4); read both together. If a section names a
+file that is in neither, that is a defect in this
 contract, not a licence to edit. The rule is Phase 2's: *a task that is not the owner may read a file
 but must not create, delete or edit it; if it needs a change there it stops and reports
 `BLOCKED: <path> is owned by <task>`.*
@@ -394,7 +442,19 @@ docs/evidence/phase3/not-measured.md                      CREATE  §12.1        
 docs/evidence/phase3/motion-labels.{md,json}              CREATE  §4.11           T3-B
 docs/evidence/phase3/motions/*.png                        CREATE  §4.11           T3-B
 docs/evidence/phase2/deferred.md                          MODIFY  §4.7 (Hiyori)   T3-B
+
+--- added by the controller's post-plan rulings (Amendments A3-1, A3-3) -----------
+apps/desktop/src/renderer/pet/stage/ui-flags.ts + .test.ts CREATE  §5.9, §5.12 (A3-1) T3-B
+apps/desktop/src/renderer/chat/App.tsx        + .test.tsx  MODIFY  §2.7, §2.8, §9.5   T3-B
+apps/desktop/src/renderer/chat/Composer.tsx   + .test.tsx  MODIFY  §9.5, §2.3         T3-B
+apps/desktop/src/renderer/chat/History.tsx    + .test.tsx  MODIFY  X5, §2.7           T3-B
+apps/desktop/src/renderer/chat/chat.css       + chat-css.test.ts   MODIFY §9.5        T3-B
+apps/desktop/src/renderer/bubble/bubble.ts    + .test.ts   MODIFY  §9.4, §2.3         T3-B
+apps/desktop/src/renderer/bubble/bubble.css   + bubble-css.test.ts MODIFY §9.4, §2.3  T3-B
+apps/desktop/src/renderer/bubble/main.ts                   MODIFY  §2.7, §2.8         T3-B
 ```
+
+**Two rules the table above cannot express, added by Amendments A3-4 and A3-3.** (1) `packages/brain/src/index.ts` and `packages/memory/src/index.ts` are **append-only shared files** — every task appends its own `export *` line at the end, nobody edits another's line, the integrator keeps both sides on a conflict, and a barrel line is never a `BLOCKED`; `packages/brain/src/turn.ts` is **T3-C's**, with the single documented batch-1 exception for `setQuery` + `metrics.envelope` (A3-4). (2) The renderer rows above grant T3-B `apps/desktop/src/renderer/chat/**` and the non-`fps.ts` half of `apps/desktop/src/renderer/bubble/**` for Phase 3; `bubble/fps.ts` keeps its own §5.8 row (A3-3).
 
 Task letters are placeholders for the plan (which this document does **not** write); the point of
 the column is that **every path has exactly one owner**, and a task that is not the owner may read
@@ -553,6 +613,10 @@ settings window that would host them is Phase 4 (R3-18). An implementer who adds
 channels has widened the surface beyond this contract.
 
 ### 2.4 Schemas — exact
+
+> **Amended by A3-1 (R3-35):** `SimSnapshotSchema` below also carries `uiWorkMode: z.boolean()` and
+> `uiSfxMuted: z.boolean()` (default `false`, in every broadcast, overlaid by `SimService.setUiFlags`
+> from the two kv keys the tray writes — **not** reducer state). Read the Amendments block at the top.
 
 ```ts
 /** The broadcast subset of SimState. Deliberately NOT the whole reducer state: ledger counters,
@@ -3200,6 +3264,11 @@ voice lines for a different character).
 
 ### 5.13 `renderer/shared/lane-metrics.ts`
 
+> **Amended by A3-5 (R3-43):** the permitted-duplication list is four pairs, not one — the
+> `SIM_DEFAULTS` mirror below, `NEAR_DUPLICATE_JACCARD`/`FACT_MERGE_JACCARD`, the two `proactive_log`
+> constants against `SIM_DEFAULTS`, and `FACT_MAX_CHARS` against `EXTRACT_VALUE_MAX`/`EXTRACT_ALIAS_MAX`.
+> Each carries an identity assertion in the earliest file that can see both sides.
+
 The one home for every constant main and the pet renderer both need — the same discipline
 `chat-metrics.ts` established in Phase 2 §6.1. It contains §5.5's motion/fade/pre-empt constants,
 §5.11's `TAP_SLOP_DIP`, `TAP_BURST_COUNT`, `TAP_BURST_WINDOW_MS` and `ANNOY_COOLDOWN_MS`, and §7's
@@ -4719,6 +4788,11 @@ proactive deferral waits for (§3.10.3). The hwnd itself is compared and then di
 stored, logged or traced.
 
 ### 10.4 The derived-state schema
+
+> **Amended by A3-2 (R3-36):** the cursor-wiggle block near the end of this section is **superseded**.
+> The predicate is owned by `apps/desktop/src/main/activity-sensor.ts`, `ActivityDerived` gains
+> `wiggle: boolean`, and the constants are 240 DIP / 10 Hz / 15-slot ring / `|dx| >= 6 DIP` /
+> `>= 4` reversals in 1.5 s / 20 s cooldown. Read A3-2 at the top of this file before implementing it.
 
 ```ts
 export interface ActivitySample {
