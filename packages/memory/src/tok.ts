@@ -23,13 +23,20 @@ const CJK = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/u;
 const LATIN = /[A-Za-z0-9_]/u;
 
 /**
- * The one walk both `tok` and `tokUnigram` use. NFKC-normalise, lowercase, then:
- *   - a maximal CJK run emits every unigram and (when `bigrams`) every adjacent bigram, in order;
- *   - a maximal [A-Za-z0-9_] run emits the word as one token;
+ * Which n-grams a CJK run contributes. `tok` (the INDEXING form) emits both; the two retrieval
+ * passes of §8.4 each take one, which is what makes them two different queries.
+ */
+type Grams = 'both' | 'unigram' | 'bigram';
+
+/**
+ * The one walk `tok`, `tokUnigram` and `tokBigram` share. NFKC-normalise, lowercase, then:
+ *   - a maximal CJK run emits every unigram and/or every adjacent bigram, in order;
+ *   - a maximal [A-Za-z0-9_] run emits the word as one token, whatever the mode — a Latin word is
+ *     already a word, not an n-gram of one;
  *   - anything else is a separator and emits nothing.
  * Deterministic, allocation-light, no dependencies.
  */
-function walk(s: string, bigrams: boolean): string {
+function walk(s: string, grams: Grams): string {
   const n = s.normalize('NFKC').toLowerCase();
   const out: string[] = [];
   let i = 0;
@@ -40,8 +47,8 @@ function walk(s: string, bigrams: boolean): string {
       while (j < n.length && CJK.test(n[j])) j++;
       const run = n.slice(i, j);
       for (let k = 0; k < run.length; k++) {
-        out.push(run[k]);
-        if (bigrams && k + 1 < run.length) out.push(run.slice(k, k + 2));
+        if (grams !== 'bigram') out.push(run[k]);
+        if (grams !== 'unigram' && k + 1 < run.length) out.push(run.slice(k, k + 2));
       }
       i = j;
     } else if (LATIN.test(ch)) {
@@ -56,14 +63,38 @@ function walk(s: string, bigrams: boolean): string {
   return out.join(' ');
 }
 
-/** `我今天面试` -> `我 我今 今 今天 天 天面 面 面试 试`; `喝 iced americano` -> `喝 iced americano`. */
+/**
+ * The INDEXING form: `我今天面试` -> `我 我今 今 今天 天 天面 面 面试 试`;
+ * `喝 iced americano` -> `喝 iced americano`. Every stored `value_tok` / `alias_tok` is this, so a
+ * row is reachable by either retrieval pass.
+ */
 export function tok(s: string): string {
-  return walk(s, true);
+  return walk(s, 'both');
 }
 
-/** The same walk emitting ONLY unigrams — the §8.4 second pass. */
+/** The same walk emitting ONLY unigrams — the §8.4 second pass (the fallback). */
 export function tokUnigram(s: string): string {
-  return walk(s, false);
+  return walk(s, 'unigram');
+}
+
+/**
+ * The same walk emitting ONLY bigrams (Latin/digit words still pass through whole) — the §8.4
+ * FIRST pass, the one the contract labels "PASS 1 (bigram)".
+ *
+ * FIX ROUND 1, finding 2. Pass 1 used to query `tok(query)`, which emits unigrams as well; its
+ * OR-joined query was therefore a strict superset of pass 2's, `merge()` could never add a row,
+ * `FACT_FALLBACK_MIN_HITS` gated nothing and `STOPWORDS` never did §8.4's stated job (a bare `的`
+ * matched through pass 1 before the stopword filter was ever consulted). R3-10's own words are
+ * "two-pass: bigram query first, unigram fallback if < 3 hits", so pass 1 is bigram-ONLY here and
+ * the deviation is §8.4's `?1 = toMatchQuery(tok(query))` binding, which contradicts its own label.
+ *
+ * A CJK run of ONE character contributes nothing: it has no bigram, and letting it through is
+ * exactly the `的` collapse pass 1 must not have. Single characters are pass 2's job, where
+ * STOPWORDS can see them. `tokBigram('猫')` is therefore `''` and `retrieve('猫')` answers from the
+ * fallback.
+ */
+export function tokBigram(s: string): string {
+  return walk(s, 'bigram');
 }
 
 /**

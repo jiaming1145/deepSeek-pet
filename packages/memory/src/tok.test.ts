@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { bigramSet, jaccard, tok, toMatchQuery, tokUnigram } from './tok.ts';
+import { bigramSet, jaccard, tok, toMatchQuery, tokBigram, tokUnigram } from './tok.ts';
 
 describe('tok (contracts §8.3, R3-10)', () => {
   it('expands a CJK run into every unigram AND every adjacent bigram, in order', () => {
@@ -42,6 +42,31 @@ describe('tok (contracts §8.3, R3-10)', () => {
   it('tokUnigram is the same walk without bigrams (the §8.4 second pass)', () => {
     expect(tokUnigram('我今天面试')).toBe('我 今 天 面 试');
     expect(tokUnigram('喝 iced americano')).toBe('喝 iced americano');
+  });
+
+  it('tokBigram is the same walk without unigrams (the §8.4 FIRST pass; fix round 1, finding 2)', () => {
+    expect(tokBigram('我今天面试')).toBe('我今 今天 天面 面试');
+    // Latin/digit words are words, not n-grams of one: they pass through in every mode.
+    expect(tokBigram('喝 iced americano')).toBe('iced americano');
+    expect(tokBigram('我喝 latte')).toBe('我喝 latte');
+    // A one-character CJK run has NO bigram and must not leak into pass 1 — that is exactly the
+    // `的` collapse §8.4's STOPWORDS exists to prevent, and single characters are pass 2's job.
+    expect(tokBigram('猫')).toBe('');
+    expect(tokBigram('的')).toBe('');
+    expect(tokBigram('我累，你呢')).toBe('我累 你呢');
+    expect(tokBigram('')).toBe('');
+  });
+
+  it('pass 2 is NOT a subset of pass 1 — the two queries are genuinely different', () => {
+    // The bug fix round 1 closed: with `tok()` on pass 1, pass 1 was a strict SUPERSET of pass 2
+    // for every input, so the fallback could never add a row and FACT_FALLBACK_MIN_HITS gated
+    // nothing. These are the probes that proved it, now asserted the other way round.
+    for (const q of ['面试', '我腰疼', '的猫', '医院', 'iced coffee 面试']) {
+      const one = new Set(tokBigram(q).split(' ').filter((t) => t !== ''));
+      const two = new Set(tokUnigram(q).split(' ').filter((t) => t !== ''));
+      const onlyInTwo = [...two].filter((t) => !one.has(t));
+      expect(onlyInTwo.length).toBeGreaterThan(0);
+    }
   });
 
   it('includes kana and CJK ext-A, excludes the CJK punctuation block', () => {
