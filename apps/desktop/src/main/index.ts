@@ -9,7 +9,7 @@ import { registerAppScheme, serveRenderer } from './app-protocol';
 import { BrainService } from './brain-service';
 import { createBubbleVisibility } from './bubble-visibility';
 import { createBubbleWindow, type BubbleWindowHooks } from './bubble-window';
-import { decideChatRequest, type ChatRequestSource } from './chat-request';
+import { createLateBoundChatRequest, decideChatRequest, type ChatRequestSource } from './chat-request';
 import { closeChat, createChatWindow, openChat } from './chat-window';
 import { startCursorPolling, type CursorPolling } from './cursor';
 import { fatal } from './fatal';
@@ -47,6 +47,11 @@ let db: DatabaseSync | null = null;
 let history: HistoryStore | null = null;
 /** CX-3: the visibility-aware gate every key-window show goes through; null until ready. */
 let keyRequest: KeyRequest | null = null;
+/**
+ * GC2-2: `second-instance` can fire before `whenReady` has built `requestChat`; this holds one
+ * such request and replays it once the real opener is bound (chat-request.ts).
+ */
+const chatRequest = createLateBoundChatRequest();
 
 /**
  * The single owner of the pet window's visibility. Four independent reasons she can be off screen,
@@ -76,7 +81,7 @@ const visibility = createVisibilityController({
     }
     if (verdict.hidden && chat) closeChat(chat);
     // CX-3: a key prompt queued behind a lock screen / fullscreen app is shown once the verdict clears.
-    keyRequest?.onVerdict(verdict.hidden);
+    keyRequest?.onVerdict();
   },
   setCursorPaused: (paused) => cursorPolling?.setPaused(paused),
   // Both of these are Phase 1 options and both are load-bearing. `setClickThrough` forces the pet
@@ -115,10 +120,10 @@ const bubbleVis = createBubbleVisibility({
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    visibility.set('user', false);
-    visibility.apply();
-  });
+  // GC2-2 / A-31: a second launch is the user asking for her — the same request the tray item and
+  // the hotkey make, through the same gate (refused behind a lock screen / fullscreen app; a
+  // user-only hide is cleared first). Before wiring the request is held and replayed once.
+  app.on('second-instance', () => chatRequest.request('second-instance', true));
 
   app.whenReady().then(() => {
     serveRenderer(join(__dirname, '../renderer'));
@@ -367,13 +372,15 @@ if (!app.requestSingleInstanceLock()) {
         return;
       }
       if (decision === 'reveal') {
-        // The same two lines `second-instance` runs: the user asked for her back.
+        // The user asked for her back (tray toggle undone), as a second launch does.
         visibility.set('user', false);
         visibility.apply();
       }
       if (source === 'key' && keyWin && !keyWin.isDestroyed()) keyWin.hide();
       openChat(chatWin, petWin, focusComposer);
     };
+    // GC2-2: a `second-instance` that arrived before this point is replayed now, through the gate.
+    chatRequest.bind(requestChat);
 
     // Three windows may legitimately send this one (contracts.md §2.7), so it gets one listener.
     // A live array, looked up at event time: the bubble and key windows can be recreated (CX-6/7).
