@@ -12,6 +12,7 @@ const ipcMain = {
 };
 
 vi.mock('electron', () => ({
+  app: { isPackaged: false },
   BrowserWindow: class {},
   ipcMain: {
     on: (channel: string, cb: Listener) => ipcMain.on(channel, cb),
