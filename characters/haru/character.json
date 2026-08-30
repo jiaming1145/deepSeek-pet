@@ -11,6 +11,41 @@
   "scale": 1.0,
   "offsetY": 0.0,
 
+  "hitParts": {
+    "Part01Face001":     { "part": "face",     "participatesInHitTest": true },
+    "Part01Eye001":      { "part": "face",     "participatesInHitTest": true },
+    "Part01EyeBall001":  { "part": "face",     "participatesInHitTest": false },
+    "Part01Brow001":     { "part": "face",     "participatesInHitTest": false },
+    "Part01Mouth001":    { "part": "face",     "participatesInHitTest": false },
+    "Part01Nose001":     { "part": "face",     "participatesInHitTest": false },
+    "Part01Hoho001":     { "part": "face",     "participatesInHitTest": false },
+    "Part01Tear":        { "part": "face",     "participatesInHitTest": false },
+    "Part01Ear001":      { "part": "head",     "participatesInHitTest": true },
+    "Part01HairFront001":{ "part": "hair",     "participatesInHitTest": true },
+    "Part01HairSide001": { "part": "hair",     "participatesInHitTest": true },
+    "Part01HairBack001": { "part": "hair",     "participatesInHitTest": true },
+    "Part01Neck001":     { "part": "body",     "participatesInHitTest": true },
+    "Part01Body001":     { "part": "body",     "participatesInHitTest": true },
+    "Part01ArmLA001":    { "part": "arm",      "participatesInHitTest": true },
+    "Part01ArmRA001":    { "part": "arm",      "participatesInHitTest": true },
+    "Part01ArmLB001":    { "part": "arm",      "participatesInHitTest": true },
+    "Part01ArmRB001":    { "part": "arm",      "participatesInHitTest": true },
+    "Part01Core":        { "part": "body",     "participatesInHitTest": false },
+    "Part01Sketch":      { "part": "body",     "participatesInHitTest": false }
+  },
+  "ticklishRect": { "x0": 0.30, "y0": 0.55, "x1": 0.70, "y1": 0.80 },
+  "hitPartDefault": "body",
+  "sim": {
+    "moodBase": { "valence": 0.10, "arousal": 0.35 },
+    "proactive": { "maxPerDay": 2 }
+  },
+  "extraMotions": {
+    "Extra": [
+      { "file": "motions/haru_g_m01.motion3.json", "name": "wave_small",
+        "tags": ["arm", "low", "loop-safe", "greet"] }
+    ]
+  },
+
   "card": {
     "spec": "chara_card_v3",
     "spec_version": "3.0",
@@ -28,6 +63,12 @@
   },
   "cannedLines": {
     "offline": ["网线好像断了……人家在这儿等着，别急。", "连不上了哦，等会儿再说。"],
-    "empty": ["……脑子空白了一下，主人再说一遍。", "刚才走神了啦，再讲一次？"]
+    "empty": ["……脑子空白了一下，主人再说一遍。", "刚才走神了啦，再讲一次？"],
+    "remember": ["嗯，记下了。", "好啦，这件事人家记着。"],
+    "forget":   ["那就当没听过。", "行，忘掉了。"],
+    "mode": {
+      "toPlain":     ["好，接下来正常回答。"],
+      "toCharacter": ["嗯，回来了。"]
+    }
   }
 }

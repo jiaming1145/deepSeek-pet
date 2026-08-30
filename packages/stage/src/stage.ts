@@ -111,6 +111,7 @@ export class Live2DStage {
         shaderPath: opts.shaderPath,
         mouth,
         rng: opts.rng,
+        extraMotions: config.extraMotions,
       });
     } catch (e) {
       // The manager holds contexts in a strong Map keyed by the GL context, so a failed load (404,
