@@ -15,5 +15,11 @@
   // "tests" lives in THIS program, not the main one: stage.spec.ts imports the ?test=1 hook type
   // from src/renderer/pet/main.ts, which drags in @ds/stage and the vendored Framework - only this
   // config has the @framework path mapping, the DOM lib and the three relaxations they need.
-  "include": ["src/renderer/pet", "tests", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"]
+  "include": ["src/renderer/pet", "tests", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"],
+  // …with two exceptions, both main-side: §12.7's motion/arbiter fixtures construct
+  // `WindowMotionController`, which drags src/main (and app-protocol.ts) into whichever program
+  // compiles them. Under this config's `strictNullChecks: false` app-protocol.ts's discriminated
+  // union stops narrowing and TS2339 fires on code no Phase 3 task owns. They are compiled by
+  // tsconfig.json (the main program) instead, where they type-check clean.
+  "exclude": ["tests/fixtures/motion", "tests/fixtures/arbiter"]
 }
