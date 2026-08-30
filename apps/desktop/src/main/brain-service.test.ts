@@ -187,7 +187,7 @@ vi.mock('@ds/brain', async (importOriginal) => {
 const { parseCharacterBundle } = await import('@ds/brain');
 const { KV_FIRST_RUN_DONE, getKv, openDb, setKv } = await import('@ds/memory');
 const { BUBBLE_HIDE_DELAY_MS, BUBBLE_LINGER_MS } = await import('./bubble-window');
-const { BrainService, HINT_TTL_MS } = await import('./brain-service');
+const { BrainService, HINT_TTL_MS, STORAGE_HINT_TEXT } = await import('./brain-service');
 
 const bundle = parseCharacterBundle(
   JSON.parse(readFileSync(join(__dirname, '../../../../characters/haru/character.json'), 'utf8')),
@@ -325,6 +325,37 @@ describe('BrainService', () => {
     expect(bubbleVisible.at(-1)).toBe(true); // the idle fallback must NOT have replaced the hint timer
     vi.advanceTimersByTime(1);
     expect(bubbleVisible.at(-1)).toBe(false);
+    await service.dispose();
+  });
+
+  it('GC-3: a persistFailed from the runner warns and shows the storage hint; idle -> the hint owns the hide', async () => {
+    vi.useFakeTimers();
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const service = makeService();
+    service.start();
+    const r = runner();
+    r.state = 'idle';
+    const secret = 'sk-' + 'b'.repeat(32);
+    r.emit('persistFailed', { turnId: 't1', label: 'assistant row', message: `SQLITE_FULL ${secret}` });
+    const hints = bubble.payloads(Channels.hintShow) as Array<{ text: string; level: string; ttlMs: number }>;
+    expect(hints).toHaveLength(1);
+    expect(hints[0].level).toBe('warn');
+    expect(hints[0].text).toBe(STORAGE_HINT_TEXT);
+    expect(hints[0].ttlMs).toBe(HINT_TTL_MS);
+    expect(bubbleVisible.at(-1)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0])).not.toContain(secret);
+    expect(String(warn.mock.calls[0])).toContain('assistant row');
+    vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
+    expect(bubbleVisible.at(-1)).toBe(false);
+    // Mid-turn (speaking): the hint is shown, but the turn's own playback keeps the hide.
+    r.state = 'speaking';
+    r.emit('state', { state: 'thinking', turnId: 't2' });
+    r.emit('persistFailed', { turnId: 't2', label: 'user row', message: 'SQLITE_FULL' });
+    expect(bubble.payloads(Channels.hintShow)).toHaveLength(2);
+    vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS + 1);
+    expect(bubbleVisible.at(-1)).toBe(true);
     await service.dispose();
   });
 
