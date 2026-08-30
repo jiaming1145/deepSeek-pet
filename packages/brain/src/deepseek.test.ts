@@ -12,6 +12,9 @@ import {
   DEFAULT_MAX_TOKENS,
   DeepSeekClient,
   DeepSeekError,
+  IDLE_TIMEOUT_MS,
+  MAX_DETAIL_CHARS,
+  MAX_ERROR_BODY_BYTES,
   RETRY_DELAYS_MS,
   RETRY_JITTER,
   RETRYABLE,
@@ -38,15 +41,31 @@ const REQ: ChatRequest = { messages: HI };
 
 // ---------------------------------------------------------------- test doubles
 
+/** Every body stream handed to the client, so a test can assert it was cancelled (G-1). */
+const openBodies: { cancelled: boolean; pulls: number }[] = [];
+
 /** Feeds an async generator into the ReadableStream the client reads. */
 function streamOf(gen: AsyncGenerator<Uint8Array>): ReadableStream<Uint8Array> {
+  const track = { cancelled: false, pulls: 0 };
+  openBodies.push(track);
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
+      track.pulls += 1;
       const next = await gen.next();
       if (next.done === true) controller.close();
       else controller.enqueue(next.value);
     },
+    cancel() {
+      // A real fetch body's cancel() resolves promptly; a generator parked on an await would only
+      // honour return() once that await settles, so it is not awaited here.
+      track.cancelled = true;
+      void gen.return(undefined).catch(() => undefined);
+    },
   });
+}
+
+async function* forever(frame: string): AsyncGenerator<Uint8Array> {
+  for (;;) yield ENC.encode(frame);
 }
 
 async function* sse(...frames: string[]): AsyncGenerator<Uint8Array> {
@@ -77,12 +96,11 @@ async function* sseThenHang(frames: string[], signal: AbortSignal | null | undef
  */
 function fakeResponse(init: { status?: number; text?: string; body?: AsyncGenerator<Uint8Array> }): Response {
   const status = init.status ?? 200;
+  const body = init.body ?? (init.text !== undefined ? sse(init.text) : undefined);
   const shape = {
     ok: status >= 200 && status < 300,
     status,
-    body: init.body === undefined ? null : streamOf(init.body),
-    text: async (): Promise<string> => init.text ?? '',
-    json: async (): Promise<unknown> => JSON.parse(init.text ?? 'null') as unknown,
+    body: body === undefined ? null : streamOf(body),
   };
   return shape as unknown as Response;
 }
@@ -124,6 +142,8 @@ const freshSignal = (): AbortSignal => new AbortController().signal;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  openBodies.length = 0;
 });
 
 // ---------------------------------------------------------------- parseSseLine
@@ -229,7 +249,8 @@ describe('DeepSeekClient.stream', () => {
     expect(err).toBeInstanceOf(DeepSeekError);
     expect((err as DeepSeekError).code).toBe('auth');
     expect((err as DeepSeekError).status).toBe(401);
-    expect((err as DeepSeekError).message).toContain('api key is invalid');
+    expect((err as DeepSeekError).message).not.toContain('api key is invalid'); // G-3: body -> detail only
+    expect((err as DeepSeekError).detail).toContain('api key is invalid');
     expect(stub.calls).toHaveLength(1);
   });
 
@@ -355,8 +376,40 @@ describe('DeepSeekClient.stream', () => {
     expect(stub.calls).toHaveLength(1);
   });
 
-  it('yields done when the body ends without a [DONE] sentinel', async () => {
+  it('G-2: EOF after a complete delta but before [DONE] is a network failure, not a synthetic done', async () => {
     const stub = stubFetch(() => fakeResponse({ body: sse(DELTA_1) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const seen: StreamChunk[] = [];
+    const err = await caught(async () => {
+      for await (const chunk of client.stream(REQ, freshSignal())) seen.push(chunk);
+    });
+    expect(seen).toEqual([{ kind: 'delta', text: '你好' }]);
+    expect(err).toBeInstanceOf(DeepSeekError);
+    expect((err as DeepSeekError).code).toBe('network');
+    expect(stub.calls).toHaveLength(1); // a delta was delivered: not retried
+  });
+
+  it('G-2: EOF after half a JSON frame is a network failure', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const stub = stubFetch(() => fakeResponse({ body: sse(DELTA_1, 'data: {"choices":[{"del') }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const err = await caught(() => drain(client.stream(REQ, freshSignal())));
+    expect((err as DeepSeekError).code).toBe('network');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('G-2: EOF before any delta and before [DONE] is retried through the existing gate', async () => {
+    const stub = stubFetch((_call, index) =>
+      index === 0 ? fakeResponse({ body: sse(': keep-alive\n\n') }) : fakeResponse({ body: sse(DELTA_1, DONE_FRAME) }),
+    );
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined, random: () => 0.5 });
+    const chunks = await drain(client.stream(REQ, freshSignal()));
+    expect(chunks).toEqual([{ kind: 'delta', text: '你好' }, { kind: 'done' }]);
+    expect(stub.calls).toHaveLength(2);
+  });
+
+  it('G-2: a final [DONE] line without a trailing newline still ends the stream cleanly', async () => {
+    const stub = stubFetch(() => fakeResponse({ body: sse(DELTA_1, 'data: [DONE]') }));
     const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
     const chunks = await drain(client.stream(REQ, freshSignal()));
     expect(chunks).toEqual([{ kind: 'delta', text: '你好' }, { kind: 'done' }]);
@@ -574,4 +627,118 @@ describe.runIf(LIVE_KEY !== '')('C-14 — real DeepSeek API (gated on DEEPSEEK_A
       'utf8',
     );
   }, 90_000);
+});
+
+// ---------------------------------------------------------------- bounded body reader (G-1 / M-3) and safe errors (G-3)
+
+/** Assembled at runtime so the literal never appears in source or output. */
+const KEY = ['sk-', 'abcdefghijklmnopqrstuvwxyz', '0123456789'].join('');
+const LEAK_PATTERN = /sk-[A-Za-z0-9]{20,}/;
+
+describe('DeepSeekClient — bounded body reader (G-1 / M-3)', () => {
+  it('complete(): a 200 whose body stalls times out with code timeout and cancels the body', async () => {
+    vi.useFakeTimers();
+    const stub = stubFetch((call) => fakeResponse({ body: sseThenHang([], call.init.signal) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
+    const pending = caught(() => client.complete({ messages: HI }, freshSignal()));
+    await vi.advanceTimersByTimeAsync(IDLE_TIMEOUT_MS + 1);
+    const err = await pending;
+    expect(err).toBeInstanceOf(DeepSeekError);
+    expect((err as DeepSeekError).code).toBe('timeout');
+    expect(openBodies[0].cancelled).toBe(true);
+  });
+
+  it('testKey(): a 200 whose body stalls resolves {ok:false, code:timeout} without a caller signal', async () => {
+    vi.useFakeTimers();
+    const stub = stubFetch((call) => fakeResponse({ body: sseThenHang([], call.init.signal) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
+    const pending = client.testKey();
+    await vi.advanceTimersByTimeAsync(IDLE_TIMEOUT_MS + 1);
+    expect(await pending).toMatchObject({ ok: false, code: 'timeout' });
+    expect(openBodies[0].cancelled).toBe(true);
+  });
+
+  it('error bodies: a 500 body that never ends is not buffered past the cap and the body is cancelled', async () => {
+    const stub = stubFetch(() => fakeResponse({ status: 500, body: forever('x'.repeat(1024)) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const err = await caught(() => client.complete({ messages: HI }, freshSignal()));
+    expect((err as DeepSeekError).code).toBe('server');
+    expect(((err as DeepSeekError).detail ?? '').length).toBeLessThanOrEqual(MAX_DETAIL_CHARS);
+    expect(openBodies[0].pulls).toBeLessThanOrEqual(MAX_ERROR_BODY_BYTES / 1024 + 2);
+    expect(openBodies[0].cancelled).toBe(true);
+  });
+
+  it('error bodies: a stalled 401 body times out instead of hanging the caller', async () => {
+    vi.useFakeTimers();
+    const stub = stubFetch((call) => fakeResponse({ status: 401, body: sseThenHang(['Authentication'], call.init.signal) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const pending = caught(() => drain(client.stream(REQ, freshSignal())));
+    await vi.advanceTimersByTimeAsync(IDLE_TIMEOUT_MS + 1);
+    const err = await pending;
+    expect((err as DeepSeekError).code).toBe('auth');
+    expect((err as DeepSeekError).status).toBe(401);
+    expect(openBodies[0].cancelled).toBe(true);
+  });
+
+  it('complete(): a body larger than the JSON cap is a server error, not an unbounded buffer', async () => {
+    const stub = stubFetch(() => fakeResponse({ body: forever('{"choices":[' + 'x'.repeat(4096)) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
+    const err = await caught(() => client.complete({ messages: HI }, freshSignal()));
+    expect((err as DeepSeekError).code).toBe('server');
+    expect(openBodies[0].cancelled).toBe(true);
+    expect(openBodies[0].pulls).toBeLessThan(1000);
+  });
+});
+
+describe('DeepSeekError — the upstream body never reaches message; detail is redacted (G-3)', () => {
+  const echo = `{"error":{"message":"bad header Authorization: Bearer ${KEY} for key ${KEY}"}}`;
+
+  it('stream(): message is status/code-derived, detail is bounded and redacted', async () => {
+    const stub = stubFetch(() => fakeResponse({ status: 401, text: echo }));
+    const client = new DeepSeekClient({ apiKey: KEY, fetch: stub.fetch, sleep: async () => undefined });
+    const err = (await caught(() => drain(client.stream(REQ, freshSignal())))) as DeepSeekError;
+    expect(err.code).toBe('auth');
+    expect(err.message).toBe('HTTP 401: the API key was rejected');
+    expect(err.message).not.toMatch(LEAK_PATTERN);
+    expect(err.detail).toBeDefined();
+    expect(err.detail).not.toContain(KEY);
+    expect(err.detail).not.toMatch(LEAK_PATTERN);
+    expect(err.detail).toContain('sk-…');
+    expect((err.detail ?? '').length).toBeLessThanOrEqual(MAX_DETAIL_CHARS);
+    expect(String(err)).not.toContain(KEY);
+    expect(JSON.stringify(err)).not.toContain(KEY);
+  });
+
+  it('redacts the exact active key even when it does not look like sk-…', async () => {
+    const odd = 'weird-key-value-1234567890';
+    const stub = stubFetch(() => fakeResponse({ status: 500, text: `upstream saw ${odd} in the header` }));
+    const client = new DeepSeekClient({ apiKey: odd, fetch: stub.fetch, sleep: async () => undefined });
+    const err = (await caught(() => client.complete({ messages: HI }, freshSignal()))) as DeepSeekError;
+    expect(err.message).toBe('HTTP 500: upstream error');
+    expect(err.detail).not.toContain(odd);
+    expect(err.detail).toContain('sk-…');
+  });
+
+  it('testKey() returns the same shape with no key in message or detail', async () => {
+    const stub = stubFetch(() => fakeResponse({ status: 401, text: echo }));
+    const client = new DeepSeekClient({ apiKey: KEY, fetch: stub.fetch });
+    const result = await client.testKey();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('auth');
+    expect(result.message).not.toContain(KEY);
+    expect(result.message).not.toMatch(LEAK_PATTERN);
+    expect(result.detail ?? '').not.toContain(KEY);
+    expect(result.detail ?? '').not.toMatch(LEAK_PATTERN);
+    expect(JSON.stringify(result)).not.toContain(KEY);
+  });
+
+  it('an empty or unreadable error body leaves detail undefined and message = HTTP <status> phrase', async () => {
+    const stub = stubFetch(() => fakeResponse({ status: 429 }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const err = (await caught(() => client.complete({ messages: HI }, freshSignal()))) as DeepSeekError;
+    expect(err.code).toBe('rate');
+    expect(err.message).toBe('HTTP 429: rate limited');
+    expect(err.detail).toBeUndefined();
+  });
 });
