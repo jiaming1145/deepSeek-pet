@@ -1,16 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Channels } from '@ds/protocol';
+import { Channels, InvokeChannels } from '@ds/protocol';
 
 type Listener = (event: unknown, payload: unknown) => void;
+type InvokeHandler = (event: unknown, payload: unknown) => Promise<unknown>;
 const listeners = new Map<string, Listener>();
-const ipcMain = { on: (channel: string, cb: Listener) => listeners.set(channel, cb) };
+const handlers = new Map<string, InvokeHandler>();
+const ipcMain = {
+  on: (channel: string, cb: Listener) => listeners.set(channel, cb),
+  handle: (channel: string, cb: InvokeHandler) => handlers.set(channel, cb),
+  removeHandler: (channel: string) => handlers.delete(channel),
+};
 
 vi.mock('electron', () => ({
   BrowserWindow: class {},
-  ipcMain: { on: (channel: string, cb: Listener) => ipcMain.on(channel, cb) },
+  ipcMain: {
+    on: (channel: string, cb: Listener) => ipcMain.on(channel, cb),
+    handle: (channel: string, cb: InvokeHandler) => ipcMain.handle(channel, cb),
+    removeHandler: (channel: string) => ipcMain.removeHandler(channel),
+  },
 }));
 
-const { isFromPet, onFromPet, sendToPet } = await import('./ipc');
+const { isFromPet, isFromWindow, onFromAny, onFromPet, sendTo, sendToPet } = await import('./ipc');
+const { handleInvoke } = await import('./invoke');
 
 /** A pet window whose main frame sits on the production origin. */
 function fakePet(url = 'app://local/pet.html') {
@@ -165,5 +176,96 @@ describe('sendToPet', () => {
   it('still throws on a payload that does not match its schema (a main-process bug)', () => {
     const win = { isDestroyed: () => false, webContents: { isDestroyed: () => false, send: vi.fn() } };
     expect(() => sendToPet(win, Channels.gazeCursor, { x: Number.NaN, y: 0 })).toThrow(/refusing to send/);
+  });
+});
+
+describe('isFromWindow / sendTo / onFromAny', () => {
+  beforeEach(() => {
+    listeners.clear();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('is the same predicate isFromPet uses, generalised to any window', () => {
+    const { pet, webContents, mainFrame } = fakePet();
+    const event = { sender: webContents, senderFrame: mainFrame };
+    expect(isFromWindow(event, pet)).toBe(true);
+    expect(isFromWindow(event, pet)).toBe(isFromPet(event, pet));
+    expect(isFromWindow({ sender: {}, senderFrame: mainFrame }, pet)).toBe(false);
+  });
+
+  it('sendTo is a no-op on a null window instead of throwing', () => {
+    expect(() => sendTo(null, Channels.brainState, { state: 'idle', turnId: 't1' })).not.toThrow();
+  });
+
+  it('onFromAny accepts an event from any window in the list and hands that window back', () => {
+    const a = fakePet();
+    const b = fakePet();
+    const cb = vi.fn();
+    onFromAny([a.pet as never, b.pet as never], Channels.bubbleHover, cb);
+    listeners.get(Channels.bubbleHover)?.({ sender: b.webContents, senderFrame: b.mainFrame }, { inside: true });
+    expect(cb).toHaveBeenCalledWith({ inside: true }, b.pet);
+  });
+
+  it('onFromAny rejects an event from a window that is not in the list', () => {
+    const a = fakePet();
+    const stranger = fakePet();
+    const cb = vi.fn();
+    onFromAny([a.pet as never], Channels.bubbleHover, cb);
+    listeners.get(Channels.bubbleHover)?.(
+      { sender: stranger.webContents, senderFrame: stranger.mainFrame },
+      { inside: true },
+    );
+    expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleInvoke', () => {
+  beforeEach(() => {
+    handlers.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('rejects an event whose sender is not in its windows list (D14)', async () => {
+    const owner = fakePet();
+    const stranger = fakePet();
+    handleInvoke(InvokeChannels.historyDelete, [owner.pet as never], async () => ({ ok: true, deleted: 1 }));
+    await expect(
+      handlers.get(InvokeChannels.historyDelete)?.(
+        { sender: stranger.webContents, senderFrame: stranger.mainFrame },
+        { turnId: 't1' },
+      ),
+    ).rejects.toThrow(/untrusted sender/);
+  });
+
+  it('rejects a malformed request before the handler runs', async () => {
+    const owner = fakePet();
+    const cb = vi.fn(async () => ({ ok: true as const, deleted: 1 }));
+    handleInvoke(InvokeChannels.historyDelete, [owner.pet as never], cb);
+    await expect(
+      handlers.get(InvokeChannels.historyDelete)?.(
+        { sender: owner.webContents, senderFrame: owner.mainFrame },
+        { turnId: '' },
+      ),
+    ).rejects.toThrow(/rejected history:delete/);
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  it('returns the parsed response for a valid request from a listed window', async () => {
+    const owner = fakePet();
+    handleInvoke(InvokeChannels.historyDelete, [owner.pet as never], async ({ turnId }) => {
+      expect(turnId).toBe('t1');
+      return { ok: true as const, deleted: 2 };
+    });
+    await expect(
+      handlers.get(InvokeChannels.historyDelete)?.(
+        { sender: owner.webContents, senderFrame: owner.mainFrame },
+        { turnId: 't1' },
+      ),
+    ).resolves.toEqual({ ok: true, deleted: 2 });
   });
 });

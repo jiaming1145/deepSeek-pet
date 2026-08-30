@@ -26,7 +26,13 @@ function loadTrayIcon(iconPath: string): NativeImage {
   return nativeImage.createFromDataURL(`data:image/png;base64,${FALLBACK_ICON_PNG}`);
 }
 
-export function createTray(actions: { toggleVisible(): void; toggleDebug(): void; quit(): void }): Tray {
+export function createTray(actions: {
+  toggleVisible(): void;
+  toggleDebug(): void;
+  openChat(): void;
+  openKey(): void;
+  quit(): void;
+}): Tray {
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, 'tray.png')
     : join(__dirname, '../../resources/tray.png');
@@ -43,6 +49,8 @@ export function createTray(actions: { toggleVisible(): void; toggleDebug(): void
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '显示/隐藏', click: actions.toggleVisible },
+      { label: '打开对话', click: actions.openChat },
+      { label: '设置 API Key', click: actions.openKey },
       { label: '调试面板', click: actions.toggleDebug },
       { type: 'separator' },
       { label: '退出', click: actions.quit },
