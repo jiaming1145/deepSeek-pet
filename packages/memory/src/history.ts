@@ -13,7 +13,8 @@ import type {
 } from '@ds/brain';
 import type { HistoryRow } from '@ds/protocol';
 import { KV_LAST_TRIM_ID, readKvInt, setKv } from './db.ts';
-import { capSummary, sanitizeMemoryText, type RunningSummary } from './summary.ts';
+import type { FactStore } from './facts.ts';
+import { capSummary, type RunningSummary } from './summary.ts';
 
 /**
  * Safety net only. It sits ABOVE planTrim's 24_000 trigger on purpose: planTrim
@@ -39,6 +40,9 @@ export interface HistoryStoreOptions {
   summary: RunningSummary;
   summarize: Summarize;
   maxTokens?: number;
+  /** §8.6: tier-3 retrieval. Optional — a store built without one keeps Phase 2's `facts() -> []`,
+   *  which is what lets `brain-service.crash.test.ts` (T3-C's file) stay untouched by this task. */
+  factStore?: FactStore;
   now?: () => number;
 }
 
@@ -73,12 +77,16 @@ export class HistoryStore implements HistoryPort, MetricsPort {
   private closed = false;
   /** G2-3: one trim in flight per store; null when idle. `trimSettled()` hands it out. */
   private inFlight: Promise<void> | null = null;
+  private readonly factStore: FactStore | null;
+  /** §8.6: the retrieval query for the next facts() call. Set by TurnRunner through HistoryPort. */
+  private pendingQuery = '';
 
   constructor(opts: HistoryStoreOptions) {
     this.db = opts.db;
     this.summaryStore = opts.summary;
     this.summarize = opts.summarize;
     this.maxTokens = opts.maxTokens ?? HISTORY_WINDOW_SAFETY_TOKENS;
+    this.factStore = opts.factStore ?? null;
     this.now = opts.now ?? Date.now;
   }
 
@@ -107,12 +115,15 @@ export class HistoryStore implements HistoryPort, MetricsPort {
     return this.summaryStore.get();
   }
 
-  /** Tier 3 retrieval is Phase 3 (spec §6). The port exists now so the prompt layout is final. */
+  /** §8.6: tier 3. The values are already sanitised by FactStore.retrieve (§8.10). */
   facts(): Promise<string[]> {
-    // M-5: the same sanitiser as the summary, applied here so Phase 3's real rows cannot forge a
-    // `【记住】` line either. Empty in Phase 2, so the map is a no-op today.
-    const rows: string[] = [];
-    return Promise.resolve(rows.map(sanitizeMemoryText));
+    if (this.factStore === null) return Promise.resolve([]);
+    return Promise.resolve(this.factStore.retrieve(this.pendingQuery, this.now()));
+  }
+
+  /** §8.6: HistoryPort.setQuery. Stores the raw user text; no database access. */
+  setQuery(text: string): void {
+    this.pendingQuery = text;
   }
 
   recentAssistant(n: number): Promise<string[]> {
@@ -154,12 +165,31 @@ export class HistoryStore implements HistoryPort, MetricsPort {
    */
   onTrimNeeded(plan: TrimPlan): Promise<void> {
     if (plan.drop.length === 0) return Promise.resolve();
-    // An idle store starts NOW: `trim` runs synchronously up to its first await, so the snapshot and
-    // the cutoff are taken before the caller's next statement (I-10's guarantee). A busy store
-    // queues behind the in-flight trim.
-    const run = this.inFlight === null ? this.trim(plan) : this.inFlight.then(() => this.trim(plan));
-    // The tracked promise never rejects (a failed transaction must not poison the next trim); the
-    // caller's promise still does.
+    return this.chain(() => this.trim(plan));
+  }
+
+  /**
+   * §8.5: the ONE write chain. `FactExtractor` appends to the same tail `onTrimNeeded` uses, so an
+   * extraction can never interleave with a trim's BEGIN…COMMIT. FW-3a: after `close()` the fence
+   * REJECTS rather than racing `db.close()`.
+   *
+   * CONTRACT GAP: §8.6 enumerates four history.ts changes and does not name this one, but §8.5
+   * requires "a single Promise tail in HistoryStore that both onTrimNeeded and the extractor append
+   * to" — this is that tail, factored out of the body it already had (Concern C-2).
+   */
+  enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
+    if (this.closed) return Promise.reject(new Error('[memory] write chain closed'));
+    return this.chain(task);
+  }
+
+  /**
+   * G2-3 / CX-4, unchanged in substance: an idle store starts NOW (the task runs synchronously up
+   * to its first await, so a trim's snapshot and cutoff are taken before the caller's next
+   * statement — I-10's guarantee); a busy store queues behind whatever is in flight. The tracked
+   * promise never rejects (a failed write must not poison the next one); the caller's still does.
+   */
+  private chain<T>(start: () => Promise<T>): Promise<T> {
+    const run = this.inFlight === null ? start() : this.inFlight.then(start);
     const settled = run.then(noop, noop);
     this.inFlight = settled;
     void settled.then(() => {
@@ -229,7 +259,7 @@ export class HistoryStore implements HistoryPort, MetricsPort {
   record(m: MetricsRecord): Promise<void> {
     this.db
       .prepare(
-        'INSERT OR REPLACE INTO metrics (turn_id, ts, ttft_ms, total_ms, prompt_tokens, cache_hit, cache_miss, completion, compliance_miss, regenerated, sensitive, lint, error_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO metrics (turn_id, ts, ttft_ms, total_ms, prompt_tokens, cache_hit, cache_miss, completion, compliance_miss, regenerated, sensitive, lint, error_code, envelope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         m.turnId,
@@ -245,6 +275,7 @@ export class HistoryStore implements HistoryPort, MetricsPort {
         m.sensitive ? 1 : 0,
         JSON.stringify(m.lint.violations),
         m.errorCode,
+        m.envelope,
       );
     return Promise.resolve();
   }
