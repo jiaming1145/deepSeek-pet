@@ -110,6 +110,12 @@ export type ForegroundWatch = {
   stop(): void;
   /** Polls now instead of waiting out the interval — for `resume` and `unlock-screen`. */
   recheck(): void;
+  /**
+   * §10.3: the coarse breakpoint (a) the proactive deferral waits for. Fires with NO argument,
+   * only when the foreground hwnd differs from the previous poll's. The hwnd is compared and then
+   * dropped: it is never stored beyond the comparison, logged, or traced.
+   */
+  onForegroundChanged(cb: () => void): () => void;
 };
 
 /**
@@ -126,13 +132,22 @@ export function startForegroundWatch(
 ): ForegroundWatch {
   const { intervalMs = 2000 } = options;
   const api = options.api === undefined ? loadWin32() : options.api;
-  if (!api) return { stop: () => { /* hiding disabled */ }, recheck: () => { /* hiding disabled */ } };
+  if (!api) {
+    return {
+      stop: () => { /* hiding disabled */ },
+      recheck: () => { /* hiding disabled */ },
+      onForegroundChanged: () => () => { /* hiding disabled */ },
+    };
+  }
 
   const handle = win.getNativeWindowHandle();
   // 8 bytes on x64/arm64, 4 on ia32.
   const selfHwnd = handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
 
   let lastHide = false;
+  /** The previous poll's hwnd, kept ONLY to detect a change; nothing reads it but the comparison. */
+  let lastFgHwnd: bigint | null = null;
+  const fgSubs = new Set<() => void>();
   let timer: ReturnType<typeof setInterval> | null = null;
   // Cleared by `stop()` — whether that came from shutdown, a destroyed window or a failed poll.
   // Nothing re-arms afterwards, so a hard failure cannot come back as a 0.5 Hz error stream.
@@ -155,8 +170,16 @@ export function startForegroundWatch(
       stop();
       return;
     }
+    // FIX ROUND 1, finding 2: the foreground CHANGE is computed inside the try but fanned out
+    // after it. The catch below is written for a native-call failure — it logs 'poll failed,
+    // fullscreen hiding disabled' and calls `stop()`, which nothing re-arms — so a throwing
+    // `onForegroundChanged` listener (Task 14's proactive breakpoint (a)) inside the try would
+    // permanently kill an unrelated Phase 1 feature and blame Win32 for it.
+    let fgChanged = false;
     try {
       const fgHwnd = toHwnd(api.GetForegroundWindow());
+      fgChanged = lastFgHwnd !== null && fgHwnd !== lastFgHwnd;
+      lastFgHwnd = fgHwnd;
       const out: RectOut = { left: 0, top: 0, right: 0, bottom: 0 };
       const ok = fgHwnd !== 0n && api.GetWindowRect(fgHwnd, out);
       const rect: Rect | null = ok
@@ -188,10 +211,23 @@ export function startForegroundWatch(
         onChange(false);
       }
     }
+    // A pure notification, outside the Win32 catch, each listener isolated from the others.
+    if (fgChanged) {
+      for (const cb of fgSubs) {
+        try { cb(); } catch (err) { console.warn('[foreground] onForegroundChanged listener threw:', err); }
+      }
+    }
   };
 
   pollOnce();
   // A poll that failed hard (or a window already gone) called stop(); do not arm the interval.
   if (armed) timer = setInterval(pollOnce, intervalMs);
-  return { stop, recheck: () => { if (armed) pollOnce(); } };
+  return {
+    stop,
+    recheck: () => { if (armed) pollOnce(); },
+    onForegroundChanged: (cb) => {
+      fgSubs.add(cb);
+      return () => { fgSubs.delete(cb); };
+    },
+  };
 }
