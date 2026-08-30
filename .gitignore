@@ -35,3 +35,13 @@ apps/desktop/playwright-report/
 **/.impeccable/mocks/
 **/.impeccable/review/
 **/.impeccable/questions/
+
+# Live2D artwork production pipeline
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+runs/
+*.psd
+*.psb

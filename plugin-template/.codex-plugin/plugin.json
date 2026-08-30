@@ -1,0 +1,29 @@
+{
+  "name": "live2d-production",
+  "version": "0.1.0",
+  "description": "Plan, produce, package, validate, and hand off Live2D-ready separated character artwork.",
+  "license": "MIT",
+  "keywords": [
+    "live2d",
+    "character-art",
+    "image-generation",
+    "photoshop",
+    "vtuber"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Live2D Production",
+    "shortDescription": "Create and validate Live2D-ready character parts",
+    "longDescription": "Reusable workflows for canonical character design, part planning, hidden-region reconstruction, Photoshop PSD packaging, quality control, and Cubism handoff.",
+    "developerName": "Local developer",
+    "category": "Design",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create a new Live2D-ready character-art run from my brief.",
+      "Audit this Live2D parts run and identify the next blocking issue."
+    ]
+  }
+}

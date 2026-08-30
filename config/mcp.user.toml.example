@@ -1,0 +1,28 @@
+# Add the official read-only documentation server.
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+enabled = true
+
+# Add only after Phase 7 implements and tests the local server.
+[mcp_servers.live2dTools]
+command = "uv"
+args = ["run", "--project", "/ABSOLUTE/PATH/TO/REPO", "python", "-m", "live2d_pipeline.mcp_server.server"]
+cwd = "/ABSOLUTE/PATH/TO/REPO"
+env_vars = ["OPENAI_API_KEY", "LIVE2D_WORKSPACE_ROOT"]
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+enabled = true
+default_tools_approval_mode = "prompt"
+enabled_tools = [
+  "get_run_status",
+  "get_part_manifest",
+  "get_job_status",
+  "create_run",
+  "generate_design_candidates",
+  "select_canonical",
+  "plan_parts",
+  "produce_parts",
+  "run_quality_control",
+  "emit_psd_job",
+  "generate_cubism_handoff"
+]

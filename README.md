@@ -86,3 +86,14 @@ deliberately did not build is listed in
 This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion.
 
 See NOTICE for third-party licenses.
+
+## Live2D artwork production pipeline
+
+The project-local Codex production blueprint is installed alongside the desktop app. It covers the
+gated workflow from an approved character brief or canonical image through separated transparent
+parts, QA, Photoshop PSD packaging, and the final Cubism handoff. It does not claim to automate
+Cubism rigging or produce a finished `.cmo3`/`.moc3` model.
+
+Start with [`docs/LIVE2D_PIPELINE.md`](docs/LIVE2D_PIPELINE.md), then follow
+[`docs/BUILD_PHASES.md`](docs/BUILD_PHASES.md). The reusable project skills live under
+`.agents/skills/`, and the phase implementation prompts live under `build-prompts/`.

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/character_brief.schema.json",
+  "title": "Live2D Character Brief",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "rights",
+    "output",
+    "character",
+    "pose",
+    "style",
+    "generation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "profile",
+        "intended_use",
+        "production_mode"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+        },
+        "profile": {
+          "enum": [
+            "bust_standard",
+            "full_body_standard",
+            "full_body_deluxe"
+          ]
+        },
+        "intended_use": {
+          "type": "string",
+          "minLength": 1
+        },
+        "production_mode": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "source_ownership_confirmed",
+        "external_processing_allowed"
+      ],
+      "properties": {
+        "source_ownership_confirmed": {
+          "type": "boolean"
+        },
+        "external_processing_allowed": {
+          "type": "boolean"
+        },
+        "commercial_use_required": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canvas_width",
+        "canvas_height",
+        "color_profile",
+        "bit_depth",
+        "transparent_background"
+      ],
+      "properties": {
+        "canvas_width": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 16384
+        },
+        "canvas_height": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 16384
+        },
+        "color_profile": {
+          "const": "sRGB"
+        },
+        "bit_depth": {
+          "const": 8
+        },
+        "transparent_background": {
+          "const": true
+        }
+      }
+    },
+    "character": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "pose": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "style": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "provider",
+        "model",
+        "candidate_count"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "review": {
+      "type": "object"
+    }
+  }
+}

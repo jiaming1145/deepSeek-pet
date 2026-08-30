@@ -1,0 +1,84 @@
+schema_version: "1.0"
+project:
+  run_id: "replace-me-v001"
+  profile: "full_body_standard"  # bust_standard | full_body_standard | full_body_deluxe
+  intended_use: "personal_vtubing"
+  production_mode: true
+
+rights:
+  source_ownership_confirmed: false
+  external_processing_allowed: false
+  commercial_use_required: false
+  notes: "Record licenses or artist permission here."
+
+output:
+  canvas_width: 4096
+  canvas_height: 8192
+  color_profile: "sRGB"
+  bit_depth: 8
+  transparent_background: true
+
+character:
+  name: ""
+  age_presentation: "adult"
+  species: "human"
+  gender_presentation: ""
+  body_proportions: "anime, approximately 7 heads tall"
+  face:
+    shape: ""
+    skin_tone: ""
+    eyes: ""
+    brows: ""
+    nose: ""
+    mouth: ""
+    distinguishing_features: []
+  hair:
+    color: ""
+    style: ""
+    length: ""
+    physics_features: []
+  outfit:
+    description: ""
+    materials: []
+    independently_moving_elements: []
+  accessories: []
+  palette: []
+
+pose:
+  view: "front"
+  head: "neutral"
+  expression: "neutral, eyes open, mouth closed"
+  arms: "relaxed and separated from torso"
+  hands: "visible and unobstructed"
+  legs: "neutral and slightly separated"
+  prohibited_overlaps:
+    - "crossed arms"
+    - "hand covering face"
+    - "hair completely covering an eye"
+    - "prop covering torso joints"
+
+style:
+  medium: "clean anime cel illustration"
+  line_weight: "consistent, production-friendly"
+  shading: "limited cel shading"
+  texture: "minimal"
+  reference_paths: []
+  must_keep: []
+  must_avoid:
+    - "watermark"
+    - "text"
+    - "extra limbs"
+    - "extreme perspective"
+    - "busy background"
+
+generation:
+  provider: "openai"
+  model: "gpt-image-2"
+  draft_quality: "low"
+  final_quality: "high"
+  candidate_count: 4
+  use_model_snapshot_when_available: true
+
+review:
+  approver: ""
+  notes: ""
