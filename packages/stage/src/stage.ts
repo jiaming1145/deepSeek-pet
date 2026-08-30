@@ -231,7 +231,11 @@ export class Live2DStage {
       const read = this.pressReader.service(gl);
       if (read && this.onPressRead) this.onPressRead(read);
       // §6.6: the quarter-scale hover mask, refreshed behind an async fence.
-      if (this.fboPicker) { this.fboPicker.capture(gl, projection); this.fboPicker.poll(gl, performance.now()); }
+      if (this.fboPicker) {
+        const now = performance.now();
+        this.fboPicker.capture(gl, projection, now);
+        this.fboPicker.poll(gl, now);
+      }
     });
   }
 
@@ -303,6 +307,10 @@ export class Live2DStage {
     if (this.disposed) return;
     this.disposed = true;
     this.stop();
+    // The FBO picker owns a framebuffer, an RGBA8 texture, a PIXEL_PACK buffer and possibly an
+    // outstanding fence; nothing else frees them, and a character swap builds a fresh stage.
+    this.fboPicker?.dispose(this.gl);
+    this.fboPicker = null;
     this.model.release();
     CubismWebGLOffscreenManager.getInstance().removeContext(this.gl);
   }
