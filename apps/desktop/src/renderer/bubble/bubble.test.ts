@@ -8,7 +8,7 @@ function mount(): { root: HTMLElement; text: HTMLElement; plate: HTMLElement; ad
   document.body.innerHTML = `
     <div id="bubble" class="bubble" data-side="left" data-emotion="neutral" hidden>
       <span class="bubble__rail" aria-hidden="true"></span>
-      <div class="bubble__plate" data-bubble-plate hidden></div>
+      <div class="bubble__plate" data-bubble-plate hidden><span class="bubble__plate-text" data-bubble-plate-text></span></div>
       <div class="bubble__surface">
         <p class="bubble__text" data-bubble-text></p>
         <span class="bubble__advance" data-bubble-advance aria-hidden="true">▼</span>
@@ -83,9 +83,11 @@ describe('Bubble', () => {
     expect(b.overflowing()).toBe(true);
   });
 
-  it('setName fills the plate and hides it when the name is empty', () => {
+  it('setName fills the counter-skewed plate span and hides the plate when the name is empty (M-13)', () => {
     const b = new Bubble(dom.root);
     b.setName('小春');
+    const span = dom.plate.querySelector('.bubble__plate-text') as HTMLElement;
+    expect(span.textContent).toBe('小春');
     expect(dom.plate.textContent).toBe('小春');
     expect(dom.plate.hidden).toBe(false);
     b.setName('');

@@ -6,6 +6,12 @@ export interface HistoryProps {
   list(opts: { before?: number; limit?: number }): Promise<{ rows: HistoryRow[]; nextBefore: number | null }>;
   remove(turnId: string): Promise<void>;
   open: boolean;
+  /**
+   * CX-9: bumps whenever a turn completes (App passes `turnDone.n`). While the pane is open a change
+   * refetches the newest page so the row that just landed in the store is read in; the pane also
+   * refetches on every closed->open edge. Rows merge by id, so the older pages already read stay.
+   */
+  refresh?: number;
   now?: () => number;
 }
 
@@ -28,7 +34,7 @@ export function dayLabel(ts: number, now: number): string {
 }
 
 export function History(props: HistoryProps): JSX.Element {
-  const { list, remove, open, now = () => Date.now() } = props;
+  const { list, remove, open, refresh = 0, now = () => Date.now() } = props;
   const [rows, setRows] = useState<HistoryRow[]>([]);
   const [nextBefore, setNextBefore] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -37,9 +43,9 @@ export function History(props: HistoryProps): JSX.Element {
   // scrollTop 0 it is permanently intersecting, so observing it there loads page after page in
   // one burst and 6.3's 50-row paging throttles nothing.
   const [pagingArmed, setPagingArmed] = useState(false);
-  const startedRef = useRef(false);
   const parkedRef = useRef(false);
   const anchorRef = useRef<number | null>(null);
+  const loadedRef = useRef(false);
   const paneRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,7 +63,12 @@ export function History(props: HistoryProps): JSX.Element {
           merged.sort((a, b) => a.id - b.id);
           return merged;
         });
-        setNextBefore(page.nextBefore);
+        // Only the FIRST read sets the paging cursor; a refresh of the newest page must not reset
+        // the cursor past pages the reader has already scrolled up through.
+        if (before !== undefined || !loadedRef.current) setNextBefore(page.nextBefore);
+        // A newest page landing means the newest row may have changed: park on it again.
+        if (before === undefined) parkedRef.current = false;
+        loadedRef.current = true;
         setLoaded(true);
       } finally {
         setLoading(false);
@@ -66,11 +77,11 @@ export function History(props: HistoryProps): JSX.Element {
     [list],
   );
 
+  // CX-9: every closed->open edge and every completed turn while open re-reads the newest page.
   useEffect(() => {
-    if (!open || startedRef.current) return;
-    startedRef.current = true;
+    if (!open) return;
     void loadPage();
-  }, [open, loadPage]);
+  }, [open, refresh, loadPage]);
 
   // 6.3 orders rows newest-at-the-bottom, so the pane opens on the newest row, not the oldest one.
   // Parking also moves the top sentinel out of view, which is what keeps the paging effect below
@@ -89,7 +100,9 @@ export function History(props: HistoryProps): JSX.Element {
     parkedRef.current = true;
     el.scrollTop = el.scrollHeight;
     setPagingArmed(el.scrollTop > 0);
-  }, [open, loaded]);
+    // `rows` is a dependency because a refreshed newest page clears the park (see loadPage) and
+    // the new bottom row only exists once those rows have rendered.
+  }, [open, loaded, rows]);
 
   // Hold the reader's place when an older page lands above them.
   useLayoutEffect(() => {

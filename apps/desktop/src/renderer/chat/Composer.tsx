@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { JSX, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { USER_TEXT_MAX } from '@ds/protocol';
 import type { ErrorCode, TurnState } from '@ds/protocol';
 import { CHAT_MAX_ROWS, CHAT_ROW_H } from '../shared/chat-metrics';
+
+/** The counter appears only once this many characters (UTF-16 units, same as the cap) remain. */
+const COUNT_NEAR = 200;
 
 export type SendResult =
   | { ok: true; turnId: string }
@@ -123,7 +127,17 @@ export function Composer(props: ComposerProps): JSX.Element {
   const submit = useCallback(
     async (text: string) => {
       setValue('');
-      const res = await onSend(text);
+      // I-4: main's handleInvoke THROWS on a schema miss (it never reaches brain-service's
+      // {ok:false} path), so the renderer sees a rejection. Spec §6.2 rule 6 says the text comes
+      // back on every failure, and a thrown one must not be the exception that loses it.
+      let res: SendResult;
+      try {
+        res = await onSend(text);
+      } catch {
+        pendingRef.current = null;
+        restore(text);
+        return;
+      }
       if (res.ok) {
         pendingRef.current = { text, turnId: res.turnId };
       } else {
@@ -173,6 +187,10 @@ export function Composer(props: ComposerProps): JSX.Element {
   }, [onComposingChange]);
 
   const busy = brainState !== 'idle';
+  // I-4: the cap is the protocol's, surfaced quietly and only near the edge — no bar, no red.
+  const remaining = USER_TEXT_MAX - value.length;
+  const countLine =
+    remaining > COUNT_NEAR ? null : remaining <= 0 ? `到 ${USER_TEXT_MAX} 字了` : `还能写 ${remaining} 字`;
 
   return (
     <section className="composer" data-state={brainState}>
@@ -185,6 +203,9 @@ export function Composer(props: ComposerProps): JSX.Element {
           历史
           <span className="chip__chevron" aria-hidden="true">{historyOpen ? '▾' : '▸'}</span>
         </button>
+        {countLine !== null && (
+          <span className="composer__count" data-at={remaining <= 0 ? 'cap' : 'near'}>{countLine}</span>
+        )}
         <span className="composer__state" role="status">{STATE_LINE[brainState]}</span>
       </div>
       <div className="composer__row">
@@ -196,6 +217,7 @@ export function Composer(props: ComposerProps): JSX.Element {
           placeholder="说点什么…"
           autoFocus
           rows={rows}
+          maxLength={USER_TEXT_MAX}
           value={value}
           disabled={disabled}
           spellCheck={false}
