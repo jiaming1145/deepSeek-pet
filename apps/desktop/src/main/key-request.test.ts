@@ -54,14 +54,14 @@ describe('CX-3: createKeyRequest', () => {
     expect(h.gate.pending).toBe('auth');
     expect(h.logs).toHaveLength(1);
     // Still hidden (suspend follows the lock): nothing.
-    h.gate.onVerdict(true);
+    h.gate.onVerdict();
     expect(h.shown).toEqual([]);
     // Unlocked: the queued prompt shows exactly once.
     h.flags.locked = false;
-    h.gate.onVerdict(false);
+    h.gate.onVerdict();
     expect(h.shown).toEqual(['auth']);
     expect(h.gate.pending).toBeNull();
-    h.gate.onVerdict(false);
+    h.gate.onVerdict();
     expect(h.shown).toEqual(['auth']);
   });
 
@@ -71,7 +71,7 @@ describe('CX-3: createKeyRequest', () => {
     h.gate.request('auth');
     expect(h.gate.pending).toBe('auth');
     h.flags.fullscreen = false;
-    h.gate.onVerdict(false);
+    h.gate.onVerdict();
     expect(h.shown).toEqual(['auth']);
   });
 
@@ -86,7 +86,38 @@ describe('CX-3: createKeyRequest', () => {
 
   it('a clear verdict with nothing queued shows nothing', () => {
     const h = harness({});
-    h.gate.onVerdict(false);
+    h.gate.onVerdict();
     expect(h.shown).toEqual([]);
+  });
+
+  it('GC3-1: a queued prompt flushes when the system flag clears even though the user flag stays set', () => {
+    const h = harness({ locked: true, user: true });
+    h.gate.request('auth');
+    expect(h.shown).toEqual([]);
+    expect(h.gate.pending).toBe('auth');
+    // Unlock: the aggregate verdict is still hidden (user), but decideKeyRequest says open.
+    h.flags.locked = false;
+    h.gate.onVerdict();
+    expect(h.shown).toEqual(['auth']);
+    expect(h.gate.pending).toBeNull();
+    h.gate.onVerdict();
+    expect(h.shown).toEqual(['auth']);
+  });
+
+  it('GC3-1: pending is cleared before show — a re-entrant verdict inside show() cannot show twice', () => {
+    const flags: Flags = { fullscreen: true };
+    const shown: string[] = [];
+    const gate = createKeyRequest({
+      visibility: { hidden: () => Object.values(flags).some(Boolean), get: (f) => flags[f] === true },
+      show: (reason) => {
+        shown.push(reason);
+        gate.onVerdict();
+      },
+      log: () => {},
+    });
+    gate.request('first-run');
+    flags.fullscreen = false;
+    gate.onVerdict();
+    expect(shown).toEqual(['first-run']);
   });
 });

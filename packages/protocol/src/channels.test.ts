@@ -149,6 +149,8 @@ describe('ERROR_HINTS', () => {
     expect(ERROR_HINTS.auth.text).toBe('API Key 无效，重新填一下');
     expect(ERROR_HINTS.auth.opensKeyWindow).toBe(true);
     expect(ERROR_HINTS.empty.text).toBe('');
+    // A-38: a failed history append travels as brain:error{code:'storage'}; it never opens the key window.
+    expect(ERROR_HINTS.storage).toEqual({ text: '刚才那句没记住，硬盘好像写不进去', level: 'warn', opensKeyWindow: false });
   });
 
   it('names no 设置 window anywhere in Phase 2 copy (C-10)', () => {

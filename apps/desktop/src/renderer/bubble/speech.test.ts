@@ -421,4 +421,73 @@ describe('SpeechController', () => {
       expect(h.speech.active).toBe(false);
     });
   });
+
+  // GC2-3 / GC2-4: the two paths that used to wedge or leak while the pet is hidden.
+  describe('hidden cancellation and complete() while paused (GC2-3 / GC2-4)', () => {
+    const acks = (sent: Sent[]) => sent.filter((s) => s.channel === 'playback:sentenceDone').length;
+    const turnDones = (sent: Sent[]) => sent.filter((s) => s.channel === 'playback:turnDone').length;
+
+    it('GC2-3: idle while paused and unfinished cancels the turn — inactive, hidden, timer-free, no acks', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev({ text: '一二三四五', seq: 0 }));
+      h.speech.onSentence(ev({ text: '六七', seq: 1, pause: 0.5 }));
+      h.clock.advance(140); // '一二' painted
+      h.speech.pause();
+      h.sent.length = 0;
+      h.speech.onState({ state: 'idle', turnId: 't1' }); // user:cancel landed while hidden
+      expect(h.speech.active).toBe(false);
+      expect(h.bubble.visible).toBe(false);
+      h.clock.advance(60_000);
+      expect(acks(h.sent)).toBe(0);
+      expect(turnDones(h.sent)).toBe(0);
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(false); // no stale band on show
+      expect(h.speech.active).toBe(false);
+      h.clock.advance(60_000);
+      expect(acks(h.sent)).toBe(0);
+      expect(turnDones(h.sent)).toBe(0);
+      expect(mouths(h.sent)).toEqual([]); // the mouth was already closed by pause(); no reopen
+      // A late echo for the cancelled turn is ignored, and the next turn starts clean.
+      h.speech.onState({ state: 'idle', turnId: 't1' });
+      h.speech.onState({ state: 'thinking', turnId: 't2' });
+      expect(h.bubble.visible).toBe(true);
+      expect(h.text.textContent).toBe('');
+      h.speech.onSentence(ev({ turnId: 't2', text: '好', seq: 0 }));
+      h.speech.onTurnDone({ turnId: 't2' });
+      h.clock.advance(1000);
+      expect(acks(h.sent)).toBe(1);
+      expect(turnDones(h.sent)).toBe(1);
+    });
+
+    it('GC2-3: speak() waiters resolve on a hidden cancellation', async () => {
+      const p = h.speech.speak([ev({ text: '一二三四五' })]);
+      h.clock.advance(140);
+      h.speech.pause();
+      h.speech.onState({ state: 'idle', turnId: 't1' });
+      await expect(p).resolves.toBeUndefined();
+    });
+
+    it('GC2-4: complete() while paused emits nothing, marks no hidden text as shown, and resumes the reveal', () => {
+      h.speech.onState({ state: 'thinking', turnId: 't1' });
+      h.speech.onSentence(ev({ text: '一二三四五', seq: 0 }));
+      h.speech.onSentence(ev({ text: '六七', seq: 1 }));
+      h.speech.onTurnDone({ turnId: 't1' });
+      h.clock.advance(140); // '一二'
+      h.speech.pause();
+      h.sent.length = 0;
+      h.speech.complete();
+      expect(h.sent).toEqual([]);
+      expect(h.text.textContent).toBe('一二');
+      expect(h.bubble.visible).toBe(false);
+      h.clock.advance(60_000);
+      expect(h.sent).toEqual([]);
+      // The reveal carries on from where it stopped once she is back.
+      h.speech.resume();
+      expect(h.bubble.visible).toBe(true);
+      h.clock.advance(5000);
+      expect(h.text.textContent).toBe('一二三四五六七');
+      expect(acks(h.sent)).toBe(2);
+      expect(turnDones(h.sent)).toBe(1);
+    });
+  });
 });

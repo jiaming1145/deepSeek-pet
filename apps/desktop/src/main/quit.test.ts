@@ -124,4 +124,48 @@ describe('I-9: before-quit sequence', () => {
     await vi.waitFor(() => expect(q.phase).toBe('done'));
     expect(calls).toEqual(['log:[quit] teardownAfterDrain failed: destroy failed', 'closeDb', 'quit']);
   });
+
+  it('GC2-1: a throwing teardownSync is logged; drain, teardownAfterDrain, closeDb and quit each run once; phase reaches done', async () => {
+    const calls: string[] = [];
+    const q = createBeforeQuit({
+      teardownSync: () => {
+        throw new Error('unregisterAll failed');
+      },
+      drain: () => {
+        calls.push('drain');
+        return Promise.resolve();
+      },
+      teardownAfterDrain: () => calls.push('after'),
+      closeDb: () => calls.push('closeDb'),
+      quit: () => calls.push('quit'),
+      log: (line) => calls.push(`log:${line}`),
+    });
+    q.handler({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(q.phase).toBe('done'));
+    expect(calls).toEqual([
+      'log:[quit] teardownSync failed: unregisterAll failed', 'drain', 'after', 'closeDb', 'quit',
+    ]);
+    let prevented = 0;
+    q.handler({ preventDefault: () => prevented++ });
+    expect(prevented).toBe(0);
+    expect(calls.filter((c) => c === 'quit')).toHaveLength(1);
+  });
+
+  it('GC2-1: a throwing quit() still leaves phase done, and quit is attempted exactly once per drain', async () => {
+    const calls: string[] = [];
+    const q = createBeforeQuit({
+      teardownSync: () => {},
+      drain: () => Promise.resolve(),
+      teardownAfterDrain: () => {},
+      closeDb: () => {},
+      quit: () => {
+        calls.push('quit');
+        throw new Error('quit failed');
+      },
+      log: (line) => calls.push(`log:${line}`),
+    });
+    q.handler({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(q.phase).toBe('done'));
+    expect(calls).toEqual(['quit', 'log:[quit] quit failed: quit failed']);
+  });
 });

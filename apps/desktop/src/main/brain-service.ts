@@ -28,11 +28,16 @@ import { boundedDetail, redactSecrets } from './redact';
 /** Mirrors the renderer's HINT_DEFAULT_TTL_MS (contracts.md §5.5); `hint:show` requires a ttl. */
 export const HINT_TTL_MS = 6000;
 /**
- * GC-3: a history append failed (disk full, a closed handle). The reply was spoken, so this is not
- * a §2.8 error code — `ErrorCode` has no `storage` member yet (amendment proposed) — but the user
- * must know the line was not remembered. Phase 2 has no 设置 window, so nothing here names one.
+ * GC-3 / A-38: a history append failed (disk full, a closed handle). The reply was spoken, so the
+ * turn's outcome stands, but the user must know the line was not remembered. The copy is §2.8's
+ * `storage` row; kept under this name for the callers that read it.
  */
-export const STORAGE_HINT_TEXT = '刚才那句没记住，硬盘好像写不进去';
+export const STORAGE_HINT_TEXT: string = ERROR_HINTS.storage.text;
+/**
+ * The `persistFailed.label` TurnRunner uses for the user's own line (packages/brain turn.ts). It is
+ * the one write that fails while the composer still holds the send as pending — see reportPersistFailed.
+ */
+export const USER_ROW_LABEL = 'user row';
 /** §6.6: a pause between characters must not flicker the listening pose. */
 const LISTENING_OFF_DEBOUNCE_MS = 250;
 /** §6.6's first message uses a turnId no TurnRunner ever issues; its playback echoes are dropped. */
@@ -543,19 +548,34 @@ export class BrainService {
   }
 
   /**
-   * GC-3: the row is missing and nothing may claim otherwise — the log gets the label plus a
-   * bounded, redacted detail, the bubble gets the storage hint. During a turn the playback still
-   * owns the window-level hide (the hint rides along); when idle the hint owns it, as reportError's.
+   * GC-3 / A-38: the row is missing and nothing may claim otherwise — the log gets the label plus
+   * a bounded, redacted detail, the chat window gets `brain:error {code:'storage'}` (its message
+   * is the hint copy, never the upstream error), and the bubble gets the storage hint. The bubble
+   * is NOT sent the error: its `brain:error` handler drops the reveal in flight, and A-26/A-38
+   * keep turnDone / idle unaffected by a failed write. During a turn the playback still owns the
+   * window-level hide (the hint rides along); when idle the hint owns it, as reportError's.
+   *
+   * Fix round 1: the chat window is NOT sent `brain:error` for the USER row. That write fails
+   * early in the turn while the composer still holds the send as pending, and the chat's only
+   * `brain:error` consumer (Composer's restore effect) would put the user's text back, selected,
+   * as if the send had failed while the reply is still streaming — a re-send would then duplicate
+   * a line TurnRunner already carries forward (A-38). Until the A-44 consumer rule
+   * (`code:'storage'` is informational) lands in Composer, the user row stays hint-only, as on
+   * main. Every assistant-side row is reported after `turnDone` / `error` cleared the pending send.
    */
   private reportPersistFailed(runner: TurnRunner, p: { turnId: string; label: string; message: string }): void {
     if (this.disposed) return;
     console.warn('[brain] history write failed (%s) turn=%s detail=%s', p.label, p.turnId, boundedDetail(p.message));
-    const { bubble } = this.deps;
+    const { bubble, chat } = this.deps;
+    const hint = ERROR_HINTS.storage;
+    if (p.label !== USER_ROW_LABEL) {
+      sendTo(chat, Channels.brainError, { turnId: p.turnId, code: 'storage', message: hint.text });
+    }
     if (runner.state === 'idle') {
       this.cancelBubbleHide();
       this.showBubble();
     }
-    sendTo(bubble, Channels.hintShow, { text: STORAGE_HINT_TEXT, level: 'warn', ttlMs: HINT_TTL_MS });
+    sendTo(bubble, Channels.hintShow, { text: hint.text, level: hint.level, ttlMs: HINT_TTL_MS });
     if (runner.state === 'idle') this.scheduleBubbleHide(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
   }
 

@@ -79,7 +79,7 @@ vi.mock('electron', () => ({
   screen: { getDisplayMatching: () => ({ workArea }) },
 }));
 
-const { createChatWindow, isChatComposing, openChat, setChatComposing } = await import('./chat-window');
+const { closeChat, createChatWindow, isChatComposing, openChat, setChatComposing } = await import('./chat-window');
 
 function build(loadResult: Promise<void> | null = null) {
   FakeWindow.nextLoadResult = loadResult;
@@ -149,5 +149,30 @@ describe('G2-6: chat window load and crash recovery', () => {
     openChat(win as never, pet, false);
     expect(win.sent).toEqual([{ channel: 'chat:opened', payload: { focusComposer: false } }]);
     expect(win.wcOnce.get('did-finish-load') ?? []).toEqual([]);
+  });
+
+  it('GC2-5: closing during the initial load cancels the pending chat:opened, even when already hidden', () => {
+    const { win } = build();
+    win.loading = true;
+    openChat(win as never, pet, true);
+    expect(win.wcOnce.get('did-finish-load')).toHaveLength(1);
+    closeChat(win as never);
+    expect(win.visible).toBe(false);
+    expect(win.wcOnce.get('did-finish-load')).toEqual([]);
+    win.fireOnce('did-finish-load');
+    expect(win.sent.filter((s) => s.channel === 'chat:opened')).toHaveLength(0);
+
+    // Already hidden (a VisibilityState-driven hide raced the open): still cleared.
+    openChat(win as never, pet, true);
+    win.visible = false;
+    closeChat(win as never);
+    expect(win.wcOnce.get('did-finish-load')).toEqual([]);
+    win.fireOnce('did-finish-load');
+    expect(win.sent.filter((s) => s.channel === 'chat:opened')).toHaveLength(0);
+
+    // A later open after the load sends normally.
+    win.loading = false;
+    openChat(win as never, pet, true);
+    expect(win.sent.filter((s) => s.channel === 'chat:opened')).toHaveLength(1);
   });
 });
