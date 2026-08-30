@@ -526,6 +526,23 @@ describe('DeepSeekClient.testKey', () => {
     expect(stub.calls).toHaveLength(0);
   });
 
+  it('GC-7: an oversized 200 body is a server failure, never ok', async () => {
+    const stub = stubFetch(() => fakeResponse({ body: forever('{"choices":[' + 'x'.repeat(4096)) }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
+    const result = await client.testKey();
+    expect(result).toMatchObject({ ok: false, code: 'server' });
+    expect(openBodies[0].cancelled).toBe(true);
+    expect(openBodies[0].pulls).toBeLessThan(1000);
+  });
+
+  it('GC-7: a 200 whose body is not a completion is a server failure', async () => {
+    for (const text of ['{}', 'not json', '{"choices":[]}', '{"choices":[{"delta":{}}]}', '[]']) {
+      const stub = stubFetch(() => fakeResponse({ text }));
+      const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });
+      expect(await client.testKey()).toMatchObject({ ok: false, code: 'server' });
+    }
+  });
+
   it('sends the pinned one-token non-streaming body', async () => {
     const stub = stubFetch(() => fakeResponse({ text: '{}' }));
     const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch });

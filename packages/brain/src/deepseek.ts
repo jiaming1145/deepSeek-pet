@@ -310,6 +310,21 @@ async function httpError(res: Response, activeKey: string, signal?: AbortSignal)
   return new DeepSeekError(code, status, statusMessage(status, code), detail);
 }
 
+/** GC-7: `{ choices: [ { message: object }, … ] }` — the minimum a chat completion body carries. */
+function isCompletionShape(text: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+  const choices = (parsed as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  const first = choices[0] as { message?: unknown } | null;
+  return first !== null && typeof first === 'object' && typeof first.message === 'object' && first.message !== null;
+}
+
 // ---------------------------------------------------------------- the client
 
 export class DeepSeekClient implements ChatClient {
@@ -559,8 +574,15 @@ export class DeepSeekClient implements ChatClient {
           ? { ok: false, code: failure.code, message: failure.message }
           : { ok: false, code: failure.code, message: failure.message, detail: failure.detail };
       }
-      // The one-token reply is not inspected, but the body must end: bounded read with the idle timeout.
-      await readBodyBounded(res, { maxBytes: MAX_JSON_BODY_BYTES, idleMs: IDLE_TIMEOUT_MS, signal: outer });
+      // GC-7: a 200 is `ok` only when its bounded body is a completion — an oversized body, invalid
+      // JSON or the wrong shape (a proxy's HTML page, an empty object) is a server failure.
+      const read = await readBodyBounded(res, { maxBytes: MAX_JSON_BODY_BYTES, idleMs: IDLE_TIMEOUT_MS, signal: outer });
+      if (read.truncated) {
+        throw new DeepSeekError('server', res.status, `response body exceeded ${MAX_JSON_BODY_BYTES} bytes`);
+      }
+      if (!isCompletionShape(read.text)) {
+        throw new DeepSeekError('server', res.status, 'unreadable response body: not a chat completion');
+      }
       return { ok: true };
     } catch (err) {
       if (err instanceof CancelledError) return { ok: false, code: 'network', message: err.message };
