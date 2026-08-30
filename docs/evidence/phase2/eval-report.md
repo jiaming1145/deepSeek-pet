@@ -1,10 +1,10 @@
 > **SUBSTITUTED — 没设 DEEPSEEK_API_KEY，这份报告是 `--dry` 的录制语料回放，不是对模型的测量。数字只证明流水线和指标代码是对的。JSON 里 `config.dry` 是 `true`。**
 
-# Phase 2 eval — 2026-08-30T00:28:58.054Z
+# Phase 2 eval — 2026-08-30T00:47:34.152Z
 
 > **DRY RUN — 回复来自 `eval/recorded/replies.zh.json`，不是模型输出。这些数字只证明流水线和指标代码是对的，不能说明模型好坏。**
 
-总判定：**FAIL**
+总判定：**PASS**
 
 ## 配置
 
@@ -50,8 +50,8 @@
 | `consecutiveQuestionPairs` | 0 | ≤ 0 | PASS |
 | `ellipsisReplyPct` | 10.9% | ≤ 20.0% | PASS |
 | `multiEllipsisCount` | 0 | ≤ 0 | PASS |
-| `repetitionMaxPct` | 45.2% | < 20.0% | FAIL |
-| `complianceMissPct` | 18.8% | < 10.0% | FAIL |
+| `repetitionMaxPct` | 8.3% | < 20.0% | PASS |
+| `complianceMissPct` | 0.0% | < 10.0% | PASS |
 | `cacheHitPct` | — | ≥ 70.0% | SKIP |
 
 ## 只上报、不设门槛
@@ -60,11 +60,11 @@
 |---|---|
 | `prompts` | 46 |
 | `turns` | 138 |
-| `lintNone` | 122 |
+| `lintNone` | 138 |
 | `lintStrip` | 0 |
-| `lintRegenerate` | 16 |
-| `lintRuleCounts` | {"opener-repeat":16,"repetition":15} |
-| `openerRepeatCount` | 16 |
+| `lintRegenerate` | 0 |
+| `lintRuleCounts` | {} |
+| `openerRepeatCount` | 0 |
 | `affectRateCount` | 0 |
 | `judgeErrors` | 0 |
 | `emojiJudgeDisagreements` | 0 |
