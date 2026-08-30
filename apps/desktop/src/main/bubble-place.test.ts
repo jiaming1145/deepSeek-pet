@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { Side } from '@ds/protocol';
 import {
-  BAND_ANCHOR_Y, BAND_PET_FRACTION, BAND_TOP_MAX_FRACTION, BUBBLE_MAX, BUBBLE_MIN, BUBBLE_PADDING,
-  placeBubble, preferredSideFor, type Rect, type Size,
+  BAND_ANCHOR_Y, BAND_PET_FRACTION, BAND_TOP_MAX_FRACTION, BUBBLE_GAP, BUBBLE_MAX, BUBBLE_MIN,
+  BUBBLE_PADDING, placeBubble, preferredSideFor, type Rect, type Size,
 } from './bubble-place';
 
 const WA = { x: 0, y: 0, width: 1920, height: 1040 };
@@ -109,6 +110,28 @@ describe('placeBubble — the band sits over her lower third (task-0 direction, 
       .toEqual({ x: 1430, y: 754, side: 'left', arrowOffset: 60 });
   });
 
+  it('G2 — contracts.md §5.3.1 A-E, the five pinned rects (C14)', () => {
+    // The same five rows as the contract table, which §8.7 pins as "verified this session". They
+    // moved with the band geometry in fix round 1 and the contract was amended in the same
+    // change-set; this test is what makes the amended numbers true rather than asserted.
+    const rows: [string, Rect, Size, Rect, Side, { x: number; y: number; side: Side; arrowOffset: number }][] = [
+      ['A', { x: 1476, y: 296, width: 420, height: 720 }, { width: 320, height: 120 }, WA, 'left',
+        { x: 1430, y: 754, side: 'left', arrowOffset: 60 }],
+      ['B', { x: 24, y: 296, width: 420, height: 720 }, { width: 320, height: 120 }, WA, 'left',
+        { x: 170, y: 754, side: 'right', arrowOffset: 60 }],
+      ['C', { x: 1476, y: 0, width: 420, height: 720 }, { width: 320, height: 120 }, WA, 'left',
+        { x: 1430, y: 458, side: 'left', arrowOffset: 60 }],
+      ['D', { x: 290, y: 0, width: 420, height: 600 }, { width: 460, height: 520 }, { x: 0, y: 0, width: 1000, height: 600 }, 'left',
+        { x: 132, y: 64, side: 'left', arrowOffset: 368 }],
+      ['E', { x: 2900, y: 296, width: 420, height: 720 }, { width: 380, height: 160 }, { x: 1280, y: 0, width: 1920, height: 1040 }, 'left',
+        { x: 2804, y: 734, side: 'left', arrowOffset: 80 }],
+    ];
+    for (const [name, pet, size, wa, pref, expected] of rows) {
+      expect([name, placeBubble(pet, size, wa, pref)]).toEqual([name, expected]);
+      expect([name, insideWorkArea(expected, size, wa)]).toEqual([name, true]);
+    }
+  });
+
   it('H — the mixed-DPI second monitor keeps its own work area (C14 test E)', () => {
     const pet = { x: 2900, y: 296, width: 420, height: 720 };
     const wa = { x: 1280, y: 0, width: 1920, height: 1040 };
@@ -142,6 +165,85 @@ describe('placeBubble — the chat window takes the band\'s rect (controller rul
     expect(p.y).toBe(WA.y + WA.height - BUBBLE_PADDING - CHAT_HISTORY_OPEN.height);
     expect(p.y).toBeLessThan(Math.floor(topFloor(PET)));
     expect((p.y - PET.y) / PET.height).toBeGreaterThan(0.3);
+  });
+});
+
+describe('placeBubble — the band steps clear of the visible composer (fix round 1, finding 2)', () => {
+  const rectOf = (p: { x: number; y: number }, s: Size): Rect => ({ x: p.x, y: p.y, ...s });
+  const overlap = (a: Rect, b: Rect): boolean =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+  /** The composer, placed exactly as `chat-window.ts` places it: the band's own rect, no `avoid`. */
+  const composer = (size: Size, pet: Rect = PET, wa: Rect = WA): Rect =>
+    rectOf(placeBubble(pet, size, wa, preferredSideFor(pet, wa)), size);
+
+  it('without a composer the placement is byte-identical to the pre-fix geometry', () => {
+    for (const size of everyBandSize()) {
+      expect(placeBubble(PET, size, WA, 'left', null)).toEqual(placeBubble(PET, size, WA, 'left'));
+    }
+  });
+
+  it('the band and the one-row composer no longer share a single pixel', () => {
+    const chat = composer(CHAT_BASE);
+    const band = { width: 400, height: 96 };
+    const withChat = placeBubble(PET, band, WA, 'left', chat);
+    // Without the dodge these two rects overlap — that is the defect app-placement.png recorded.
+    expect(overlap(rectOf(placeBubble(PET, band, WA, 'left'), band), chat)).toBe(true);
+    expect(overlap(rectOf(withChat, band), chat)).toBe(false);
+    // Below, not above: her line reads under your line and stays off her face.
+    expect(withChat.y).toBe(chat.y + chat.height + BUBBLE_GAP);
+    expect(insideWorkArea(withChat, band, WA)).toBe(true);
+  });
+
+  it('goes above the composer when the work area has no room below it', () => {
+    // A six-row composer plus a full-height band cannot both fit under the anchor row, so the band
+    // takes the other side of the same flip.
+    const chat = composer(CHAT_SIX_ROWS);
+    const p = placeBubble(PET, BUBBLE_MAX, WA, 'left', chat);
+    expect(p.y).toBe(chat.y - BUBBLE_GAP - BUBBLE_MAX.height);
+    expect(overlap(rectOf(p, BUBBLE_MAX), chat)).toBe(false);
+    expect(insideWorkArea(p, BUBBLE_MAX, WA)).toBe(true);
+  });
+
+  it('never leaves the work area while dodging, at any band size or pet position (C14 still wins)', () => {
+    const displays: Rect[] = [WA, { x: 1280, y: 0, width: 1920, height: 1040 }, { x: 0, y: 0, width: 1000, height: 600 }];
+    const bad: string[] = [];
+    for (const wa of displays) {
+      for (const px of [wa.x, wa.x + 40, wa.x + wa.width / 2 - 210, wa.x + wa.width - 420]) {
+        const pet = { x: px, y: wa.y + Math.max(0, wa.height - 720), width: 420, height: 720 };
+        for (const chatSize of [CHAT_BASE, CHAT_SIX_ROWS, CHAT_HISTORY_OPEN]) {
+          const chat = composer(chatSize, pet, wa);
+          for (const size of everyBandSize()) {
+            const p = placeBubble(pet, size, wa, preferredSideFor(pet, wa), chat);
+            if (!insideWorkArea(p, size, wa)) bad.push(JSON.stringify({ wa, pet, chatSize, size, p }));
+          }
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('overlaps only when neither side of the composer has room — and then it is the work area\'s doing', () => {
+    const displays: Rect[] = [WA, { x: 1280, y: 0, width: 1920, height: 1040 }, { x: 0, y: 0, width: 1000, height: 600 }];
+    const unexplained: string[] = [];
+    for (const wa of displays) {
+      const waT = wa.y + BUBBLE_PADDING;
+      const waB = wa.y + wa.height - BUBBLE_PADDING;
+      for (const px of [wa.x, wa.x + 40, wa.x + wa.width / 2 - 210, wa.x + wa.width - 420]) {
+        const pet = { x: px, y: wa.y + Math.max(0, wa.height - 720), width: 420, height: 720 };
+        for (const chatSize of [CHAT_BASE, CHAT_SIX_ROWS, CHAT_HISTORY_OPEN]) {
+          const chat = composer(chatSize, pet, wa);
+          for (const size of everyBandSize()) {
+            const p = placeBubble(pet, size, wa, preferredSideFor(pet, wa), chat);
+            if (!overlap(rectOf(p, size), chat)) continue;
+            const roomBelow = chat.y + chat.height + BUBBLE_GAP + size.height <= waB;
+            const roomAbove = chat.y - BUBBLE_GAP - size.height >= waT;
+            if (roomBelow || roomAbove) unexplained.push(JSON.stringify({ wa, pet, chatSize, size, p }));
+          }
+        }
+      }
+    }
+    expect(unexplained).toEqual([]);
   });
 });
 
