@@ -6,7 +6,7 @@ import type { ChatMessage, MetricsRecord, Summarize, TrimPlan } from '@ds/brain'
 import { estimateTokens, planTrim } from '@ds/brain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KV_LAST_TRIM_ID, getKv, openDb, setKv } from './db.ts';
-import { HISTORY_WINDOW_SAFETY_TOKENS, HistoryStore } from './history.ts';
+import { HISTORY_WINDOW_SAFETY_TOKENS, HistoryStore, TRIM_CHUNK_TOKENS } from './history.ts';
 import { RunningSummary } from './summary.ts';
 
 const NOW = 1_700_000_000_000;
@@ -284,7 +284,72 @@ describe('HistoryStore', () => {
     // summarised — back inside the prompt window.
     expect(getKv(db, KV_LAST_TRIM_ID)).toBe('22');
     expect((await store.window()).length).toBe(plan.keep.length);
-    expect(summarizeCalls[0][1]).toEqual(plan.drop);
+    // GC-1: the summariser sees the truncated prefix (ids 1..7) as well, so its input ENDS with plan.drop.
+    expect(summarizeCalls[0][1].slice(-plan.drop.length)).toEqual(plan.drop);
+    expect(summarizeCalls[0][1].length).toBe(22);
+  });
+
+  it('GC-1: a trim behind the safety truncation summarises EVERY row from the old pointer to the cutoff, once each', async () => {
+    // 60 rows x 600 tokens: window() starts at id 8 (ids 1..7 truncated), plan.drop = ids 8..22.
+    const LINE = '话'.repeat(900);
+    for (let i = 0; i < 60; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', `${i + 1}:${LINE}`);
+    const plan = planTrim(await store.window());
+    expect(plan.drop.length).toBe(15);
+    expect(plan.drop[0].content.startsWith('8:')).toBe(true);
+
+    await store.onTrimNeeded(plan);
+
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('22');
+    const fed = summarizeCalls.flatMap(([, dropped]) => dropped.map((m) => Number(m.content.split(':')[0])));
+    expect(fed).toEqual(Array.from({ length: 22 }, (_unused, i) => i + 1)); // 1..22, in order, once each
+    for (const [, dropped] of summarizeCalls) {
+      expect(dropped.reduce((n, m) => n + estimateTokens(m.content), 0)).toBeLessThanOrEqual(TRIM_CHUNK_TOKENS);
+    }
+    expect((await store.window()).length).toBe(plan.keep.length);
+  });
+
+  it('GC-1: an oversized prefix is summarised in bounded sequential chunks, chained through the summary, one commit', async () => {
+    // 100 rows x 600 tokens = 60_000; window() keeps the last 53 rows (ids 48..100); plan.drop = ids 48..62.
+    // The prefix 1..62 is ~37_300 tokens (the `N:` label costs a little): chunks of
+    // <= TRIM_CHUNK_TOKENS (24_000) -> 39 rows + 23 rows.
+    const LINE = '话'.repeat(900);
+    for (let i = 0; i < 100; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', `${i + 1}:${LINE}`);
+    const chained: Summarize = (oldSummary, dropped) => {
+      summarizeCalls.push([oldSummary, dropped]);
+      const first = dropped[0].content.split(':')[0];
+      const last = dropped[dropped.length - 1].content.split(':')[0];
+      return Promise.resolve(`${oldSummary}[${first}-${last}]`);
+    };
+    const chunked = makeStore({ summarize: chained });
+    const plan = planTrim(await chunked.window());
+    expect(plan.drop[0].content.startsWith('48:')).toBe(true);
+    expect(plan.drop.length).toBe(15);
+
+    await chunked.onTrimNeeded(plan);
+
+    expect(summarizeCalls.map(([, d]) => d.length)).toEqual([39, 23]);
+    for (const [, dropped] of summarizeCalls) {
+      expect(dropped.reduce((n, m) => n + estimateTokens(m.content), 0)).toBeLessThanOrEqual(TRIM_CHUNK_TOKENS);
+    }
+    expect(summarizeCalls[1][0]).toBe('[1-39]'); // the second chunk sees the first chunk's summary
+    expect(await chunked.summary()).toBe('[1-39][40-62]');
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('62');
+  });
+
+  it('GC-1: a failing later chunk advances nothing — neither the pointer nor the summary', async () => {
+    const LINE = '话'.repeat(900);
+    for (let i = 0; i < 100; i++) await store.append(i % 2 === 0 ? 'user' : 'assistant', `${i + 1}:${LINE}`);
+    let calls = 0;
+    const flaky: Summarize = () => {
+      calls += 1;
+      return calls === 1 ? Promise.resolve('第一块。') : Promise.reject(new Error('boom'));
+    };
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const s = makeStore({ summarize: flaky });
+    await s.onTrimNeeded(planTrim(await s.window()));
+    expect(calls).toBe(2);
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe(null);
+    expect(await s.summary()).toBe('');
   });
 
   it('CX-4: a plan that no longer describes the window writes nothing and calls no summariser', async () => {

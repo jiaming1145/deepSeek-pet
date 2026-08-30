@@ -13,7 +13,7 @@ import type {
 } from '@ds/brain';
 import type { HistoryRow } from '@ds/protocol';
 import { KV_LAST_TRIM_ID, readKvInt, setKv } from './db.ts';
-import { sanitizeMemoryText, type RunningSummary } from './summary.ts';
+import { capSummary, sanitizeMemoryText, type RunningSummary } from './summary.ts';
 
 /**
  * Safety net only. It sits ABOVE planTrim's 24_000 trigger on purpose: planTrim
@@ -22,6 +22,14 @@ import { sanitizeMemoryText, type RunningSummary } from './summary.ts';
  * running summary could never refresh.
  */
 export const HISTORY_WINDOW_SAFETY_TOKENS = 32_000;
+
+/**
+ * GC-1: a trim summarises EVERY row between the old pointer and the cutoff — the prefix that the
+ * safety truncation kept out of `window()` included — in sequential chunks of at most this many
+ * estimated tokens. planTrim's own window budget (24_000) is the natural bound for one
+ * summariser call.
+ */
+export const TRIM_CHUNK_TOKENS = 24_000;
 
 const DEFAULT_LIST_LIMIT = 50;
 const LIST_COLUMNS = 'id, ts, role, content, turn_id, kind, interrupted';
@@ -172,22 +180,34 @@ export class HistoryStore implements HistoryPort, MetricsPort {
     const cutoff = this.resolveCutoff(base, plan);
     if (cutoff === null) return; // the plan no longer matches the table: NOTHING is written
 
-    let next: string;
-    try {
-      next = await this.summarize(this.summaryStore.getSync(), plan.drop);
-    } catch (err) {
-      console.warn(
-        '[memory] summarize failed; window left untrimmed:',
-        err instanceof Error ? err.message : String(err),
-      );
-      return;
+    // GC-1: the pointer moves to `cutoff`, so every row `base < id <= cutoff` leaves the prompt
+    // window for good — including the oldest ones the safety truncation had already kept out of
+    // `window()` (and therefore out of plan.drop). They are all summarised, in id order, once
+    // each, in bounded chunks; the id-bearing snapshot is what the commit re-validates.
+    const prefix = this.rowsBetween(base, cutoff);
+    const chunks = chunkByTokens(prefix, TRIM_CHUNK_TOKENS);
+
+    let next = this.summaryStore.getSync();
+    for (const chunk of chunks) {
+      try {
+        next = await this.summarize(next, chunk.map((r) => ({ role: r.role, content: r.content })));
+      } catch (err) {
+        console.warn(
+          '[memory] summarize failed; window left untrimmed:',
+          err instanceof Error ? err.message : String(err),
+        );
+        return;
+      }
+      if (this.closed) return; // G2-2: the db is closing or closed under us
+      // The next chunk sees what the store would keep, not an uncapped intermediate.
+      next = capSummary(next);
     }
-    if (this.closed) return; // G2-2: the db is closing or closed under us
 
     this.db.exec('BEGIN');
     try {
-      if (this.lastTrimId() !== base) {
-        // Someone moved the pointer while the summary was on the wire: this plan is stale.
+      if (this.lastTrimId() !== base || !this.prefixStillMatches(prefix, cutoff)) {
+        // Someone moved the pointer while the summary was on the wire, or the rows the summary
+        // describes are not the rows the pointer would retire: this plan is stale.
         this.db.exec('ROLLBACK');
         return;
       }
@@ -296,6 +316,29 @@ export class HistoryStore implements HistoryPort, MetricsPort {
     return rows.slice(start);
   }
 
+  /** GC-1: every row the trim retires, `after < id <= upTo`, oldest first, with ids. */
+  private rowsBetween(after: number, upTo: number): Array<{ id: number; role: Role; content: string }> {
+    return this.db
+      .prepare('SELECT id, role, content FROM messages WHERE id > ? AND id <= ? ORDER BY id ASC')
+      .all(after, upTo) as Array<{ id: number; role: Role; content: string }>;
+  }
+
+  /**
+   * GC-1: the rows the summary was built from are exactly the rows the pointer is about to retire.
+   * A `history:delete` of a retired row during the await only removes rows from the set (the
+   * summary then describes slightly more than the table holds, which is harmless and matches
+   * I-10); a row that is now MISSING from the summary — an append landing with an id inside the
+   * range cannot happen (ids are monotonic), but a changed content can — makes the plan stale.
+   */
+  private prefixStillMatches(snapshot: Array<{ id: number; role: Role; content: string }>, upTo: number): boolean {
+    const byId = new Map(snapshot.map((r) => [r.id, r]));
+    for (const row of this.rowsBetween(snapshot.length === 0 ? upTo : snapshot[0].id - 1, upTo)) {
+      const seen = byId.get(row.id);
+      if (seen === undefined || seen.role !== row.role || seen.content !== row.content) return false;
+    }
+    return true;
+  }
+
   /**
    * The id of the last row `plan.drop` covers, or null when the plan does not describe the oldest
    * prefix of the window as it stands now (rows deleted, a pointer moved by an earlier trim, a plan
@@ -313,3 +356,25 @@ export class HistoryStore implements HistoryPort, MetricsPort {
 }
 
 const noop = (): void => {};
+
+/**
+ * GC-1: splits rows into consecutive groups whose estimated tokens stay at or under `maxTokens`.
+ * A single row larger than the bound is its own group — it is never split or skipped.
+ */
+export function chunkByTokens<T extends { content: string }>(rows: T[], maxTokens: number): T[][] {
+  const out: T[][] = [];
+  let group: T[] = [];
+  let total = 0;
+  for (const row of rows) {
+    const cost = estimateTokens(row.content);
+    if (group.length > 0 && total + cost > maxTokens) {
+      out.push(group);
+      group = [];
+      total = 0;
+    }
+    group.push(row);
+    total += cost;
+  }
+  if (group.length > 0) out.push(group);
+  return out;
+}

@@ -1,4 +1,5 @@
 import { app, ipcMain, type BrowserWindow } from 'electron';
+import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   Channels, ERROR_HINTS, InvokeChannels,
@@ -26,6 +27,12 @@ import { boundedDetail, redactSecrets } from './redact';
 
 /** Mirrors the renderer's HINT_DEFAULT_TTL_MS (contracts.md §5.5); `hint:show` requires a ttl. */
 export const HINT_TTL_MS = 6000;
+/**
+ * GC-3: a history append failed (disk full, a closed handle). The reply was spoken, so this is not
+ * a §2.8 error code — `ErrorCode` has no `storage` member yet (amendment proposed) — but the user
+ * must know the line was not remembered. Phase 2 has no 设置 window, so nothing here names one.
+ */
+export const STORAGE_HINT_TEXT = '刚才那句没记住，硬盘好像写不进去';
 /** §6.6: a pause between characters must not flicker the listening pose. */
 const LISTENING_OFF_DEBOUNCE_MS = 250;
 /** §6.6's first message uses a turnId no TurnRunner ever issues; its playback echoes are dropped. */
@@ -55,6 +62,21 @@ export interface BrainServiceDeps {
   /** index.ts owns show/hide because bubble visibility must lose to VisibilityState (§5.4 rule 5). */
   setBubbleVisible(on: boolean): void;
   openKeyWindow(reason: KeyWindowReason): void;
+  /**
+   * GC-5: the probe for a LITERAL `key:test` (an unsaved key typed into the key window). Defaults
+   * to a real DeepSeekClient; tests inject a fake so no key:test can reach the network.
+   */
+  probeClient?(apiKey: string): ChatClient;
+}
+
+/** GC-5: a key is never compared or logged as itself — the first 16 hex chars of its sha-256. */
+function keyFingerprint(apiKey: string | null): string | null {
+  return apiKey === null ? null : createHash('sha256').update(apiKey).digest('hex').slice(0, 16);
+}
+
+interface KeyTestInFlight {
+  controller: AbortController;
+  settled: Promise<void>;
 }
 
 export class BrainService {
@@ -65,6 +87,15 @@ export class BrainService {
   private offRunner: Array<() => void> = [];
   private offKey: (() => void) | null = null;
   private lastTest: { ok: boolean; code?: ErrorCode; at: number } | null = null;
+  /**
+   * GC-5: bumped by every rebuildClient() (key change) and by dispose(). A key:test result is
+   * applied to the broadcast `lastTest` only when the generation it started in is still current
+   * AND the key it tested is the key stored now (by fingerprint) — a literal test of an unsaved
+   * key, or a test that outlived a rotation, is returned to its caller and nothing else.
+   */
+  private keyGen = 0;
+  /** GC-6: every in-flight key:test; rebuildClient() and dispose() abort them, dispose() drains them. */
+  private readonly keyTests = new Set<KeyTestInFlight>();
   private listeningTimer: NodeJS.Timeout | null = null;
   private bubbleTimer: NodeJS.Timeout | null = null;
   /** The last `bubble:hover` value: pointer inside the bubble/hint DOM (§5.4 rule 4, §5.2's box). */
@@ -135,13 +166,32 @@ export class BrainService {
 
     handleInvoke(InvokeChannels.keyTest, key, async ({ apiKey }) => {
       // With an apiKey: test that literal key. Without: test the stored one (contracts.md §2.4).
-      const probe: ChatClient | null = apiKey ? new DeepSeekClient({ apiKey }) : this.client;
+      const literal = apiKey ? apiKey : null;
+      const probe: ChatClient | null = literal !== null ? this.makeProbe(literal) : this.client;
       if (!probe) {
+        if (this.disposed) return { ok: false as const, code: 'no-key' as const, message: ERROR_HINTS['no-key'].text };
         this.lastTest = { ok: false, code: 'no-key', at: Date.now() };
         this.refreshKeyStatus();
         return { ok: false as const, code: 'no-key' as const, message: ERROR_HINTS['no-key'].text };
       }
-      const res = await probe.testKey();
+      // GC-5 / GC-6: stamp the generation and the tested key's fingerprint BEFORE the await; track
+      // the controller so a key change or dispose() can abort it, and the promise so dispose() drains it.
+      const gen = this.keyGen;
+      const tested = keyFingerprint(literal ?? keyStore.get());
+      const controller = new AbortController();
+      const run = probe.testKey(controller.signal);
+      const entry: KeyTestInFlight = { controller, settled: run.then(() => undefined, () => undefined) };
+      this.keyTests.add(entry);
+      let res: Awaited<typeof run>;
+      try {
+        res = await run;
+      } catch (err) {
+        res = { ok: false, code: 'network', message: err instanceof Error ? err.message : String(err) };
+      } finally {
+        this.keyTests.delete(entry);
+      }
+      if (this.disposed || gen !== this.keyGen) return res; // stale: the caller gets its answer, the status does not
+      if (tested !== keyFingerprint(keyStore.get())) return res; // an unsaved literal key never describes the stored one
       this.lastTest = res.ok ? { ok: true, at: Date.now() } : { ok: false, code: res.code, at: Date.now() };
       this.refreshKeyStatus();
       return res;
@@ -242,6 +292,16 @@ export class BrainService {
   /** The live client, rebuilt on every key change. The summarizer closure reads it through this. */
   currentClient(): ChatClient | null {
     return this.client;
+  }
+
+  private makeProbe(apiKey: string): ChatClient {
+    return this.deps.probeClient ? this.deps.probeClient(apiKey) : new DeepSeekClient({ apiKey });
+  }
+
+  /** GC-5 / GC-6: no key:test result started before this call may describe the key stored from now on. */
+  private invalidateKeyTests(): void {
+    this.keyGen += 1;
+    for (const t of this.keyTests) t.controller.abort();
   }
 
   /**
@@ -375,9 +435,13 @@ export class BrainService {
     // The runner's listeners stay attached through the cancel so the windows still get the
     // turnDone/idle the retire emits. `TurnRunner.cancel(): Promise<void>` (BRAIN lane) resolves
     // after retire's writes settle; awaiting a `void` from an older turn.ts is harmless.
+    // GC-6: in-flight key tests are aborted and their settlement is part of the bounded drain, so
+    // none of them can run its continuation against a closing window.
+    this.invalidateKeyTests();
     await this.runner?.cancel();
     await this.retiring;
     this.retiring = null;
+    await Promise.all([...this.keyTests].map((t) => t.settled));
     // G2-2: a summarisation the retire (or an earlier turn) started is still on the wire; its
     // commit must land before index.ts closes the db, or be fenced by `HistoryStore.close()`.
     await this.deps.store.trimSettled();
@@ -389,8 +453,10 @@ export class BrainService {
   // ---------------------------------------------------------------------------------------
 
   private rebuildClient(): void {
-    // §2.3's pinned rule (M-7): `lastTest` describes the key stored NOW; a key change invalidates it.
+    // §2.3's pinned rule (M-7): `lastTest` describes the key stored NOW; a key change invalidates it —
+    // and (GC-5) so is every test still in flight: aborted, and its result kept off the status.
     this.lastTest = null;
+    this.invalidateKeyTests();
     // A22: no turn in flight survives a key change — it is cancelled first.
     void this.runner?.cancel();
     for (const off of this.offRunner) off();
@@ -473,6 +539,24 @@ export class BrainService {
     );
 
     this.offRunner.push(runner.on('error', (p) => this.reportError(p)));
+    this.offRunner.push(runner.on('persistFailed', (p) => this.reportPersistFailed(runner, p)));
+  }
+
+  /**
+   * GC-3: the row is missing and nothing may claim otherwise — the log gets the label plus a
+   * bounded, redacted detail, the bubble gets the storage hint. During a turn the playback still
+   * owns the window-level hide (the hint rides along); when idle the hint owns it, as reportError's.
+   */
+  private reportPersistFailed(runner: TurnRunner, p: { turnId: string; label: string; message: string }): void {
+    if (this.disposed) return;
+    console.warn('[brain] history write failed (%s) turn=%s detail=%s', p.label, p.turnId, boundedDetail(p.message));
+    const { bubble } = this.deps;
+    if (runner.state === 'idle') {
+      this.cancelBubbleHide();
+      this.showBubble();
+    }
+    sendTo(bubble, Channels.hintShow, { text: STORAGE_HINT_TEXT, level: 'warn', ttlMs: HINT_TTL_MS });
+    if (runner.state === 'idle') this.scheduleBubbleHide(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
   }
 
   private reportError(p: { turnId?: string; code: ErrorCode; message: string }): void {
