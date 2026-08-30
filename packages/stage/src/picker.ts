@@ -79,6 +79,12 @@ export interface PickSurface {
   getBoundingClientRect(): { left: number; top: number; width: number; height: number };
 }
 
+/**
+ * How `Picker` maps a UV to texel coordinates. `'contract'` is §6.2 step 6 verbatim and is the only
+ * value production uses; `'texel-center'` exists so §6.5's oracle can measure the GL-correct form.
+ */
+export type TexelSampling = 'contract' | 'texel-center';
+
 const EMPTY: PickResult = { alpha: 0, part: null, modelX: 0, modelY: 0 };
 
 export class Picker {
@@ -93,6 +99,13 @@ export class Picker {
     private readonly map: PickerMap,
     private readonly textures: readonly ImageData[],
     private readonly surface: PickSurface,
+    /**
+     * ORACLE ONLY. `'contract'` (the default, and the only value production ever uses) is §6.2 step 6
+     * verbatim: `u -> u * (W - 1)`. `'texel-center'` is GL's LINEAR mapping `u -> u * W - 0.5`, which
+     * the reference framebuffer was actually rendered with; §6.5's oracle measures both so a controller
+     * can see whether the half-texel inward bias moves the R3-6e gate before §6.2 step 6 is amended.
+     */
+    private readonly sampling: TexelSampling = 'contract',
   ) {}
 
   /** Invalidated by a texture reload or a model swap. */
@@ -229,13 +242,21 @@ export class Picker {
     return 0;
   }
 
-  /** u -> px = u * (w - 1); v is bottom-up (GL) while ImageData is top-down -> py = (1 - v) * (h - 1). */
+  /**
+   * u -> px = u * (w - 1); v is bottom-up (GL) while ImageData is top-down -> py = (1 - v) * (h - 1).
+   * Under `sampling: 'texel-center'` the GL-correct `u * W - 0.5` form is used instead (oracle only).
+   */
   private bilinearAlpha(textureIndex: number, u: number, v: number): number {
     const img = this.textures[textureIndex];
     if (!img) return 0;
     const W = img.width, H = img.height, d = img.data;
-    const px = Math.min(Math.max(u, 0), 1) * (W - 1);
-    const py = (1 - Math.min(Math.max(v, 0), 1)) * (H - 1);
+    const uc = Math.min(Math.max(u, 0), 1), vc = Math.min(Math.max(v, 0), 1);
+    const px = this.sampling === 'texel-center'
+      ? Math.min(Math.max(uc * W - 0.5, 0), W - 1)
+      : uc * (W - 1);
+    const py = this.sampling === 'texel-center'
+      ? Math.min(Math.max((1 - vc) * H - 0.5, 0), H - 1)
+      : (1 - vc) * (H - 1);
     const x0 = Math.floor(px), y0 = Math.floor(py);
     const x1 = Math.min(x0 + 1, W - 1), y1 = Math.min(y0 + 1, H - 1);
     const fx = px - x0, fy = py - y0;

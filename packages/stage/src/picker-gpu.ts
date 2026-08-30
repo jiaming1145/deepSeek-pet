@@ -1,5 +1,5 @@
 import type { CubismMatrix44 } from '@framework/math/cubismmatrix44';
-import { ENTER_ALPHA, PART_ATTRIBUTION_MIN, type PickResult, type Picker, type PickSource } from './picker';
+import { ENTER_ALPHA, PART_ATTRIBUTION_MIN, type PickerMap, type PickResult, type Picker, type PickSource } from './picker';
 
 export interface PendingPress { pressId: number; deviceX: number; deviceY: number }
 export interface PressRead { pressId: number; alpha: number }
@@ -196,6 +196,8 @@ export class FboPicker {
   private sync: WebGLSync | null = null;
   private w = 0; private h = 0;
   private lastReadMs = -Infinity;
+  /** Throttles the redraw to the readback clock: §6.1 budgets ONE quarter-scale pass per FBO_REFRESH_MS. */
+  private lastCaptureMs = -Infinity;
   private forceCapture = true;
   private readonly mask: { data: Uint8Array; w: number; h: number } = { data: new Uint8Array(0), w: 0, h: 0 };
   private disposed = false;
@@ -204,13 +206,20 @@ export class FboPicker {
     private readonly model: { draw(p: CubismMatrix44, fb: WebGLFramebuffer | null, vp: number[]): void },
     private readonly meshPicker: Picker,
     private readonly surface: { width: number; height: number; getBoundingClientRect(): { left: number; top: number; width: number; height: number } },
+    /** §6.4's map: the fallback needs `hitPartDefault` and must not reach into `Picker`'s private state. */
+    private readonly map: PickerMap,
   ) {}
 
   /** Forced re-capture on motion start and resize(). */
   invalidate(): void { this.forceCapture = true; }
 
-  /** Called from Live2DStage.frame(): re-draws the model into the quarter-scale FBO. */
-  capture(gl: WebGL2RenderingContext, projection: CubismMatrix44): void {
+  /**
+   * Called from Live2DStage.frame(): re-draws the model into the quarter-scale FBO. Throttled to the
+   * readback clock (`nowMs`, the same `performance.now()` `poll()` gets) so §6.1's budget of one
+   * quarter-scale pass per FBO_REFRESH_MS holds; without it every frame after a completed fence would
+   * pay a whole extra model.draw(). `invalidate()` still forces the next call through.
+   */
+  capture(gl: WebGL2RenderingContext, projection: CubismMatrix44, nowMs: number): void {
     if (this.disposed) return;
     const w = Math.max(1, Math.round(this.surface.width * FBO_SCALE)), h = Math.max(1, Math.round(this.surface.height * FBO_SCALE));
     if (!this.fbo || w !== this.w || h !== this.h) {
@@ -221,12 +230,15 @@ export class FboPicker {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.tex, 0);
       this.pbo = gl.createBuffer(); this.w = w; this.h = h; this.forceCapture = true;
     }
-    if (!this.forceCapture && this.sync) return; // a readback is in flight; keep the FBO stable
+    // A readback in flight must see a stable FBO, and outside that window the redraw is throttled to
+    // the readback clock: one quarter-scale pass per FBO_REFRESH_MS, not one per frame.
+    if (!this.forceCapture && (this.sync !== null || nowMs - this.lastCaptureMs < FBO_REFRESH_MS)) return;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     this.model.draw(projection, this.fbo, [0, 0, w, h]);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.forceCapture = false;
+    this.lastCaptureMs = nowMs;
   }
 
   /** Starts an async readback if none is in flight and FBO_REFRESH_MS has elapsed; completes a finished one. */
@@ -265,7 +277,7 @@ export class FboPicker {
     const x = Math.min(w - 1, Math.max(0, Math.floor(((clientX - r.left) / r.width) * w)));
     const y = Math.min(h - 1, Math.max(0, Math.floor(((clientY - r.top) / r.height) * h)));
     const alpha = data[((h - 1 - y) * w + x) * 4 + 3];
-    const part = alpha >= ENTER_ALPHA ? (mesh.part ?? this.meshPicker['map'].hitPartDefault) : null;
+    const part = alpha >= ENTER_ALPHA ? (mesh.part ?? this.map.hitPartDefault) : null;
     return { alpha, part, modelX: mesh.modelX, modelY: mesh.modelY };
   }
 
