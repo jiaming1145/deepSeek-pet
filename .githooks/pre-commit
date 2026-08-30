@@ -18,7 +18,7 @@ offenders=$(git diff --cached --name-only --diff-filter=ACMR -z \
 
 if [ -n "$offenders" ]; then
   echo "pre-commit: refusing to commit content that looks like an API key (sk-...) in:" >&2
-  printf '  %s\n' $offenders >&2
+  printf '%s\n' "$offenders" | sed 's/^/  /' >&2
   exit 1
 fi
 exit 0
