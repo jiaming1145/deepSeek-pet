@@ -49,6 +49,19 @@ describe('BehaviorSelector', () => {
     expect(new Set(started).size).toBeGreaterThanOrEqual(4);
   });
   it('cooldown is measured from the behaviour\'s own last START, not its finish', () => {
+    // The pack is large enough that recency rotates past `only` while it cools, so the boundary is
+    // observable on trace.eligible: excluded at 24 000 (start + cooldown = 30 000 not yet reached),
+    // admitted at 30 000. Stamping the cooldown in finish() (6000 + 30 000) or dropping cooldowns
+    // altogether each break one of the two assertions. Fix round 2, finding 1.
+    const pack = packOf([b({ id: 'only', cooldownMs: 30_000 }), b({ id: 's1' }), b({ id: 's2' }), b({ id: 's3' }), b({ id: 's4' })]);
+    const sel = new BehaviorSelector({ pack, rng: scripted([0]), map: mapAt(0.3) });
+    expect(sel.select(FACTS, 0)!.behavior.id).toBe('only');
+    sel.finish('only', 6000, 'completed');
+    for (const t of [6000, 12_000, 18_000]) sel.select(FACTS, t);
+    expect(sel.select(FACTS, 24_000)!.trace.eligible).not.toContain('only');
+    expect(sel.select(FACTS, 30_000)!.trace.eligible).toContain('only');
+  });
+  it('holds rather than repeat the id just started, even once it has cooled (D1)', () => {
     const pack = packOf([b({ id: 'only', cooldownMs: 30_000 })]);
     const sel = new BehaviorSelector({ pack, rng: mulberry32(1), map: mapAt(0.3) });
     expect(sel.select(FACTS, 0)!.behavior.id).toBe('only');
