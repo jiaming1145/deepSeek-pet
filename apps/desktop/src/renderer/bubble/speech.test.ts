@@ -184,6 +184,36 @@ describe('SpeechController', () => {
     expect(h.bubble.visible).toBe(false);
   });
 
+  it('hover-then-leave during the linger re-arms a full LINGER_MS (I-11)', () => {
+    h.speech.onState({ state: 'thinking', turnId: 't1' });
+    h.speech.onSentence(ev());
+    h.speech.onTurnDone({ turnId: 't1' });
+    h.clock.advance(140); // reveal done, linger armed at t=140
+    h.clock.advance(1000);
+    h.speech.setPinned(true); // hover at +1.0 s
+    h.clock.advance(500);
+    h.speech.setPinned(false); // leave at +1.5 s, well before the original deadline
+    h.clock.advance(LINGER_MS - 1);
+    expect(h.bubble.visible).toBe(true);
+    h.clock.advance(1);
+    expect(h.bubble.visible).toBe(false);
+  });
+
+  it('active is true from the first sentence through the linger, false once hidden (I-6)', () => {
+    expect(h.speech.active).toBe(false);
+    h.speech.onState({ state: 'thinking', turnId: 't1' });
+    expect(h.speech.active).toBe(true);
+    h.speech.onSentence(ev());
+    h.speech.onTurnDone({ turnId: 't1' });
+    h.clock.advance(140);
+    expect(h.speech.active).toBe(true); // finished, lingering
+    h.clock.advance(LINGER_MS);
+    expect(h.speech.active).toBe(false);
+    h.speech.onState({ state: 'thinking', turnId: 't2' });
+    h.speech.onError({ code: 'network', message: 'x' });
+    expect(h.speech.active).toBe(false);
+  });
+
   it('drops the oldest sentence when the text node overflows', () => {
     Object.defineProperty(h.text, 'clientHeight', { value: 156, configurable: true });
     Object.defineProperty(h.text, 'scrollHeight', { value: 156, configurable: true });

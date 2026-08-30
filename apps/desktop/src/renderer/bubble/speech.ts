@@ -58,6 +58,8 @@ export class SpeechController {
   private gen = 0;
   private handle: number | null = null;
   private hideAt: number | null = null;
+  /** Bumped every time the linger is (re)armed; a stale hide callback compares it and returns. */
+  private hideArm = 0;
   private waiters: Array<() => void> = [];
 
   constructor(deps: SpeechDeps) {
@@ -147,6 +149,15 @@ export class SpeechController {
     }
     this.setMouth(false);
     if (this.turnEnded) this.finishTurn();
+  }
+
+  /**
+   * True while there is something on the band: a turn that is still revealing, or one that has
+   * finished and is lingering. bubble/main.ts reads it on a hidden->shown `shell:visibility` edge
+   * to decide whether the band element must be re-shown (I-6).
+   */
+  get active(): boolean {
+    return this.turnId !== null && (!this.finished || this.hideAt !== null);
   }
 
   /** Pointer state from bubble/main.ts: hover only defers the hide. */
@@ -255,8 +266,13 @@ export class SpeechController {
 
   private scheduleHide(): void {
     if (this.hideAt === null) return;
+    // Each arm invalidates the previous one. `setPinned(false)` re-arms without going through
+    // `cancelPending()` (that would also kill an in-flight reveal), so without this token the
+    // ORIGINAL hide timer still fires at the original deadline and the re-armed linger is ignored.
+    const armed = ++this.hideArm;
     const left = Math.max(0, this.hideAt - this.now());
     this.schedule(left, () => {
+      if (armed !== this.hideArm) return;
       if (this.hideAt === null || this.bubble.pinned) return;
       this.hideAt = null;
       this.bubble.setAwaiting(false);
