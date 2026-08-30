@@ -33,6 +33,7 @@ later be mistaken for an oversight. Sources: `.superpowers/sdd/2026-08-29-phase2
 | Bubble inside the pet window (final-review carry 7) | Phase 3/4 architecture decision | R3 gave the band its own `BrowserWindow`; one window with three surfaces (or `backgroundThrottling` on the hidden ones) is the alternative the 750 MB shortfall row names. Decide with the resource budget, not as a tuning knob. |
 | `metrics` table retention (final-review carry 8) | Phase 4 metrics tab | The spec names no retention for `MetricsRecord` rows; `usage` is logged per turn and nothing prunes it. Decide when the metrics tab lands. |
 | Typechecking `apps/desktop/tests-e2e/**` | Not done | That directory sits outside every tsconfig `include`, like the Phase 1 `tests/` directory: `apps/desktop/tsconfig.json` is `"lib": ["ES2022"]` with no `DOM`, and the specs call `page.evaluate(() => document…)`. Playwright transpiles them itself. A second tsconfig with `"lib": ["ES2022","DOM"]` would fix it and was not added. |
+| `app://local` `serveRenderer` does not preserve HEAD / Range (gpt-review-2 **G2-8**) | Phase 4 packaging | `app-protocol.ts`'s `serveRenderer` answers a HEAD or `Range:` request with the plain GET body and status; no consumer needs ranges today (the renderers are small static files and `<audio>`/`<video>` are not used), so nothing breaks, but the handler is not a faithful static server. Fix with the packaging pass: 204-style empty body for HEAD, `206` + `Content-Range` for a single byte range. |
 
 ## Recorded deviations from the addendum
 
