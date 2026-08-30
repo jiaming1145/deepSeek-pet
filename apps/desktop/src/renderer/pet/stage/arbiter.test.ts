@@ -356,6 +356,49 @@ describe('Arbiter — fix round 1', () => {
     expect(h.arb.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'drag' });
   });
 
+  it('a behaviour re-entered from a behaviour end is refused, and the end sees all three lanes settled (fix round 2, finding 1)', () => {
+    // The runner's `onEnd` calls `decide()` synchronously, and behaviour-vs-behaviour is EQUAL rank,
+    // so a re-entrant command would be granted — winning three lanes the command in flight is about
+    // to overwrite two of, leaving the body playing one behaviour and expression/gaze another.
+    const h = harness();
+    const ended: string[] = [];
+    let reentered: boolean | null = null;
+    let lanesAtEnd: { lane: string; source: string | null; generation: number }[] = [];
+    h.arb.onBehaviourResult((id, result) => {
+      ended.push(`${id}:${result}`);
+      lanesAtEnd = h.arb.lanes();
+      if (reentered === null) reentered = h.behaviour('yawn');
+    });
+    h.behaviour('stretch');
+    h.behaviour('doze');                                   // equal rank: pre-empts `stretch`
+    expect(ended).toEqual(['stretch:preempted']);
+    expect(reentered).toBe(false);
+    // The end was delivered with `doze` installed on ALL THREE lanes (generation 2 everywhere), not
+    // after the body grant alone.
+    expect(lanesAtEnd.map((l) => `${l.lane}:${l.source}:${l.generation}`))
+      .toEqual(['body:behaviour:2', 'expression:behaviour:2', 'gaze:behaviour:2']);
+    // `yawn` took nothing: six behaviour grants (three each for stretch and doze) and three refusals.
+    expect(h.traces.filter((t) => t.kind === 'laneGrant' && t.source === 'behaviour')).toHaveLength(6);
+    expect(h.traces.filter((t) => t.kind === 'laneResult' && t.source === 'behaviour' && t.id === 'yawn')
+      .map((t) => `${t.lane}:${t.result}:${t.generation}`))
+      .toEqual(['body:preempted:null', 'expression:preempted:null', 'gaze:preempted:null']);
+    expect(h.arb.lanes().map((l) => `${l.lane}:${l.source}:${l.generation}`))
+      .toEqual(['body:behaviour:2', 'expression:behaviour:2', 'gaze:behaviour:2']);
+  });
+
+  it('mayTake() answers for all three lanes without touching them (fix round 2, finding 3)', () => {
+    const h = harness();
+    expect(h.arb.mayTake('behaviour')).toBe(true);
+    h.behaviour('stretch');
+    expect(h.arb.mayTake('behaviour')).toBe(true);          // equal rank: a boundary may re-decide
+    h.arb.llm({ expression: 'F01', motion: ['TapBody', 1], look: null, emotion: 'happy' }, 0);
+    expect(h.arb.mayTake('behaviour')).toBe(false);
+    expect(h.arb.mayTake('touch')).toBe(true);
+    const before = h.traces.length;
+    expect(h.arb.mayTake('behaviour')).toBe(false);
+    expect(h.traces).toHaveLength(before);                  // a probe is not a command: no records
+  });
+
   it('a refused behaviour reports `preempted` on the lanes that refused it (finding 5)', () => {
     const h = harness();
     h.arb.llm({ expression: 'F01', motion: ['TapBody', 1], look: null, emotion: 'happy' }, 0);
