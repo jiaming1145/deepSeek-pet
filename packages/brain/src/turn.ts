@@ -485,7 +485,11 @@ export class TurnRunner {
       writes.push(this.commitAssistant(turn));
     }
     await Promise.all(writes);
-    if (this.abandoned(turn)) return; // retire() already reported this turn
+    // A send()/cancel() during the writes retired this turn only if it was NOT settled above;
+    // retire() then already emitted turnDone + metrics. A settled turn superseded meanwhile
+    // (current !== turn, not interrupted) still owes its terminal report (§3.11) — finish()
+    // is safe there: toIdle() no-ops for a non-current turn.
+    if (turn.reported) return;
     await this.finish(turn, null);
   }
 
@@ -546,7 +550,9 @@ export class TurnRunner {
   /** A DeepSeekError gets `error` + a MetricsRecord and NO turnDone (§3.11.5). */
   private async fail(turn: Turn, err: unknown): Promise<void> {
     if (err instanceof CancelledError) return;
-    if (turn.settled || this.abandoned(turn)) return;
+    // A turn that already reported (turnDone out, e.g. a listener threw inside finish()) is a
+    // completed turn, never an error: no `error` event, no second MetricsRecord.
+    if (turn.settled || turn.reported || this.abandoned(turn)) return;
     turn.settled = true;
     const failure =
       err instanceof DeepSeekError
