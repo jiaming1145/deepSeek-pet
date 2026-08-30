@@ -1,4 +1,4 @@
-import type { ErrorCode, LintResult } from '@ds/protocol';
+import type { ErrorCode, LintResult, LintRule } from '@ds/protocol';
 import { CancelledError, DeepSeekError } from './deepseek.ts';
 import type { ChatClient, ChatRequest } from './deepseek.ts';
 import type { HistoryPort, MessageKind, MetricsPort, MetricsRecord } from './ports.ts';
@@ -55,6 +55,9 @@ type SentenceVerdict = 'accepted' | 'dropped' | 'regenerate';
 
 const cleanLint = (): LintResult => ({ violations: [], severity: 'none' });
 
+/** The tail rules whose violation lives in the final (pending, unpainted) sentence itself (I-3). */
+const LAST_SENTENCE_RULES: ReadonlySet<LintRule> = new Set<LintRule>(['closing-moral', 'question-streak']);
+
 interface Turn {
   id: string;
   kind: MessageKind;
@@ -77,6 +80,8 @@ interface Turn {
   usage: Usage | null;
   regenerated: boolean;
   emptyRetried: boolean;
+  /** True once any sentence of the current attempt reached consider() — gates the A23 strip (M-1). */
+  consideredAny: boolean;
   lastLint: LintResult;
   commit: Promise<void> | null;
   committed: boolean;
@@ -168,6 +173,7 @@ export class TurnRunner {
       usage: null,
       regenerated: false,
       emptyRetried: false,
+      consideredAny: false,
       lastLint: cleanLint(),
       commit: null,
       committed: false,
@@ -291,7 +297,16 @@ export class TurnRunner {
             this.resetAttempt(turn);
             continue;
           }
-          turn.pending = null; // strip, never keep-and-mark (D6)
+          // I-3: only a last-sentence rule may delete the pending sentence — it is the offender.
+          // Reply-scope rules (ellipsis, ellipsis-rate, affect-rate, emoji-rate, opener-repeat,
+          // repetition) describe text that is already painted; their verdict stays in lastLint/metrics.
+          // `ellipsis` (more than one …… in the reply) strips only when the pending sentence carries
+          // one itself: removing it then repairs the violation, so it is an offender.
+          const pendingText = turn.pending.text;
+          const offender = tail.violations.some(
+            (v) => LAST_SENTENCE_RULES.has(v.rule) || (v.rule === 'ellipsis' && pendingText.includes('……')),
+          );
+          if (offender) turn.pending = null; // strip, never keep-and-mark (D6)
         }
       }
 
@@ -336,7 +351,8 @@ export class TurnRunner {
 
   /** §3.11.2 steps 1-6, in order. */
   private consider(turn: Turn, ev: SentenceEvent): SentenceVerdict {
-    const display = sanitizeForDisplay(ev.text);
+    const display = sanitizeForDisplay(ev.text, { leadingNumber: !turn.consideredAny });
+    turn.consideredAny = true;
     if (display === '') return 'dropped';
 
     const result = this.lintEnabled ? lintSentence(ev.text, turn.ctx) : cleanLint();
@@ -376,6 +392,7 @@ export class TurnRunner {
   private resetAttempt(turn: Turn): void {
     turn.parser = new StreamParser(turn.id);
     turn.pending = null;
+    turn.consideredAny = false;
     turn.rawStream = '';
     turn.rawKept = '';
     turn.ttftMs = null;
