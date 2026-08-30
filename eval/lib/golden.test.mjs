@@ -50,7 +50,8 @@ async function runAll() {
 test('the shipped fixture satisfies R8 and its own mix', () => {
   const v = validateFixture(fixture);
   assert.equal(v.ok, true, v.message);
-  assert.equal(fixture.prompts.length, 46);
+  // Phase 2 shipped 46; Phase 3 §13.2 adds the 12 `trait-NN` E-3 probes (mix.trait = 12).
+  assert.equal(fixture.prompts.length, 58);
 });
 
 test('the shipped card and the whole static block each fit their own budget', () => {

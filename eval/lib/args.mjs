@@ -15,17 +15,21 @@ export const USAGE = `node eval/run.mjs [options]
   --concurrency <n>     默认 4
   --out <dir>           默认 eval/out
   --seed <n>            默认 1
+  --persona <id>        eval/personas/<id>.json 的角色卡，默认 haru（§9.6）
+  --suite <name>        memory-recall（§8.11）或 persona-bleed（§9.6 A8）；不带则跑标准 fixture
+  --sessions <n>        memory-recall 的会话数，默认 5
 
 退出码：0 = 所有生效的门槛都过了，1 = 有门槛没过（报告照样写），2 = 用法或配置错误。`;
 
-const INT_FLAGS = new Set(['--runs', '--limit', '--concurrency', '--seed']);
-const STR_FLAGS = new Set(['--fixture', '--character', '--model', '--judge', '--out']);
+const INT_FLAGS = new Set(['--runs', '--limit', '--concurrency', '--seed', '--sessions']);
+const STR_FLAGS = new Set(['--fixture', '--character', '--model', '--judge', '--out', '--persona', '--suite']);
 
 export function parseArgs(argv) {
   const opts = {
     dry: false, ablation: false, fixture: null, character: null, runs: 3, limit: null,
     model: DEEPSEEK_MODEL, judge: DEEPSEEK_JUDGE_MODEL, noJudge: false,
     concurrency: 4, out: null, seed: 1,
+    persona: 'haru', suite: null, sessions: 5,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -43,11 +47,17 @@ export function parseArgs(argv) {
         if (a === '--runs') opts.runs = n;
         else if (a === '--limit') opts.limit = n;
         else if (a === '--concurrency') opts.concurrency = n;
+        else if (a === '--sessions') opts.sessions = n;
         else opts.seed = n;
       } else if (a === '--fixture') opts.fixture = v;
       else if (a === '--character') opts.character = v;
       else if (a === '--model') opts.model = v;
       else if (a === '--judge') opts.judge = v;
+      else if (a === '--persona') opts.persona = v;
+      else if (a === '--suite') {
+        if (v !== 'memory-recall' && v !== 'persona-bleed') return { ok: false, message: `--suite 只能是 memory-recall 或 persona-bleed，收到 ${v}\n\n${USAGE}` };
+        opts.suite = v;
+      }
       else opts.out = v;
       continue;
     }
