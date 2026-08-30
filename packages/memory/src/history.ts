@@ -12,7 +12,7 @@ import type {
   TrimPlan,
 } from '@ds/brain';
 import type { HistoryRow } from '@ds/protocol';
-import { KV_LAST_TRIM_ID, getKv, setKv } from './db.ts';
+import { KV_LAST_TRIM_ID, readKvInt, setKv } from './db.ts';
 import { sanitizeMemoryText, type RunningSummary } from './summary.ts';
 
 /**
@@ -61,6 +61,10 @@ export class HistoryStore implements HistoryPort, MetricsPort {
   private readonly summarize: Summarize;
   private readonly maxTokens: number;
   private readonly now: () => number;
+  /** G2-2: set by `close()`; every post-await continuation returns without touching the db. */
+  private closed = false;
+  /** G2-3: one trim in flight per store; null when idle. `trimSettled()` hands it out. */
+  private inFlight: Promise<void> | null = null;
 
   constructor(opts: HistoryStoreOptions) {
     this.db = opts.db;
@@ -72,20 +76,23 @@ export class HistoryStore implements HistoryPort, MetricsPort {
 
   // ---- HistoryPort -------------------------------------------------------
 
+  /**
+   * G2-2: closing fence. Called by index.ts before `db.close()`; a summariser that resolves after
+   * this (the quit's drain timed out on it) finds `closed` and writes nothing, instead of throwing
+   * ERR_INVALID_STATE into a closed handle.
+   */
+  close(): void {
+    this.closed = true;
+  }
+
+  /** G2-2: resolves once every trim admitted so far has settled. `BrainService.dispose()` awaits it. */
+  trimSettled(): Promise<void> {
+    return this.inFlight ?? Promise.resolve();
+  }
+
   /** Rows after the last trim point, oldest first. kind='system' rows are included: the user saw them. */
   window(): Promise<ChatMessage[]> {
-    const rows = this.db
-      .prepare('SELECT role, content FROM messages WHERE id > ? ORDER BY id ASC')
-      .all(this.lastTrimId()) as Array<{ role: Role; content: string }>;
-    const msgs: ChatMessage[] = rows.map((r) => ({ role: r.role, content: r.content }));
-
-    let total = msgs.reduce((n, m) => n + estimateTokens(m.content), 0);
-    let start = 0;
-    while (start < msgs.length && total > this.maxTokens) {
-      total -= estimateTokens(msgs[start].content);
-      start++;
-    }
-    return Promise.resolve(msgs.slice(start));
+    return Promise.resolve(this.visibleRows(this.lastTrimId()).map((r) => ({ role: r.role, content: r.content })));
   }
 
   summary(): Promise<string> {
@@ -131,24 +138,39 @@ export class HistoryStore implements HistoryPort, MetricsPort {
    * — the new summary and the new trim point — run inside one. Dropped rows are
    * never deleted: last_trim_id is what excludes them from the prompt window, and
    * the history pane still shows them (X5).
+   *
+   * G2-3 / CX-4: trims are SERIALISED — one in flight per store. A second plan admitted while a
+   * summarisation is on the wire (a superseded turn's) waits for the first to settle, and then
+   * finds the table no longer matches it and aborts without writing, so two overlapping trims can
+   * never both commit and a stale summary can never overwrite a newer one.
    */
-  async onTrimNeeded(plan: TrimPlan): Promise<void> {
-    if (plan.drop.length === 0) return;
+  onTrimNeeded(plan: TrimPlan): Promise<void> {
+    if (plan.drop.length === 0) return Promise.resolve();
+    // An idle store starts NOW: `trim` runs synchronously up to its first await, so the snapshot and
+    // the cutoff are taken before the caller's next statement (I-10's guarantee). A busy store
+    // queues behind the in-flight trim.
+    const run = this.inFlight === null ? this.trim(plan) : this.inFlight.then(() => this.trim(plan));
+    // The tracked promise never rejects (a failed transaction must not poison the next trim); the
+    // caller's promise still does.
+    const settled = run.then(noop, noop);
+    this.inFlight = settled;
+    void settled.then(() => {
+      if (this.inFlight === settled) this.inFlight = null;
+    });
+    return run;
+  }
 
-    // plan.drop carries no row ids: it is the oldest prefix of the current window, so the new
-    // trim point is the plan.drop.length-th row with id > last_trim_id in ascending id order
-    // (contracts §4.3). If that query returns no row the plan no longer matches the table and
-    // NOTHING is written — neither the summary nor the pointer.
-    //
-    // I-10: resolved BEFORE the summarize await, while the table still matches the plan. A
-    // `history:delete` landing during the network call used to shift the row-count offset onto
-    // kept rows and move the pointer past turns that were never summarised. An id resolved now
-    // bounds `id >` correctly even if that very row is deleted before the transaction below.
-    const row = this.db
-      .prepare('SELECT id FROM messages WHERE id > ? ORDER BY id ASC LIMIT 1 OFFSET ?')
-      .get(this.lastTrimId(), plan.drop.length - 1) as { id: number } | undefined;
-    if (row === undefined) return;
-    const nextTrimId = row.id;
+  private async trim(plan: TrimPlan): Promise<void> {
+    if (this.closed) return;
+
+    // I-10 / CX-5: the trim point is the EXACT id of the last dropped row, resolved BEFORE the
+    // summarize await while the table still matches the plan — never `last_trim_id + drop.length`.
+    // `window()` may have safety-truncated the oldest rows (HISTORY_WINDOW_SAFETY_TOKENS), so
+    // plan.drop does not necessarily start at last_trim_id + 1; a length-derived pointer skipped
+    // every truncated row. The snapshot of last_trim_id is re-checked inside the transaction.
+    const base = this.lastTrimId();
+    const cutoff = this.resolveCutoff(base, plan);
+    if (cutoff === null) return; // the plan no longer matches the table: NOTHING is written
 
     let next: string;
     try {
@@ -160,11 +182,17 @@ export class HistoryStore implements HistoryPort, MetricsPort {
       );
       return;
     }
+    if (this.closed) return; // G2-2: the db is closing or closed under us
 
     this.db.exec('BEGIN');
     try {
+      if (this.lastTrimId() !== base) {
+        // Someone moved the pointer while the summary was on the wire: this plan is stale.
+        this.db.exec('ROLLBACK');
+        return;
+      }
       this.summaryStore.setSync(next); // caps at SUMMARY_TOKEN_CAP; synchronous by contract
-      setKv(this.db, KV_LAST_TRIM_ID, String(nextTrimId));
+      setKv(this.db, KV_LAST_TRIM_ID, String(cutoff));
       this.db.exec('COMMIT');
     } catch (err) {
       try {
@@ -248,6 +276,40 @@ export class HistoryStore implements HistoryPort, MetricsPort {
   // ---- internal ----------------------------------------------------------
 
   private lastTrimId(): number {
-    return Number(getKv(this.db, KV_LAST_TRIM_ID) ?? '0');
+    return readKvInt(this.db, KV_LAST_TRIM_ID);
+  }
+
+  /**
+   * The rows `window()` would return for a given trim point, WITH their ids: everything after the
+   * pointer, oldest first, then the same safety truncation from the oldest end.
+   */
+  private visibleRows(afterId: number): Array<{ id: number; role: Role; content: string }> {
+    const rows = this.db
+      .prepare('SELECT id, role, content FROM messages WHERE id > ? ORDER BY id ASC')
+      .all(afterId) as Array<{ id: number; role: Role; content: string }>;
+    let total = rows.reduce((n, r) => n + estimateTokens(r.content), 0);
+    let start = 0;
+    while (start < rows.length && total > this.maxTokens) {
+      total -= estimateTokens(rows[start].content);
+      start++;
+    }
+    return rows.slice(start);
+  }
+
+  /**
+   * The id of the last row `plan.drop` covers, or null when the plan does not describe the oldest
+   * prefix of the window as it stands now (rows deleted, a pointer moved by an earlier trim, a plan
+   * built from a window this store never produced). plan.drop carries no ids (contracts §4.3), so
+   * the match is by position, role and content.
+   */
+  private resolveCutoff(base: number, plan: TrimPlan): number | null {
+    const visible = this.visibleRows(base);
+    if (visible.length < plan.drop.length) return null;
+    for (let i = 0; i < plan.drop.length; i++) {
+      if (visible[i].role !== plan.drop[i].role || visible[i].content !== plan.drop[i].content) return null;
+    }
+    return visible[plan.drop.length - 1].id;
   }
 }
+
+const noop = (): void => {};
