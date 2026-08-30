@@ -88,11 +88,11 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 15358,
+                  "duration": 15867,
                   "errors": [],
                   "stdout": [
                     {
-                      "text": "[check] cold-profile first message (light): visible after 382 ms (bar <= 3000 ms)\n"
+                      "text": "[check] cold-profile first message (light): visible after 540 ms (bar <= 3000 ms)\n"
                     },
                     {
                       "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWZpcnN0LW1lc3NhZ2UtY29sZC5wbmcNCg=="
@@ -101,18 +101,18 @@
                       "text": "[check] placement (light): composer top at 68.6 % of the pet window (bar >= 55 %), x 2038 vs pet 2116\n"
                     },
                     {
-                      "text": "[check] band vs composer (light): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":104,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
+                      "text": "[check] band vs composer (light): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":116,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
                     },
                     {
                       "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLXBsYWNlbWVudC5wbmcNCg=="
                     },
                     {
-                      "buffer": "aWRsZTogY3B1PTAuOTMlIHdzPTc1Ny4yTUIgcHJvY3M9Nw0K"
+                      "buffer": "aWRsZTogY3B1PTEuMDklIHdzPTc0Ny4zTUIgcHJvY3M9Nw0K"
                     }
                   ],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T04:45:09.565Z",
+                  "startTime": "2026-08-30T08:24:21.455Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -141,22 +141,22 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1191,
+                  "duration": 1304,
                   "errors": [],
                   "stdout": [
                     {
-                      "text": "[check] cold-profile first message (dark): visible after 720 ms (bar <= 3000 ms)\n"
+                      "text": "[check] cold-profile first message (dark): visible after 751 ms (bar <= 3000 ms)\n"
                     },
                     {
                       "text": "[check] placement (dark): composer top at 68.6 % of the pet window (bar >= 55 %), x 2038 vs pet 2116\n"
                     },
                     {
-                      "text": "[check] band vs composer (dark): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":102,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
+                      "text": "[check] band vs composer (dark): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":114,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
                     }
                   ],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T04:45:24.944Z",
+                  "startTime": "2026-08-30T08:24:37.342Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -185,12 +185,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1362,
+                  "duration": 1337,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T04:45:26.141Z",
+                  "startTime": "2026-08-30T08:24:38.651Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -219,7 +219,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 48623,
+                  "duration": 48106,
                   "errors": [],
                   "stdout": [
                     {
@@ -235,13 +235,13 @@
                       "text": "[check] pointerleave re-arms the hide: PASS — the first message had armed a hide; while the pointer was on the band it never fired, and the band hid within 20 s of pointerleave: true\n"
                     },
                     {
-                      "text": "[check] band and composer never share a pixel: PASS — mid-reply, both windows visible: band {\"x\":2047,\"y\":1144,\"width\":125,\"height\":102,\"scaleFactor\":1.5}, composer {\"x\":1858,\"y\":1082,\"width\":360,\"height\":50,\"scaleFactor\":1.5}, pet.y 588. The band steps below the composer (contracts 5.3 step 6 / 6.1), so app-desktop.png carries both.\n"
+                      "text": "[check] band and composer never share a pixel: PASS — mid-reply, both windows visible: band {\"x\":2047,\"y\":1144,\"width\":125,\"height\":114,\"scaleFactor\":1.5}, composer {\"x\":1858,\"y\":1082,\"width\":360,\"height\":50,\"scaleFactor\":1.5}, pet.y 588. The band steps below the composer (contracts 5.3 step 6 / 6.1), so app-desktop.png carries both.\n"
                     },
                     {
                       "buffer": "Y2FwdHVyZWQgODE5eDExNTIgYXQgMjc1MSw4NDYgKGRjIG9mZnNldCAyNzUxLDg0NikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWRlc2t0b3AucG5nDQo="
                     },
                     {
-                      "buffer": "c3BlYWtpbmc6IGNwdT0xLjkyJSB3cz03NDYuNE1CIHByb2NzPTcNCg=="
+                      "buffer": "c3BlYWtpbmc6IGNwdT0yLjcyJSB3cz03NTAuMU1CIHByb2NzPTcNCg=="
                     },
                     {
                       "text": "[check] Escape mid-reply: chat stays open, history marks [中断]: PASS — 6.2 rule 4 (Escape while brainState !== idle cancels and does not close) and R2 (the history row keeps only the sentences whose playback:sentenceDone arrived, and carries the [中断] chip)\n"
@@ -255,11 +255,11 @@
                   "steps": [
                     {
                       "title": "hover holds the window interactive",
-                      "duration": 5023
+                      "duration": 5026
                     },
                     {
                       "title": "the bubble follows a drag of the pet",
-                      "duration": 13
+                      "duration": 14
                     },
                     {
                       "title": "display-removal reconciliation",
@@ -267,22 +267,22 @@
                     },
                     {
                       "title": "pointerleave re-arms the hide",
-                      "duration": 3431
+                      "duration": 3442
                     },
                     {
                       "title": "composited desktop shot while she is speaking",
-                      "duration": 36621
+                      "duration": 36451
                     },
                     {
                       "title": "Escape mid-reply cancels without closing, and history marks [中断]",
-                      "duration": 1807
+                      "duration": 1746
                     },
                     {
                       "title": "an abandoned IME composition is dismissed cleanly",
-                      "duration": 744
+                      "duration": 610
                     }
                   ],
-                  "startTime": "2026-08-30T04:45:27.511Z",
+                  "startTime": "2026-08-30T08:24:39.994Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -321,12 +321,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "skipped",
-                  "duration": 2,
+                  "duration": 1,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T04:46:16.145Z",
+                  "startTime": "2026-08-30T08:25:28.105Z",
                   "annotations": [
                     {
                       "type": "skip",
@@ -354,8 +354,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-08-30T04:45:09.234Z",
-    "duration": 66958.554,
+    "startTime": "2026-08-30T08:24:21.037Z",
+    "duration": 67100.295,
     "expected": 4,
     "skipped": 1,
     "unexpected": 0,
