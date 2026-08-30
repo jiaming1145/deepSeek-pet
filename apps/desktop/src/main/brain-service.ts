@@ -69,6 +69,8 @@ export class BrainService {
   private bubbleTimer: NodeJS.Timeout | null = null;
   /** The last `bubble:hover` value: pointer inside the bubble/hint DOM (§5.4 rule 4, §5.2's box). */
   private bubblePinned = false;
+  /** CX-6: the retire started by bubbleCrashed(); dispose() awaits it before the db closes. */
+  private retiring: Promise<void> | null = null;
   /** True while a window-level hide is owed for this turn but has not happened yet. */
   private hideOwed = false;
   private emittedThisTurn = 0;
@@ -317,11 +319,13 @@ export class BrainService {
     const runner = this.runner;
     if (runner) {
       const turnId = runner.turnId;
-      // `void`: the retire's writes are awaited by dispose() on quit, not here (I-9).
-      void runner.cancel();
-      // A turn whose stream already finished is settled — `cancel()` is a no-op on it — and sits in
-      // `speaking` until the bubble acknowledges the reveal, which a dead bubble never will. The
-      // acknowledgement is given on its behalf; its reply was fully written at settle time.
+      // Not awaited here: the retire's writes (shown prefix as [中断], metrics) are awaited by
+      // dispose() on quit through `retiring` (I-9) — a second `cancel()` on the already-settled
+      // turn resolves at once and would not cover them.
+      this.retiring = runner.cancel();
+      // CX-1: a turn whose stream already finished but whose reveal the bubble never acknowledged
+      // is retired by that cancel() exactly like a mid-stream one — history keeps only the shown
+      // prefix. A turn that was already acknowledged and settled just needs the idle transition.
       if (turnId !== null && runner.state !== 'idle') runner.turnShown(turnId);
     }
     this.firstMesPending = false;
@@ -372,6 +376,8 @@ export class BrainService {
     // turnDone/idle the retire emits. `TurnRunner.cancel(): Promise<void>` (BRAIN lane) resolves
     // after retire's writes settle; awaiting a `void` from an older turn.ts is harmless.
     await this.runner?.cancel();
+    await this.retiring;
+    this.retiring = null;
     // G2-2: a summarisation the retire (or an earlier turn) started is still on the wire; its
     // commit must land before index.ts closes the db, or be fenced by `HistoryStore.close()`.
     await this.deps.store.trimSettled();

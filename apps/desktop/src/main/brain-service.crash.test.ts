@@ -210,20 +210,29 @@ describe('CX-6: a bubble crash mid-playback, with the real TurnRunner', () => {
     expect(metrics.map((m) => m.turn_id)).toContain(turnId);
   });
 
-  it('after the stream settled: the runner is acknowledged on behalf of the dead bubble and reaches idle', async () => {
+  it('after the stream finished: the unacknowledged turn is retired with the shown prefix and the runner reaches idle', async () => {
     holdRest = false;
-    const { turnId } = await speakFirstSentence();
-    // The whole reply is in; the runner waits in `speaking` for a playback:turnDone that will never come.
-    await vi.waitFor(() => expect(store.list({}).some((r) => r.role === 'assistant' && r.turnId === turnId)).toBe(true));
+    const { turnId, text } = await speakFirstSentence();
+    // The whole reply is in (turnDone out); the runner waits in `speaking` for a playback:turnDone
+    // that will never come. CX-1: no assistant row exists yet — the full reply is written only once
+    // the bubble acknowledges the reveal.
+    await vi.waitFor(() =>
+      expect(chat.payloads<{ turnId: string }>(Channels.brainTurnDone).map((p) => p.turnId)).toContain(turnId));
+    expect(store.list({}).some((r) => r.role === 'assistant' && r.turnId === turnId)).toBe(false);
     expect(lastState()).toEqual({ state: 'speaking', turnId });
 
     service.bubbleCrashed();
 
     await vi.waitFor(() => expect(lastState()).toEqual({ state: 'idle', turnId }));
     expect(bubbleVisible.at(-1)).toBe(false);
-    const assistant = store.list({}).find((r) => r.role === 'assistant' && r.turnId === turnId)!;
-    expect(assistant.interrupted).toBe(false); // the reply was complete when it settled
-    expect(assistant.content).toBe(`${FIRST}${REST}`);
+    await vi.waitFor(() => {
+      const assistant = store.list({}).find((r) => r.role === 'assistant' && r.turnId === turnId);
+      expect(assistant).toBeDefined();
+      expect(assistant!.interrupted).toBe(true); // the user saw only the first sentence
+      expect(assistant!.content).toBe(text);
+    });
+    // turnDone was emitted once, at stream end — the retire never repeats it.
+    expect(chat.payloads<{ turnId: string }>(Channels.brainTurnDone).filter((p) => p.turnId === turnId)).toHaveLength(1);
     // The runner is free: a new turn is admitted and starts thinking.
     releaseRest();
     const res = (await invokeHandlers.get(InvokeChannels.userText)!({ text: '再来' })) as { ok: boolean; turnId: string };
