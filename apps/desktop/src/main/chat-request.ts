@@ -1,7 +1,7 @@
 import type { VisibilityFlag } from './visibility-state';
 
-/** Who asked for the chat — `chat:open`'s `source` plus main's own two entry points. */
-export type ChatRequestSource = 'pet' | 'bubble' | 'tray' | 'hotkey' | 'key';
+/** Who asked for the chat — `chat:open`'s `source` plus main's own three entry points. */
+export type ChatRequestSource = 'pet' | 'bubble' | 'tray' | 'hotkey' | 'key' | 'second-instance';
 
 /**
  * I-7: what to do with a chat request given the shell's current visibility.
@@ -24,4 +24,47 @@ const SYSTEM_FLAGS: readonly VisibilityFlag[] = ['locked', 'suspended', 'fullscr
 export function decideChatRequest(vis: { hidden: boolean; get(flag: VisibilityFlag): boolean }): ChatRequestDecision {
   if (!vis.hidden) return 'open';
   return SYSTEM_FLAGS.some((flag) => vis.get(flag)) ? 'refuse' : 'reveal';
+}
+
+export type ChatRequestFn = (source: ChatRequestSource, focusComposer: boolean) => void;
+
+export type LateBoundChatRequest = {
+  /** Forwarded once wired; before that, held as the ONE pending request (latest wins). */
+  request: ChatRequestFn;
+  /** Wire the real `requestChat`; a held request is replayed exactly once. */
+  bind(fn: ChatRequestFn): void;
+  readonly pending: { source: ChatRequestSource; focusComposer: boolean } | null;
+};
+
+/**
+ * GC2-2: `second-instance` is registered at module scope and can fire before `whenReady` has
+ * built the windows and `requestChat`. Rather than a second opener (the single-opener rule, A-31)
+ * the event is routed through this late-bound delegate: before wiring one request is remembered,
+ * after wiring every request goes straight to `requestChat`. `pending` is cleared BEFORE the
+ * replay so a request issued from inside it is forwarded, not re-queued.
+ */
+export function createLateBoundChatRequest(log?: (line: string) => void): LateBoundChatRequest {
+  const out = log ?? ((line: string) => console.log(line));
+  let target: ChatRequestFn | null = null;
+  let pending: { source: ChatRequestSource; focusComposer: boolean } | null = null;
+  return {
+    request(source, focusComposer) {
+      if (target) {
+        target(source, focusComposer);
+        return;
+      }
+      pending = { source, focusComposer };
+      out(`[chat] request source=${source} held: main is not wired yet; replayed once it is`);
+    },
+    bind(fn) {
+      target = fn;
+      if (pending === null) return;
+      const { source, focusComposer } = pending;
+      pending = null;
+      fn(source, focusComposer);
+    },
+    get pending() {
+      return pending;
+    },
+  };
 }
