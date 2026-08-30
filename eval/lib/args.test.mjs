@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, USAGE } from './args.mjs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseArgs, resolveOutTarget, USAGE } from './args.mjs';
 
 test('defaults match the contract CLI', () => {
   const r = parseArgs([]);
@@ -59,4 +62,33 @@ test('an unknown flag is a usage error that prints the usage block', () => {
   assert.equal(r.ok, false);
   assert.match(r.message, /未知参数 --nope/);
   assert.ok(r.message.includes(USAGE));
+});
+
+// FIX ROUND 1, finding 3 (Important). `--suite memory-recall --out out/memory-recall.json` used to
+// treat the same string as BOTH the directory to create and the file to write: `mkdirSync` made a
+// directory named `memory-recall.json`, then `writeFileSync` threw EISDIR — after the whole paid
+// run had finished, losing the results. These cases pin the split and then perform run.mjs's own
+// mkdir + write sequence, which is what actually threw.
+test('resolveOutTarget splits the directory to create from the file to write', () => {
+  assert.deepEqual(resolveOutTarget(null, '/def', 'r.json'), { dir: '/def', path: join('/def', 'r.json') });
+  assert.deepEqual(resolveOutTarget('/some/dir', '/def', 'r.json'), { dir: '/some/dir', path: join('/some/dir', 'r.json') });
+  const f = resolveOutTarget(join('out', 'memory-recall.json'), '/def', 'r.json');
+  assert.equal(f.path, join('out', 'memory-recall.json'));
+  assert.equal(f.dir, 'out');
+  assert.notEqual(f.dir, f.path);
+  assert.equal(resolveOutTarget('bare.json', '/def', 'r.json').dir, '.');
+});
+
+test('run.mjs mkdir-then-write succeeds for a --out file and for a --out directory', () => {
+  const base = mkdtempSync(join(tmpdir(), 'ds-out-'));
+  try {
+    for (const out of [join(base, 'a', 'memory-recall.json'), join(base, 'b'), null]) {
+      const { dir, path } = resolveOutTarget(out, join(base, 'def'), 'stamp-memory-recall.json');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path, '{}', 'utf8');            // threw EISDIR before the fix
+      writeFileSync(join(dir, 'memory-recall.sqlite'), '', 'utf8');
+    }
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });

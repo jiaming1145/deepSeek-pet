@@ -4,7 +4,7 @@
 // by the eval package); the write path (FactStore.upsert) is the real one.
 import { readFileSync, rmSync } from 'node:fs';
 import {
-  EXTRACT_EVERY_N_USER_TURNS, EXTRACT_MAX_TOKENS, EXTRACT_SYSTEM, ExtractResponseSchema, extractUserMessage,
+  EXTRACT_EVERY_N_USER_TURNS, EXTRACT_MAX_FACTS, EXTRACT_MAX_TOKENS, EXTRACT_SYSTEM, ExtractResponseSchema, extractUserMessage,
   StreamParser, assemblePrompt, parseCharacterBundle, renderStaticSystem, sanitizeForDisplay,
 } from '@ds/brain';
 import { FactStore, openDb } from '@ds/memory';
@@ -53,7 +53,7 @@ async function chat(client, staticSystem, phi, history, facts, userText) {
   return reply;
 }
 
-/** The real N = 6 cadence: the last N user texts, one call, truncation or a parse failure = nothing written. */
+/** One extractor call: the given user texts, truncation or a parse failure = nothing written. */
 async function extract(client, store, userTurns, sourceTurn) {
   const req = { messages: [{ role: 'system', content: EXTRACT_SYSTEM }, { role: 'user', content: extractUserMessage(userTurns) }], maxTokens: EXTRACT_MAX_TOKENS };
   let parsed;
@@ -64,6 +64,26 @@ async function extract(client, store, userTurns, sourceTurn) {
   if (!parsed.success) return 0;
   let n = 0;
   for (const f of parsed.data.facts) { store.upsert({ key: f.key, value: f.value, alias: f.alias, confidence: f.confidence, sourceTurn }); n++; }
+  return n;
+}
+
+/**
+ * FIX ROUND 1, finding 1 (Critical). The cadence trigger stays the real N = 6, but a batch handed
+ * to one extractor call is split into chunks of at most `EXTRACT_MAX_FACTS`.
+ *
+ * Why: `ExtractResponseSchema` caps `facts` at `EXTRACT_MAX_FACTS = 3` (§8.5) and a schema failure
+ * means "extract NOTHING" (research §7). The shipped fixture plants 5/5/4/3/3 facts per session, so
+ * before this fix every session made exactly ONE call carrying 4-5 recordable facts: a compliant
+ * model answered with 4-5 facts, `safeParse` failed, and the session wrote zero rows — the run's
+ * ceiling was 3 x 5 = 15 stored facts against a 18/20 threshold, i.e. A11 could only ever FAIL,
+ * after burning ~40 paid calls. Chunking makes every call see <= 3 recordable facts, which is also
+ * what the shipped app does: `FactExtractor` never hands the model more than it may answer with.
+ */
+async function extractBatched(client, store, userTurns, sourceTurn) {
+  let n = 0;
+  for (let i = 0; i < userTurns.length; i += EXTRACT_MAX_FACTS) {
+    n += await extract(client, store, userTurns.slice(i, i + EXTRACT_MAX_FACTS), sourceTurn);
+  }
   return n;
 }
 
@@ -94,9 +114,9 @@ export async function runMemoryRecall({ client, fixture, sessions, characterPath
         const reply = await chat(client, staticSystem, phi, history, [], f.plant);
         if (reply.includes(FORBIDDEN_CALLBACK)) callbackPhraseCount++;
         pending.push(f.plant);
-        if (pending.length >= EXTRACT_EVERY_N_USER_TURNS) { await extract(client, store, pending.splice(0), turnCounter); }
+        if (pending.length >= EXTRACT_EVERY_N_USER_TURNS) { await extractBatched(client, store, pending.splice(0), turnCounter); }
       }
-      if (pending.length > 0) await extract(client, store, pending.splice(0), turnCounter);   // session end flushes the remainder
+      if (pending.length > 0) await extractBatched(client, store, pending.splice(0), turnCounter);   // session end flushes the remainder
       for (const p of asks) {
         turnCounter++;
         const plant = fixture.facts.find((f) => f.id === p.id);
