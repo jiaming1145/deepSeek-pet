@@ -1,0 +1,161 @@
+@import '../shared/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  text-autospace: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.key {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.key__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.plate {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  background: var(--c-plate);
+  color: var(--c-accent-text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  transform: skewX(var(--adv-skew));
+}
+
+/* Counter-skew, derived from the token so the two can never disagree (5.8 forbids hard-coded values). */
+.plate__text {
+  display: inline-block;
+  transform: skewX(calc(-1 * var(--adv-skew)));
+}
+
+.key__status {
+  margin-left: auto;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.key__label {
+  color: var(--c-text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.key__field {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+
+.key__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-control);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.key__toggle,
+.key__actions button {
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-control);
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  cursor: pointer;
+  transition: opacity var(--dur-feedback) var(--ease-enter);
+}
+
+.key__toggle:hover,
+.key__actions button:hover {
+  opacity: 0.72;
+}
+
+.key__actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.key__actions {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: auto;
+}
+
+.key__actions button:first-child {
+  border-color: var(--c-border-strong);
+}
+
+.key__disclosure {
+  margin: 0;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.key__note {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.key__note--ok {
+  color: var(--c-ok);
+}
+
+.key__note--bad {
+  color: var(--c-danger-text);
+}
+
+.key__input:focus-visible,
+.key__toggle:focus-visible,
+.key__actions button:focus-visible {
+  outline: 2px solid var(--c-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .key__toggle,
+  .key__actions button {
+    transition-duration: 80ms;
+  }
+}

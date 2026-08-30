@@ -1,5 +1,6 @@
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
+import react from '@vitejs/plugin-react';
 
 // electron-vite 5.0.0's `isolatedEntries` progress reporter calls process.stdout.clearLine(),
 // cursorTo() and moveCursor() unconditionally (dist/chunks/lib-*.js, `clearLine`/`writeLine`, and
@@ -75,6 +76,7 @@ export default defineConfig({
     // electron-vite roots the renderer at src/renderer, so Vite's default publicDir would be
     // src/renderer/public. The SDK assets (scripts/fetch-sdk.mjs) land in apps/desktop/public.
     publicDir: resolve(__dirname, 'public'),
+    plugins: [react()],
     resolve: { alias: { '@framework': resolve(__dirname, '../../vendor/CubismWebFramework/src') } },
     server: { fs: { allow: [resolve(__dirname, '../..')] } },
     build: {

@@ -4,17 +4,13 @@ import { Channels } from '@ds/protocol';
 import { isAllowedPetUrl, rendererUrl } from './app-protocol';
 import { placeBubble } from './bubble-place';
 import { sendTo } from './ipc';
+// contracts.md 6.1: the numbers live in the renderer's chat-metrics.ts, which T8 owns; main
+// re-exports them so the sizer and the composer cannot drift.
+import {
+  CHAT_BASE_H, CHAT_GAP, CHAT_HISTORY_H, CHAT_MAX_H, CHAT_MAX_ROWS, CHAT_ROW_H, CHAT_WIDTH,
+} from '../renderer/shared/chat-metrics';
 
-// C-9: the spec's 360x48 wins, growing with multiline up to 6 lines.
-// T8 moves these to src/renderer/shared/chat-metrics.ts and converts this block into a re-export
-// (contracts.md §6.1); T6 lands first, so T6 declares them here. Do not create chat-metrics.ts.
-export const CHAT_WIDTH = 360;
-export const CHAT_ROW_H = 22; // one composer line == --lh-body
-export const CHAT_BASE_H = 48; // one line + chrome
-export const CHAT_MAX_ROWS = 6;
-export const CHAT_MAX_H = CHAT_BASE_H + CHAT_ROW_H * (CHAT_MAX_ROWS - 1); // 158
-export const CHAT_HISTORY_H = 420; // extra height while the history pane is open
-export const CHAT_GAP = 12; // the same gap constant as the bubble
+export { CHAT_BASE_H, CHAT_GAP, CHAT_HISTORY_H, CHAT_MAX_H, CHAT_MAX_ROWS, CHAT_ROW_H, CHAT_WIDTH };
 
 /**
  * Light dismiss must not fire while an IME candidate window holds the focus, and only the renderer

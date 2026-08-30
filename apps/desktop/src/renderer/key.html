@@ -2,24 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>API Key (placeholder)</title>
-  <style>
-    body { margin: 0; padding: 20px; color: #1b2238;
-           font: 14px/22px system-ui, "Microsoft YaHei UI", sans-serif; }
-    input { width: 100%; box-sizing: border-box; padding: 6px; }
-    p { color: #55607a; }
-  </style>
+  <meta name="color-scheme" content="light dark" />
+  <title>小春 · API Key</title>
 </head>
 <body>
-  <h1 id="status">还没设置</h1>
-  <input id="k" type="password" spellcheck="false" autocomplete="off" placeholder="sk-..." />
-  <p>
-    <button id="save">保存</button>
-    <button id="test">测试连接</button>
-    <button id="clear">清除</button>
-    <span id="msg"></span>
-  </p>
-  <p>对话内容会发送到 DeepSeek（服务器在中国境内）处理，回复由 AI 生成。</p>
-  <script type="module" src="/key/placeholder.ts"></script>
+  <div id="root"></div>
+  <script type="module" src="/key/main.tsx"></script>
 </body>
 </html>
