@@ -22,9 +22,12 @@
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
+    "@testing-library/jest-dom": "^6.9.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "electron": "43.4.1",
     "electron-vite": "5.0.0",
     "jsdom": "^30.0.1",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "vitest": "3.2.7"
   }
 }
