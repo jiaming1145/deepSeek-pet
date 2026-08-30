@@ -2,13 +2,13 @@
   "config": {
     "argv": [
       "C:\\Program Files\\nodejs\\node.exe",
-      "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\node_modules\\@playwright\\test\\cli.js",
+      "D:\\ds\\apps\\desktop\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "-c",
       "playwright.electron.config.ts"
     ],
-    "configFile": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\playwright.electron.config.ts",
-    "rootDir": "D:/ds/.claude/worktrees/wf_fd945927-780-1/apps/desktop/tests-e2e",
+    "configFile": "D:\\ds\\apps\\desktop\\playwright.electron.config.ts",
+    "rootDir": "D:/ds/apps/desktop/tests-e2e",
     "failOnFlakyTests": false,
     "forbidOnly": false,
     "fullyParallel": false,
@@ -24,7 +24,7 @@
     "preserveOutput": "always",
     "projects": [
       {
-        "outputDir": "D:/ds/.claude/worktrees/wf_fd945927-780-1/apps/desktop/test-results",
+        "outputDir": "D:/ds/apps/desktop/test-results",
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
@@ -32,7 +32,7 @@
         },
         "id": "",
         "name": "",
-        "testDir": "D:/ds/.claude/worktrees/wf_fd945927-780-1/apps/desktop/tests-e2e",
+        "testDir": "D:/ds/apps/desktop/tests-e2e",
         "testIgnore": [],
         "testMatch": [
           "**/*.@(spec|test).?(c|m)[jt]s?(x)"
@@ -307,7 +307,7 @@
                   "type": "skip",
                   "description": "DEEPSEEK_API_KEY not set",
                   "location": {
-                    "file": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
+                    "file": "D:\\ds\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
                     "line": 426,
                     "column": 8
                   }
@@ -332,7 +332,7 @@
                       "type": "skip",
                       "description": "DEEPSEEK_API_KEY not set",
                       "location": {
-                        "file": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
+                        "file": "D:\\ds\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
                         "line": 426,
                         "column": 8
                       }
