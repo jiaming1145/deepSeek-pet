@@ -8,7 +8,7 @@
 
 **Tech Stack:** pnpm workspace; TypeScript 5.9 (erasable syntax, explicit `.ts` imports in the five plain-Node packages); Electron 43.4.1 (Node 24.18.1, SQLite 3.53.1 via `node:sqlite`); zod 4; vitest 3.2.7 (root `projects: ['packages/*', 'apps/*', 'scripts']`); Playwright 1.62.1 (browser + electron lanes); Live2D Cubism 5-r.5 (`packages/stage`); koffi ^2.9.0 for Win32; ffmpeg 8.1.2 (`ddagrab` filter, `gfxcapture`); DeepSeek V4 (`deepseek-v4-flash`) through the existing `TurnRunner`.
 
-**Spec:** `docs/superpowers/specs/2026-08-29-exquisite-bar.md` · `docs/superpowers/specs/2026-08-28-live2d-companion-design.md` · contract `docs/superpowers/plans/2026-08-30-phase3-contracts.md` (§0–§14; §1.5 owner table is binding) · rulings `.superpowers/sdd/2026-08-30-phase3-behaviour/rulings.md` (R3-1..R3-34, precedence over everything).
+**Spec:** `docs/superpowers/specs/2026-08-29-exquisite-bar.md` · `docs/superpowers/specs/2026-08-28-live2d-companion-design.md` · contract `docs/superpowers/plans/2026-08-30-phase3-contracts.md` (§0–§14; §1.5 owner table is binding; the **Amendments** block at the top of the contract, A3-1..A3-5, overrides the section it names) · rulings `.superpowers/sdd/2026-08-30-phase3-behaviour/rulings.md` (R3-1..R3-43, precedence over everything).
 
 ## Global Constraints
 
@@ -16,7 +16,8 @@
 - **Ownership rule (§1.5):** every path has exactly one owner group (T3-A..T3-E); a task that is not the owner may read but never create/delete/edit — it stops and reports `BLOCKED: <path> is owned by <task>`; §1.5 is exhaustive — a file named by a section but absent from §1.5 is a contract defect, not a licence to edit (see "Contract gaps" below).
 - **Erasable TS (Phase 2 C1/C1a, contract §1.2):** every relative import inside `@ds/protocol`, `@ds/brain`, `@ds/memory`, `@ds/sim`, `@ds/behaviors` carries an explicit `.ts` extension; their tsconfigs set `erasableSyntaxOnly`, `allowImportingTsExtensions`, `verbatimModuleSyntax` (copy `packages/brain/tsconfig.json` verbatim for the two new packages); no `enum`, parameter properties, `namespace`, `import x = require`; `@ds/stage` and `apps/desktop` stay extensionless.
 - **Dependency direction (§1.2):** `@ds/sim` and `@ds/behaviors` import only `@ds/protocol` and `zod` (each ships `expect(readFileSync(f,'utf8')).not.toMatch(/from '(electron|node:)/)` over its own `src/**`); `@ds/behaviors` never reads a file; `@ds/stage` takes `SimSnapshot` only as `import type` from `@ds/protocol`; main imports from `renderer/**` only `renderer/shared/chat-metrics.ts` and `renderer/shared/lane-metrics.ts`.
-- **Shared-protocol exception (§1.5):** `packages/protocol/src/index.ts` is edited by exactly one task (T3-A, Task 1) in **one** edit carrying all of §2 (constants, channels, schemas, allow-lists, `SentenceEventSchema.look/walkTo`) before any other Phase 3 task starts; `channels.test.ts`'s literal allow-list arrays and its cross-window regex (widened to `/^(user|key|history|proactive):/`) change in the same edit; `PET_INVOKE`/`BUBBLE_INVOKE` stay empty; **no new invoke channels** anywhere in Phase 3.
+- **Shared-protocol exception (§1.5):** `packages/protocol/src/index.ts` is edited by exactly one task (T3-A, Task 1) in **one** edit carrying all of §2 (constants, channels, schemas, allow-lists, `SentenceEventSchema.look/walkTo`) before any other Phase 3 task starts; `channels.test.ts`'s literal allow-list arrays and its cross-window regex (widened to `/^(user|key|history|proactive):/`) change in the same edit; `PET_INVOKE`/`BUBBLE_INVOKE` stay empty; **no new invoke channels** anywhere in Phase 3. **R3-35's two `SimSnapshot` booleans belong to that same one edit and were delivered to Task 1 in its dispatch, after this document's Task 1 section was written** — so the Task 1 section below does not mention them, but `packages/protocol/src/index.ts` on `main` carries `uiWorkMode: z.boolean()` / `uiSfxMuted: z.boolean()` (both **required**, no `.default()`, verified at `packages/protocol/src/index.ts:261-262` and pinned in `channels.test.ts`). Tasks 8, 9, 12, 13 and 15 consume them; read A3-1 in the contract for the whole chain. Task 1's section is otherwise untouched because it was already executing when these rulings landed.
+- **Append-only barrels and the `turn.ts` owner (R3-39, contract Amendment A3-4):** `packages/brain/src/index.ts` and `packages/memory/src/index.ts` are **shared, append-only** files — any task may append **its own** `export * from './<file>.ts';` line at the **end** of the barrel and may edit no other line; the integrator resolves a conflict there by **keeping both sides**. No task reorders, rewrites or removes an existing barrel line, and a barrel edit is never a reason to report `BLOCKED`. `packages/brain/src/turn.ts` is owned by **T3-C (Task 14)** for Phase 3, with the single documented exception already in flight (Task 2's `setQuery` + `metrics.envelope` writer, batch 1, merged before Task 14 starts); any **other** task that needs a change there stops and reports `BLOCKED: turn.ts is owned by Task 14`.
 - **One home per constant (§5.13, rulings preamble):** every number is a named constant with a test override; `renderer/shared/lane-metrics.ts` is the one home for motion/fade/pre-empt/touch/drag/fling/landing/walk numbers, re-exported by `main/window-motion.ts` and `stage/touch.ts`; the only permitted duplication is `SIM_DEFAULTS`' mirror of `TAP_BURST_COUNT`/`TAP_BURST_WINDOW_MS`/`ANNOY_COOLDOWN_MS` with an equality test in `packages/sim/src/state.test.ts`; `lane-metrics.test.ts` asserts `FLING_VELOCITY_CAP === 2400` against `LandingSchema.impulse.max`.
 - **Byte-stable strings:** `PLAIN_RULES` (unchanged), `PLAIN_OUTPUT`, `EXTRACT_SYSTEM`, `PROACTIVE_INSTRUCTION_TAIL`, the character profile's `tagGrammar` — any edit is a prompt-cache reset and needs an Amendment at the top of the contract; the four legitimate cache resets are trim/compaction, persona↔plain switch, system-prompt change, new conversation (§8.7).
 - **Evidence rules (A-5, R3-15, R3-26, §12):** every artefact under `docs/evidence/` is byte-exact (`.gitattributes -text`) and produced with the cwd banner `D:\ds\…`, never a worktree path; captures are **cropped to the pet** with `ddagrab`'s own `offset_x/offset_y/video_size` (physical px = DIP × 1.5) in the filter form `-init_hw_device d3d11va -filter_complex "ddagrab=output_idx=0:framerate=30:draw_mouse=0|1:offset_x=$X:offset_y=$Y:video_size=${W}x${H},hwdownload,format=bgra"` at **30 fps**, never `gdigrab -i hwnd=`/`-i title=` (pure black), never NVENC; DDA unavailable ⇒ the run FAILS visibly, no fallback capture; the JSONL trace is the primary assertion source and the video corroborates (`signalstats.YDIF` ≥ 90 % of 1-s windows with max YDIF > 0.35; `freezedetect` diagnostic only); 60-Hz claims come from trace `fps` records; resource numbers come from a **separate run without recording** on a production `electron-vite build` with no DevTools; the D16 run is at liveliness **0.30** and says so; the picker-oracle and memory sheets record the hardware line (Windows 11 Home 10.0.26200, integrated GPU, 3840×2160 @ 150 %).
@@ -26,12 +27,12 @@
 - **Commit trailers (every commit, exactly):**
   `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
   `Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe`
-- **Test commands:** `pnpm test` (root vitest, all projects) · `pnpm --filter @ds/<pkg> exec vitest run` (one package: sim, behaviors, memory, brain, stage, desktop) · `pnpm typecheck` (`pnpm -r --if-present typecheck`; desktop = `tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.ui.json`) · `pnpm --filter @ds/desktop test:e2e` (Playwright browser lane, `?test=1&seed=1`) · `pnpm --filter @ds/desktop test:e2e:electron` (adapter lane) · `pnpm test:eval` (`node --test lib/*.test.mjs`, A-8 glob form) · `node --test scripts/assert-trace.test.mjs scripts/phase3-cache.test.mjs` · `pnpm build` before any measurement or recording.
+- **Test commands (R3-40 — the root form is the ONLY sanctioned one):** `pnpm test` (root vitest, all projects) · `npx vitest run --project <name>` (one package; append a path fragment to narrow to one file, e.g. `npx vitest run --project desktop src/main/tray.test.ts`). **The filter is the vitest PROJECT name, not the package name, and they differ for exactly one project:** `@ds/sim`, `@ds/behaviors`, `@ds/memory`, `@ds/brain`, `@ds/protocol`, `@ds/stage` are scoped, but `apps/desktop/vitest.config.ts` sets `name: 'desktop'` — so it is **`--project desktop`**, and `--project @ds/desktop` dies with `Error: No projects matched the filter "@ds/desktop"` (ran it). R3-40's literal `@ds/<pkg>` form is read as "the root form, filtered by project name"; the desktop exception is recorded here so no task re-derives it) · `pnpm typecheck` (`pnpm -r --if-present typecheck`; desktop = `tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.ui.json`) · `pnpm --filter @ds/desktop build` · `pnpm --filter @ds/desktop test:e2e` (Playwright browser lane, `?test=1&seed=1`) · `pnpm --filter @ds/desktop test:e2e:electron` (adapter lane) · `pnpm test:eval` (`node --test lib/*.test.mjs`, A-8 glob form) · `node --test scripts/assert-trace.test.mjs scripts/phase3-cache.test.mjs` · `pnpm build` before any measurement or recording. **`pnpm --filter <pkg> exec vitest run` is NOT used** — four packages (`@ds/memory`, `@ds/brain`, `@ds/protocol`, `@ds/stage`) have no local `vitest.config.ts`, so vitest resolves the ROOT config from the package cwd and dies with `Error: Projects definition references a non-existing file or a directory` (measured in Task 2's session).
 - **Plan format (writing-plans):** every step is one action with complete code, exact commands, expected FAIL/PASS lines and the exact commit message; no placeholders; every type/function used is defined in the contract or an earlier task by number.
 - **Tunables are never unspecified:** every Phase 3 number in the rulings is the shipped default and is exposed as a named constant with a test override (`SIM_DEFAULTS`, `lane-metrics.ts`, `expression-lease.ts`, `gaze-lane.ts`, `hover-ack.ts`, `window-motion.ts`, `window-lifecycle.ts`, `picker.ts`, `facts.ts`, `extract-prompt.ts`).
 - **Phase 2 interfaces are extended, never rewritten (§0.6, §13.3):** `TurnRunner.cancel(): Promise<void>` (FW-1), `BrainService.dispose(): Promise<void>` before `db.close()` (FW-2), `HistoryStore` closing fence (FW-3a), chunked trim with no row ids (FW-3b corrected), `requestChat(source, focusComposer)` (FW-4), `SpeechController.visible` (FW-5), `PAUSE_MAX_S = 3` / `USER_TEXT_MAX = 2000` (FW-6), user-safe `DeepSeekError` (FW-7); the RESIDUAL-2 rows (`quit.ts` ordering + `DRAIN_TIMEOUT_MS = 3000` re-derivation, second-instance path, `speech.ts` hidden-cancel, `ErrorCodeSchema 'storage'`) are re-verified by the owning task before it starts and recorded as an Amendment if changed.
 
-## Rulings log — R3-1..R3-34
+## Rulings log — R3-1..R3-43
 
 - **R3-1** Sim is a pure reducer in main; events dispatch immediately, the 2-Hz `TICK` (500 ms) only integrates with `presentDelta` capped at 2 s; PRESENT := unlocked ∧ not suspended ∧ input age < 300 s (pet visibility irrelevant); snapshot `{version, state, rngState, remainingMs}` every 60 s and on quit, awaited before `db.close()`.
 - **R3-2** `@ds/behaviors` is platform-neutral; declarative `allOf/anyOf/not` conditions with `eq/lt/gt/in`; weighted shuffle bag (`round(weight×4)` copies, no replacement, refill swap) + recency last-3 + density guard (≥ 4 starts per rolling 60 s at L ≥ 0.3, period clamp 14 000 ms); LRU fallback relaxes only recency; usable < 12 ⇒ character validation FAILS.
@@ -67,6 +68,15 @@
 - **R3-32** A11 (20 facts / 5 sessions → ≥ 90 %) → `not-measured.md` beside A8; Phase 3 ships the fixture and the harness command.
 - **R3-33** X4 import → Phase 4 (export + wipe ship).
 - **R3-34** Remaining §G questions resolved by the preflight's defaults and recorded in §14.3 (P7: `LIVELINESS_DEFAULT = 0.30` overrides D12's "default quiet"; P8: the chat window is warm-lazy — pre-created once 2 s after `stage:ready`, guarded for D10, dropped first if `after-chat-close` shows no reclaim).
+- **R3-35** `SimSnapshot` gains `uiWorkMode: z.boolean()` and `uiSfxMuted: z.boolean()` (default `false`, present in every `sim:state` broadcast, sourced from the kv keys `ui.workMode` / `ui.sfxMuted` — this contract's names are `ui_work_mode` / `ui_sfx_muted` — that the tray toggles already write). Task 1 lands them in the one §2 edit; Task 8's hover-ack machine consumes `uiWorkMode`, Task 13 relays both into the machine and the `SfxPlayer`. Contract Amendment **A3-1**.
+- **R3-36** The D11 cursor-wiggle predicate is owned by Task 12's `ActivitySensor`: within **240 DIP** of the pet window **centre** the cursor is sampled at **10 Hz** into a **15-sample ring**; a reversal is a sign change of the x-delta with `|dx| >= 6 DIP`; **>= 4 reversals within 1.5 s** emits `sim:event {kind:'cursorWiggle'}`, cooldown **20 s**; outside the radius sampling stays 2 Hz; `ActivityDerived` gains `wiggle: boolean`. Contract Amendment **A3-2** (supersedes §10.4's five draft constants).
+- **R3-37** New **Task 18** — renderer consumers (owner **T3-B**, **batch 6**): the chat 普通模式 plate (§9.5), the bubble `data-mode="plain"` + proactive band (§2.3/§9.4), the chat `proactive:gate` status line, and X5's History badge. It owns `apps/desktop/src/renderer/chat/**` and the non-`fps.ts` half of `apps/desktop/src/renderer/bubble/**`. Contract Amendment **A3-3**.
+- **R3-38** **Task 6 moves to batch 3**, gains `dependsOn: 3`, drops its duplicate `nextLocalMidnight` and imports Task 3's `packages/sim/src/phases.ts`. This also clears the batch-2 collision with Task 5 on `packages/brain/src/index.ts`.
+- **R3-39** Package barrels (`packages/brain/src/index.ts`, `packages/memory/src/index.ts`) are **append-only shared files**; `packages/brain/src/turn.ts` is owned by **T3-C (Task 14)**. Contract Amendment **A3-4**. (Global Constraints carry the operative rule.)
+- **R3-40** The sanctioned test command is the **root** form: `npx vitest run --project <name>` for one package (the vitest project name — scoped for every package except **`desktop`**, see Global Constraints), `pnpm test` for the repo, `pnpm -r --if-present typecheck`, `pnpm --filter @ds/desktop build`. `pnpm --filter <pkg> exec vitest run` is not used.
+- **R3-41** Task 2 stays one task but its implementer commits at the Step 29 boundary (2a schema/tokeniser/FactStore/sanitiser · 2b history+ports wiring, extraction, A11 fixture).
+- **R3-42** **A10** (self-fact consistency) has **no Phase 3 owner** and stays in `not-measured.md` beside A8/A11/E-3/X1/R4 — a live-API judged axis; revisit when the DeepSeek balance exists.
+- **R3-43** Ratified: `FACT_MAX_CHARS` (`@ds/memory`) and `EXTRACT_VALUE_MAX` / `EXTRACT_ALIAS_MAX` (`@ds/brain`) **stay two homes**, pinned by the identity assertion that already ships from `apps/desktop` (Task 2's `fact-extractor.test.ts`: `expect(FACT_MAX_CHARS).toBe(EXTRACT_VALUE_MAX)`). Moving them into `@ds/protocol` is refused. Contract Amendment **A3-5**.
 
 ## Deferred — everything the contract §13/§14 defers, with its phase
 
@@ -89,6 +99,8 @@
 - A11 memory recall ≥ 90 % — **NOT MEASURED** (R3-32, §8.11); fixture + command ship.
 - E-3 `trait_hit ≥ 0.80` — 12 probes authored now; the gate becomes real at the first run with balance (§13.2).
 - X1 prompt-cache ≥ 70 % live 20-turn probe, R4 first-sentence p50, the addendum's paint latency — **NOT MEASURED** (§12.1 `not-measured.md`); `scripts/phase3-cache.mjs` ships.
+- **A10 self-fact consistency — NOT MEASURED, and unowned by design (R3-42).** No Phase 3 contract section states a threshold for it and no task implements it; it is a live-API judged axis, so it is revisited when a DeepSeek account with balance exists. Task 17 carries it as a named row in `not-measured.md` with no estimate and no substitute number. This is a **decision**, not an outstanding gap.
+- **Two homes for the 120/24-character extraction bounds — ratified, not deferred (R3-43).** `FACT_MAX_CHARS` lives in `packages/memory/src/facts.ts` and `EXTRACT_VALUE_MAX` / `EXTRACT_ALIAS_MAX` in `packages/brain/src/extract-prompt.ts` because `@ds/brain` may not import `@ds/memory` (§1.2). They stay two homes; the identity is pinned from `apps/desktop`, which can see both (`fact-extractor.test.ts`: `expect(FACT_MAX_CHARS).toBe(EXTRACT_VALUE_MAX)`, Task 2). Moving them into `@ds/protocol` is **refused** — it would make Task 2 depend on Task 1 inside batch 1 for no user-visible gain. Recorded in Task 14's Concerns as the §5.13 exception list's fourth entry.
 - Template floor toward 160 per bucket and the re-derived no-exhaustion arithmetic at a higher persona cap — **Phase 4** (R3-30, §4.8).
 - Opt-in sensing tier UI — **Phase 4** (§10.6); Phase 3 ships the `sensing_tier` kv flag and the `EXE_CATEGORIES` plumbing wired to nothing.
 - `sim_phases` kv (configurable phase hours) — no UI in Phase 3 (§3.9, §8.1).
@@ -101,8 +113,8 @@
 - **CONTRACT GAP:** §1.5 omits every `packages/sim/**` and `packages/behaviors/**` path (§1.3/§1.4 list the files with no owner). The plan assigns `packages/sim/**` to **T3-A** (the `SimService` owner, per the rulings ownership table "Sim state → main `SimService` (`packages/sim` reducer)") and `packages/behaviors/**` to **T3-B** (owner of `characters/haru/behaviors.json` and the renderer selector).
 - **CONTRACT GAP:** §3.11's quit drain and §0.6's RESIDUAL-2 row name `apps/desktop/src/main/quit.ts` (four awaits, `DRAIN_TIMEOUT_MS` re-derivation) but §1.5 has no row for it. The plan puts the edit in the wiring task (T3-A, owner of `index.ts`, the only caller of `createBeforeQuit`).
 - **CONTRACT GAP:** §8.6 requires `TurnRunner.send()` to call `history.setQuery(text)` before `history.window()` — `packages/brain/src/turn.ts` is not in §1.5. The plan puts the one-line call in the memory v2 task (T3-D, owner of `ports.ts`/`history.ts`).
-- **CONTRACT GAP:** §9.5's chat mode plate (`普通模式` chip), §2.3's bubble plain/proactive band styling (`data-mode="plain"`, proactive band), the chat status line for `proactive:gate` and the History badge (X5) name renderer files (`renderer/chat/*`, `renderer/bubble/*`) that §1.5 does not list. **No task edits them**; the main-side producers ship and the renderer consumers are BLOCKED until §1.5 is amended.
-- **CONTRACT GAP:** §10.4's cursor-wiggle predicate (`WIGGLE_*`, `sim:event cursorWiggle`) has no owning file and no field on `ActivityDerived` or the `TICK` event (which carries only a scalar `cursorDeltaDip`; reversals need direction). The sensor task ships the five constants only; the producer is BLOCKED pending a ruling.
+- **CLOSED by R3-37 (was a contract gap):** §9.5's chat mode plate (`普通模式` chip), §2.3/§9.4's bubble plain/proactive band styling (`data-mode="plain"`, proactive band), the chat status line for `proactive:gate` and the History badge (X5) name renderer files (`renderer/chat/*`, `renderer/bubble/*`) that §1.5 did not list. **Task 18 (T3-B, batch 6) now owns and implements all four**, and contract Amendment **A3-3** adds their §1.5 rows.
+- **CLOSED by R3-36 (was a contract gap):** §10.4's cursor-wiggle predicate had no owning file and no field on `ActivityDerived`. The predicate is now Task 12's `ActivitySensor` (240 DIP radius, 10 Hz ring of 15, `|dx| >= 6 DIP` sign change, >= 4 reversals in 1.5 s, 20 s cooldown, `ActivityDerived.wiggle`), and contract Amendment **A3-2** supersedes §10.4's five draft constants. Task 13's curiosity reaction consumes `sim:event {kind:'cursorWiggle'}` by that exact name.
 - **CONTRACT GAP:** §12.7 names fixtures as `<area>/<name>.fixture.ts` with no root directory. The plan roots them at `<owning package>/src/fixtures/<area>/` (pure) and `apps/desktop/tests/fixtures/<area>/` (adapter/browser lanes).
 - **CONTRACT GAP:** §13.1 item 4 lists `main/brain-service.ts` under owner **T3-E** while §1.5 says **T3-C**. The plan keeps T3-C as owner; `window-lifecycle.ts` (T3-E) receives `speechLeaseActive(): boolean` and `retireSpeech(): Promise<void>` as injected deps wired in `index.ts`, so no cross-owner edit is needed.
 - **CONTRACT GAP:** §4.5's `SelectorOptions.map: LivelinessMap` imports a type from `@ds/sim`, but §1.2 restricts `@ds/behaviors` to `@ds/protocol` + `zod`. The plan has `@ds/behaviors` declare the seven-field `LivelinessMap` shape structurally (identical field names/types to §3.4) and adds an identity test in `packages/sim/src/liveliness.test.ts`.
@@ -110,10 +122,19 @@
 - **CONTRACT GAP:** `NOTICE` (§5.12 gains one line), `docs/evidence/phase3/{picker-oracle,memory,persona-tokens,d16-report,trace-*,phase3-*.mp4,ydif-idle,freeze-idle}` (§12.1) and `eval/fixtures/prompts.zh.json` + `eval/lib/shape.mjs` (§13.2 names T3-C) are not in §1.5. Assigned by the owning section: `NOTICE` → T3-B; `picker-oracle.*` → T3-B; `persona-tokens.txt` → T3-C; the rest of `docs/evidence/phase3/` → T3-E.
 - **CONTRACT GAP:** §11.5's merged-bubble spike names no files and no owner; the plan runs it as a bounded step of the evidence task on a throwaway branch that is deleted, with only the `merged-bubble` row of `memory.md` merged.
 - **CONTRACT GAP:** §10.2/§3.11 reference a `NotificationState.onChange` object while §10.2 declares only `QUNS` and `isDnd`; the `rng.ts` API, the `presence.ts` API, the overlay updater class name, the gaze-lane class name, the hover-ack machine class name and the `%TEMP%\ds-pids.json` writer (§11.4) are unnamed. Each is flagged inside its task; the author uses the contract's described behaviour and the smallest name consistent with the neighbouring file, recorded for the controller.
-- **CONTRACT GAP:** A10 (self-fact consistency) was moved "to Phase 3 with A8" by Phase 2 A-14, but the Phase 3 contract never mentions it; the evidence task records it in `not-measured.md` as unowned.
-- **Task count:** 17 tasks, one over the requested 12–16 ceiling. R3-27 mandates the labelling pass as its own task, §12 the evidence task, T3-A's single-owner `index.ts` the wiring task, and `ActivitySensor` must precede `SimService` (a type import) while `SimService` must follow the reducer — collapsing any further would create 800-line tasks that a single reviewer could not reject independently.
+- **RULED by R3-42 (was a contract gap):** A10 (self-fact consistency) was moved "to Phase 3 with A8" by Phase 2 A-14, but the Phase 3 contract never mentions it. It has **no Phase 3 owner**, by decision; Task 17 records it in `not-measured.md` as a named row with no estimate.
+- **RULED by R3-43 (was a §5.13 question):** the two homes for the 120/24-character extraction bounds are ratified as-is; the identity assertion from `apps/desktop` is the pin. See the Deferred list.
+- **RULED by R3-39 (was a contract gap):** `packages/brain/src/index.ts` and `packages/memory/src/index.ts` are append-only shared barrels; `packages/brain/src/turn.ts` is T3-C's (Task 14). Both are in Global Constraints above and in contract Amendment **A3-4**.
+- **Task count:** 18 tasks (17 as generated, plus Task 18 from R3-37), two over the requested 12–16 ceiling. R3-27 mandates the labelling pass as its own task, §12 the evidence task, T3-A's single-owner `index.ts` the wiring task, and `ActivitySensor` must precede `SimService` (a type import) while `SimService` must follow the reducer — collapsing any further would create 800-line tasks that a single reviewer could not reject independently. Task 18 is R3-37's answer to "every producer ships with no consumer": it is the only task that touches `renderer/chat/**` and `renderer/bubble/**`, so folding it into any existing task would have handed a second owner group those files.
 
 ## Task map
+
+**Batches (18 tasks, 7 batches, after the R3-38 move and the R3-37 addition):**
+b1 → 1, 2 · b2 → 3, 4, 5, 7 · b3 → 6, 8, 9, 10, 11 · b4 → 12, 13 · b5 → 14 · b6 → 15, 18 · b7 → 16, 17.
+Every batch is file-disjoint: b3's Task 6 (T3-C, `packages/brain|memory` + `main/tray.ts` + `eval/**`)
+shares no file with 8/9/10/11, and b6's Task 18 (renderer chat/bubble) shares none with Task 15
+(`main/index.ts`, `main/quit.ts`). The barrels `packages/brain/src/index.ts` and
+`packages/memory/src/index.ts` are append-only by R3-39 and are therefore not collisions.
 
 | n | Title | Owner | Batch | Files (CREATE/MODIFY/TEST) | Depends on |
 |---|---|---|---|---|---|
@@ -122,7 +143,7 @@
 | 3 | `@ds/sim` part 1: package, state, rng, phases, liveliness, affection, mood, energy, presence (§3.1, §3.4, §3.6–3.9) | T3-A | 2 | CREATE `packages/sim/{package.json,tsconfig.json,vitest.config.ts}`, `src/{state,rng,phases,liveliness,affection,mood,energy,presence}.ts` + tests | 1 |
 | 4 | `@ds/behaviors` package + Haru starter pack (§4.1–4.7, §4.9, §4.11.3 schema) | T3-B | 2 | CREATE `packages/behaviors/{package.json,tsconfig.json,vitest.config.ts,src/index.ts}`, `src/{schema,conditions,bag,selector,bind}.ts` + tests, `characters/haru/behaviors.json` | 1 |
 | 5 | Stage hooks, overlay, character schema + `character.json`, ACT vocabulary, lane metrics, fps, sfx (§5.14, §5.7, §4.10, §6.4, §2.6, §5.13, §5.8, §5.12) | T3-B | 2 | MODIFY `packages/stage/src/companion-model.ts`, `stage.ts`, `character.ts`, `characters/haru/character.json`, `packages/brain/src/tags.ts`, `types.ts`, `apps/desktop/src/renderer/bubble/fps.ts`, `NOTICE`; CREATE `packages/stage/src/overlay.ts`, `packages/brain/src/act.ts`, `apps/desktop/src/renderer/shared/lane-metrics.ts`, `apps/desktop/src/renderer/pet/stage/sfx.ts`, `scripts/make-sfx.mjs`, `apps/desktop/public/sfx/{tap,annoyed,land,notify}.ogg`; TEST siblings | 1 |
-| 6 | T3-C surface: mode grammar, plain profile, `dropAct`, proactive prompt, `ModeStore`, `personaName`, tray, proactive templates, `proactive_log` store, X10/A8/E-3 eval fixtures (§9.1–9.6, §3.10.7, §1.7, §3.5, §4.8, §3.10.6, §13.2) | T3-C | 2 | CREATE `packages/brain/src/mode.ts`, `proactive-prompt.ts`, `apps/desktop/src/main/mode-store.ts`, `persona-name.ts`, `proactive-templates.ts`, `packages/memory/src/proactive-log.ts`, `eval/personas/{haru,quiet,blunt}.json`, `eval/fixtures/persona-bleed.zh.json`, `docs/evidence/phase3/persona-tokens.txt`; MODIFY `packages/brain/src/persona.ts`, `stream-parser.ts`, `apps/desktop/src/main/tray.ts`, `eval/run.mjs`, `eval/judge.md`, `eval/lib/shape.mjs`, `eval/fixtures/prompts.zh.json`; TEST siblings | 1, 2 |
+| 6 | T3-C surface: mode grammar, plain profile, `dropAct`, proactive prompt, `ModeStore`, `personaName`, tray, proactive templates, `proactive_log` store, X10/A8/E-3 eval fixtures (§9.1–9.6, §3.10.7, §1.7, §3.5, §4.8, §3.10.6, §13.2) | T3-C | **3** (moved from 2 by R3-38) | CREATE `packages/brain/src/mode.ts`, `proactive-prompt.ts`, `apps/desktop/src/main/mode-store.ts`, `persona-name.ts`, `proactive-templates.ts`, `packages/memory/src/proactive-log.ts`, `eval/personas/{haru,quiet,blunt}.json`, `eval/fixtures/persona-bleed.zh.json`, `docs/evidence/phase3/persona-tokens.txt`; MODIFY `packages/brain/src/persona.ts`, `stream-parser.ts`, `apps/desktop/src/main/tray.ts`, `apps/desktop/package.json`, `apps/desktop/electron.vite.config.ts` (gap), `eval/run.mjs`, `eval/judge.md`, `eval/lib/shape.mjs`, `eval/fixtures/prompts.zh.json`; TEST siblings | 1, 2, **3** |
 | 7 | T3-E main infrastructure: trace writer, `LazyWindow` lifecycle, memory metric, invoke/ipc getter form (§12.2, §11.2–11.3, §11.1) | T3-E | 2 | CREATE `apps/desktop/src/main/trace.ts`, `window-lifecycle.ts`, `memory-metric.ts`; MODIFY `apps/desktop/src/main/invoke.ts`, `ipc.ts`; TEST siblings | 1 |
 | 8 | Renderer lane primitives: `LaneHolder`, expression lease curve, gaze lane, hover-ack machine (§5.2, §5.4, §5.6, §5.9) | T3-B | 3 | CREATE `apps/desktop/src/renderer/pet/stage/{lanes,expression-lease,gaze-lane,hover-ack}.ts` + tests; fixture B-05 | 1, 5 |
 | 9 | `@ds/sim` part 2: events, reducer + effects, proactive gate + buckets, snapshot persistence, barrel, boundary fixtures (§3.2, §3.3, §3.10.1–3.10.5, §3.12) | T3-A | 3 | CREATE `packages/sim/src/{events,reduce,proactive,snapshot,index}.ts` + tests, fixtures B-01/B-02/B-03/B-10; MODIFY `packages/sim/src/state.test.ts` (lane-metrics mirror) | 3, 5 |
@@ -134,6 +155,7 @@
 | 15 | Main wiring: `index.ts`, quit drain, retired handlers (§3.11, §7.7, §9.3, §11.2, §2.9) | T3-A | 6 | MODIFY `apps/desktop/src/main/index.ts`, `quit.ts` (gap); CREATE `apps/desktop/src/main/index.test.ts` | 7, 10, 12, 13, 14 |
 | 16 | Motion-labelling pass + starter-pack re-bind + Hiyori deferral row (§4.11, §4.7) | T3-B | 7 | CREATE `docs/evidence/phase3/motion-labels.{md,json}`, `docs/evidence/phase3/motions/*.png`; MODIFY `characters/haru/character.json` (`extraMotions`), `characters/haru/behaviors.json` (3 re-binds), `docs/evidence/phase2/deferred.md` | 4, 5, 15 |
 | 17 | Evidence: assertion script, recorders, SendInput driver, memory measurement, cache audit, D16 run, not-measured, evidence README (§12, §11.4–11.5, §8.8, §8.11) | T3-E | 7 | CREATE `scripts/assert-trace.mjs` + `.test.mjs`, `scripts/record-phase3.ps1`, `scripts/sendinput-drive.ps1`, `scripts/measure-memory.ps1`, `scripts/phase3-cache.mjs` + `.test.mjs`, `docs/evidence/phase3/{not-measured.md,README.md,d16-report.json,d16-report.md,memory.md,memory.json,trace-idle-60s.jsonl,trace-interaction-20s.jsonl,phase3-idle-60s.mp4,phase3-interaction-20s.mp4,ydif-idle.txt,freeze-idle.txt}` | 15 (records after 16 merges) |
+| 18 | Renderer consumers: plain-mode plate, proactive band, gate status line, History badge (§9.5, §9.4, §2.3, §2.7, §2.8, X5) | T3-B | **6** (with Task 15; the two share no file — main vs. renderer) | MODIFY `apps/desktop/src/renderer/chat/{App.tsx,Composer.tsx,History.tsx,chat.css}`, `apps/desktop/src/renderer/bubble/{main.ts,bubble.ts,bubble.css}`; TEST `chat/{App.test.tsx,Composer.test.tsx,History.test.tsx,chat-css.test.ts}`, `bubble/{bubble.test.ts,bubble-css.test.ts}` | 1, 6, 14 |
 
 ---
 
@@ -4834,7 +4856,7 @@ Create (all owned by this task — CONTRACT GAP: `packages/sim/**` is absent fro
 
 Modify: none. (`packages/sim/src/index.ts`, `events.ts`, `reduce.ts`, `proactive.ts`, `snapshot.ts` and the §12.7 fixtures are Task 9's — do not create them.)
 
-Test: every `*.test.ts` above; `pnpm --filter @ds/sim exec vitest run`; `pnpm -r --if-present typecheck`.
+Test: every `*.test.ts` above; `npx vitest run --project @ds/sim`; `pnpm -r --if-present typecheck`.
 
 **Interfaces:**
 
@@ -4905,7 +4927,7 @@ export default defineConfig({ test: { name: '@ds/sim', environment: 'node', incl
 Run: `pnpm install`
 Expect the last line: `Done in` (workspace link `@ds/sim` → `@ds/protocol` created; `pnpm-lock.yaml` gains an `packages/sim` importer).
 
-Run: `pnpm --filter @ds/sim exec vitest run`
+Run: `npx vitest run --project @ds/sim`
 Expect: `No test files found, exiting with code 1` (the package is wired; nothing to run yet).
 
 Commit:
@@ -4964,7 +4986,7 @@ describe('rng (mulberry32, serialisable state)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/rng.test.ts`
+Run: `npx vitest run --project @ds/sim src/rng.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./rng.ts" from "src/rng.test.ts". Does the file exist?`
 
 - [ ] **Step 3: rng — implementation**
@@ -4994,7 +5016,7 @@ export function nextRandom(rngState: number): { value: number; rngState: number 
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/rng.test.ts`
+Run: `npx vitest run --project @ds/sim src/rng.test.ts`
 Expect PASS: `Test Files  1 passed (1)` / `Tests  4 passed (4)`
 
 Commit:
@@ -5093,7 +5115,7 @@ describe('mealJitter (FNV-1a, deterministic per local date)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/phases.test.ts`
+Run: `npx vitest run --project @ds/sim src/phases.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./phases.ts" from "src/phases.test.ts". Does the file exist?`
 
 - [ ] **Step 5: phases — implementation**
@@ -5163,7 +5185,7 @@ export function mealJitter(localDate: string, meal: 'breakfast' | 'lunch' | 'din
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/phases.test.ts`
+Run: `npx vitest run --project @ds/sim src/phases.test.ts`
 Expect PASS: `Tests  7 passed (7)`
 
 Commit:
@@ -5314,7 +5336,7 @@ describe('initialSimState (§3.1)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/state.test.ts`
+Run: `npx vitest run --project @ds/sim src/state.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./state.ts" from "src/state.test.ts". Does the file exist?`
 
 - [ ] **Step 7: state — implementation**
@@ -5592,7 +5614,7 @@ export function initialSimState(nowMono: number, nowWall: number, opts?: { seed?
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/state.test.ts`
+Run: `npx vitest run --project @ds/sim src/state.test.ts`
 Expect PASS: `Tests  8 passed (8)` — **if Task 5's `lane-metrics.ts` is not yet on `main`, the mirror test fails with `lane-metrics.ts must exist (Task 5) before this mirror can be asserted`; that is the intended red — wait for Task 5 to merge, do not weaken the test** (see Concerns).
 
 Run: `pnpm -r --if-present typecheck`
@@ -5681,7 +5703,7 @@ describe('livelinessMap (R3-13, §3.4 — the ONE monotonic table)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/liveliness.test.ts`
+Run: `npx vitest run --project @ds/sim src/liveliness.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./liveliness.ts" from "src/liveliness.test.ts". Does the file exist?`
 
 - [ ] **Step 9: liveliness — implementation**
@@ -5723,7 +5745,7 @@ export function livelinessMap(L: number): LivelinessMap {
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/liveliness.test.ts`
+Run: `npx vitest run --project @ds/sim src/liveliness.test.ts`
 Expect PASS: `Tests  5 passed (5)`
 
 Commit:
@@ -5805,7 +5827,7 @@ describe('affectionShown (§3.6.3 — dual-path milestones)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/affection.test.ts`
+Run: `npx vitest run --project @ds/sim src/affection.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./affection.ts" from "src/affection.test.ts". Does the file exist?`
 
 - [ ] **Step 11: affection — implementation**
@@ -5843,7 +5865,7 @@ export function affectionShown(state: SimState): number {
 
 Note on the doc comment's "throws in dev": the contract's code body (copied verbatim) ignores the amount in every environment; there is no `NODE_ENV` branch in `packages/sim` (no `process` access — §1.2). Recorded under Concerns.
 
-Run: `pnpm --filter @ds/sim exec vitest run src/affection.test.ts`
+Run: `npx vitest run --project @ds/sim src/affection.test.ts`
 Expect PASS: `Tests  6 passed (6)`
 
 Commit:
@@ -5966,7 +5988,7 @@ describe('neglectTick (§3.7.4 — the ONLY downward pressure)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/mood.test.ts`
+Run: `npx vitest run --project @ds/sim src/mood.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./mood.ts" from "src/mood.test.ts". Does the file exist?`
 
 - [ ] **Step 13: mood — implementation**
@@ -6072,7 +6094,7 @@ export function neglectTick(
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/mood.test.ts`
+Run: `npx vitest run --project @ds/sim src/mood.test.ts`
 Expect PASS: `Tests  14 passed (14)`
 
 Commit:
@@ -6150,7 +6172,7 @@ describe('expenditureTick', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/energy.test.ts`
+Run: `npx vitest run --project @ds/sim src/energy.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./energy.ts" from "src/energy.test.ts". Does the file exist?`
 
 - [ ] **Step 15: energy — implementation**
@@ -6193,7 +6215,7 @@ export function expenditureTick(expenditure: number, presentDeltaMs: number): nu
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/energy.test.ts`
+Run: `npx vitest run --project @ds/sim src/energy.test.ts`
 Expect PASS: `Tests  8 passed (8)`
 
 Commit:
@@ -6297,7 +6319,7 @@ describe('typingStep (§10.4 — the probableTyping predicate, exactly R3-9)', (
 });
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/presence.test.ts`
+Run: `npx vitest run --project @ds/sim src/presence.test.ts`
 Expect FAIL: `Error: Failed to resolve import "./presence.ts" from "src/presence.test.ts". Does the file exist?`
 
 - [ ] **Step 17: presence — implementation**
@@ -6374,7 +6396,7 @@ export function typingStep(
 }
 ```
 
-Run: `pnpm --filter @ds/sim exec vitest run src/presence.test.ts`
+Run: `npx vitest run --project @ds/sim src/presence.test.ts`
 Expect PASS: `Tests  11 passed (11)`
 
 Commit:
@@ -6388,7 +6410,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 
 - [ ] **Step 18: whole-package verification**
 
-Run: `pnpm --filter @ds/sim exec vitest run`
+Run: `npx vitest run --project @ds/sim`
 Expect PASS: `Test Files  8 passed (8)` / `Tests  63 passed (63)`
 
 Run: `pnpm -r --if-present typecheck`
@@ -6421,7 +6443,7 @@ No further commit (nothing changed). No evidence artefact: the contract names no
 - [ ] `circadian` exact at all 11 anchors, `circadian(24) === circadian(0) === 18`, `circadian(1.5) === 13`; `energyOf` equal for two states differing only in downtime.
 - [ ] `phaseOf` boundaries at 6/11/18/22; `localDateString`/`localHour`/`nextLocalMidnight` pinned under `TZ=Asia/Shanghai`; `fnv1a32('')===0x811c9dc5`, `fnv1a32('a')===0xe40c292c`, `fnv1a32('foobar')===0xbf9cf968`; `mealJitter` bounded by ±1 800 000.
 - [ ] `isPresent` flips exactly between 299 900 and 300 000; `presentationModeOf` nap at 300 000, sleep at 900 000 only in `night`; `typingStep` enters at 4, exits at 2, strict `<` thresholds, null never counts.
-- [ ] `pnpm --filter @ds/sim exec vitest run` → 8 files / 63 tests green; `pnpm -r --if-present typecheck` green; `pnpm test` green.
+- [ ] `npx vitest run --project @ds/sim` → 8 files / 63 tests green; `pnpm -r --if-present typecheck` green; `pnpm test` green.
 - [ ] Nine commits, each with both trailers verbatim.
 - [ ] Criteria closed (pure half): §0 Absence economics (§3.6/§3.7), D4 (§3.9), D5 nap threshold (§3.3), D12 default 0.30 (§3.4/§3.5), R3-9 predicate (§10.4), R3-13 presets.
 - [ ] CONTRACT GAPs recorded in `plan-header.md` by the controller: (1) `packages/sim/**` absent from §1.5 → T3-A; (2) rng function names; (3) presence/typing function names; (4) mood helper names beyond `decayToward`; (5) `expenditureTick` name (§3.8 gives only the formula).
@@ -6620,7 +6642,7 @@ describe('conditionTypeIssues', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/conditions.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/conditions.test.ts`
 Expected: `Error: Failed to load url ./conditions.ts` (FAIL, 1 file).
 
 - [ ] **Step 3: Implement `conditions.ts`**
@@ -6704,7 +6726,7 @@ export function conditionTypeIssues(c: Condition | undefined): string[] {
 }
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/conditions.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/conditions.test.ts`
 Expected: `Test Files  1 passed (1)` · `Tests  8 passed (8)`.
 
 Commit:
@@ -6799,7 +6821,7 @@ describe('MotionLabelSchema (§4.11.3)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/schema.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/schema.test.ts`
 Expected: `Error: Failed to load url ./schema.ts` (FAIL).
 
 - [ ] **Step 5: Implement `schema.ts`**
@@ -6910,7 +6932,7 @@ export const MotionLabelSchema = z.object({
 export const MOTION_LABEL_TARGET = 10;   // R3-27's "target >= 10 usable extra motions"
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/schema.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/schema.test.ts`
 Expected: `Test Files  1 passed (1)` · `Tests  7 passed (7)`.
 
 Commit:
@@ -7026,7 +7048,7 @@ describe('WeightedShuffleBag', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/bag.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/bag.test.ts`
 Expected: `Error: Failed to load url ./bag.ts` (FAIL).
 
 - [ ] **Step 7: Implement `bag.ts`**
@@ -7097,7 +7119,7 @@ export class WeightedShuffleBag {
 }
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/bag.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/bag.test.ts`
 Expected: `Test Files  1 passed (1)` · `Tests  5 passed (5)`.
 
 Commit:
@@ -7195,7 +7217,7 @@ describe('hitParts validation (§6.4)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/bind.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/bind.test.ts`
 Expected: `Error: Failed to load url ./bind.ts` (FAIL).
 
 - [ ] **Step 9: Implement `bind.ts`**
@@ -7293,7 +7315,7 @@ export function bindResources(pack: BehaviorPack, cat: ResourceCatalogue, hitPar
 }
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/bind.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/bind.test.ts`
 Expected: `Test Files  1 passed (1)` · `Tests  7 passed (7)`.
 
 Commit:
@@ -7470,7 +7492,7 @@ describe('10-minute seeded simulation at L = 0.30 on the committed Haru pack (§
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/selector.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/selector.test.ts`
 Expected: `Error: Failed to load url ./selector.ts` (FAIL).
 
 - [ ] **Step 11: Implement `selector.ts`**
@@ -7624,7 +7646,7 @@ export class BehaviorSelector {
 }
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/selector.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/selector.test.ts`
 Expected at this point: `Tests  10 passed | 3 failed (13)` — the three simulation cases fail with `ENOENT: no such file or directory … characters/haru/behaviors.json`. That is the Step 12 dependency, not a selector bug — proceed.
 
 - [ ] **Step 12: Create the Haru starter pack**
@@ -7722,7 +7744,7 @@ Create `characters/haru/behaviors.json` — §4.9 verbatim, no reordering, no re
 }
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/selector.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/selector.test.ts`
 Expected: `Test Files  1 passed (1)` · `Tests  13 passed (13)`.
 
 Run: `grep -rn '小春' packages/behaviors characters/haru/behaviors.json; echo "exit=$?"` → expected `exit=1` (no matches; R3-19).
@@ -7807,7 +7829,7 @@ describe('dependency direction (§1.2)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run src/schema.test.ts`
+Run: `npx vitest run --project @ds/behaviors src/schema.test.ts`
 Expected FAIL: `lists every module` — `expected [ 'bag.ts', 'bind.ts', 'conditions.ts', 'schema.ts', 'selector.ts', 'test-util.ts' ] to deeply equal [ …'index.ts'… ]` (the barrel does not exist yet); `Tests  16 passed | 1 failed (17)`.
 
 - [ ] **Step 14: Create the barrel and typecheck**
@@ -7822,7 +7844,7 @@ export * from './bind.ts';
 export * from './selector.ts';
 ```
 
-Run: `pnpm --filter @ds/behaviors exec vitest run`
+Run: `npx vitest run --project @ds/behaviors`
 Expected: `Test Files  5 passed (5)` · `Tests  50 passed (50)`.
 
 Run: `pnpm -r --if-present typecheck`
@@ -7845,7 +7867,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 ---
 
 **Acceptance:** (a reviewer verifies each line)
-- `pnpm --filter @ds/behaviors exec vitest run` → 5 files / 50 tests pass: `conditions.test.ts` (8), `schema.test.ts` (17), `bag.test.ts` (5), `bind.test.ts` (7), `selector.test.ts` (13, incl. the three 10-minute seeded simulations at L = 0.30).
+- `npx vitest run --project @ds/behaviors` → 5 files / 50 tests pass: `conditions.test.ts` (8), `schema.test.ts` (17), `bag.test.ts` (5), `bind.test.ts` (7), `selector.test.ts` (13, incl. the three 10-minute seeded simulations at L = 0.30).
 - `pnpm -r --if-present typecheck` clean; `pnpm test` clean.
 - Files created are exactly: `packages/behaviors/{package.json,tsconfig.json,vitest.config.ts}`, `packages/behaviors/src/{index,conditions,schema,bag,bind,selector,test-util}.ts`, the five `.test.ts` siblings, `characters/haru/behaviors.json`. No file outside those paths changed (`git diff --stat phase2-brain..HEAD -- . ':!packages/behaviors' ':!characters/haru/behaviors.json' ':!pnpm-lock.yaml'` shows nothing from this task).
 - `cmp packages/brain/tsconfig.json packages/behaviors/tsconfig.json` → identical.
@@ -7893,7 +7915,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 | CREATE | `packages/brain/src/act.ts`, `packages/brain/src/act.test.ts` | §2.6 `LookTarget`, `parseLook`, `parseWalkTo`, `boundSay`, `ACT_ATTRS` |
 | MODIFY | `packages/brain/src/tags.ts` (l.1–26 rewritten; l.43–47 `TagScanner` constructor) + `tags.test.ts` (l.35–38, l.95–103, l.113–119, l.123–129 edited; new `describe` appended) | §2.6 grammar |
 | MODIFY | `packages/brain/src/types.ts` (l.1–7) | `Tag` act arm gains `look?` / `walkTo?` |
-| MODIFY | `packages/brain/src/index.ts` (append one line) | `export * from './act.ts'` (CONTRACT GAP: `packages/brain/src/index.ts` absent from §1.5; assigned T3-B for this line only) |
+| MODIFY | `packages/brain/src/index.ts` (append one line **at the end**, edit no other line) | `export * from './act.ts'` — **append-only shared file (R3-39 / contract Amendment A3-4)**: Task 2 (batch 1) and Task 6 (batch 3) append their own lines to the same barrel, the integrator resolves any conflict by keeping both sides, and a barrel line is never a `BLOCKED` report |
 | CREATE | `apps/desktop/src/renderer/shared/lane-metrics.ts`, `lane-metrics.test.ts` | §5.13 constants home |
 | MODIFY | `apps/desktop/src/renderer/bubble/fps.ts` (whole file, 9 lines) + `fps.test.ts` (whole file) | §5.8 `moving` |
 | MODIFY | `apps/desktop/src/renderer/pet/main.ts` l.101 only | `fpsState` gains `moving: false` so `pnpm typecheck` stays green (T3-B owns `pet/main.ts`; the `moving` *producer* is Task 13's) |
@@ -8033,7 +8055,7 @@ describe('CompanionModel — Phase 3 hooks (§5.14)', () => {
 });
 ```
 
-- [ ] **Step 2: Run, expect FAIL** — `pnpm --filter @ds/stage exec vitest run src/companion-model.test.ts`
+- [ ] **Step 2: Run, expect FAIL** — `npx vitest run --project @ds/stage src/companion-model.test.ts`
   Expected: `TypeError: model.setExpressionFades is not a function` (first failing case), 7 failed.
 
 - [ ] **Step 3: Implement the CompanionModel hooks** — edit `packages/stage/src/companion-model.ts`:
@@ -8175,7 +8197,7 @@ with
     } else {
 ```
 
-- [ ] **Step 4: Run, expect PASS** — `pnpm --filter @ds/stage exec vitest run src/companion-model.test.ts`
+- [ ] **Step 4: Run, expect PASS** — `npx vitest run --project @ds/stage src/companion-model.test.ts`
   Expected: `Tests  N passed` with the seven new cases listed, 0 failed.
 
 - [ ] **Step 5: Commit**
@@ -8334,7 +8356,7 @@ describe('OverlayUpdater (§5.7, §4.1)', () => {
 });
 ```
 
-- [ ] **Step 10: Run, expect FAIL** — `pnpm --filter @ds/stage exec vitest run src/overlay.test.ts`
+- [ ] **Step 10: Run, expect FAIL** — `npx vitest run --project @ds/stage src/overlay.test.ts`
   Expected: `Error: Failed to load url ./overlay` (module not found), 1 file failed.
 
 - [ ] **Step 11: Create `packages/stage/src/overlay.ts`**
@@ -8423,7 +8445,7 @@ export class OverlayUpdater extends ICubismUpdater {
 ```
 Then append to `packages/stage/src/index.ts`: `export * from './overlay';`
 
-- [ ] **Step 12: Run, expect PASS** — `pnpm --filter @ds/stage exec vitest run src/overlay.test.ts && pnpm --filter @ds/stage typecheck`
+- [ ] **Step 12: Run, expect PASS** — `npx vitest run --project @ds/stage src/overlay.test.ts && pnpm --filter @ds/stage typecheck`
   Expected: `Tests  6 passed (6)`; tsc exits 0.
 
 - [ ] **Step 13: Commit**
@@ -8504,7 +8526,7 @@ describe('normalizeHitArea (§6.4, D6)', () => {
 });
 ```
 
-- [ ] **Step 15: Run, expect FAIL** — `pnpm --filter @ds/stage exec vitest run src/character.test.ts`
+- [ ] **Step 15: Run, expect FAIL** — `npx vitest run --project @ds/stage src/character.test.ts`
   Expected: `SyntaxError: The requested module './character' does not provide an export named 'normalizeHitArea'`.
 
 - [ ] **Step 16: Rewrite `packages/stage/src/character.ts`** (whole file):
@@ -8660,7 +8682,7 @@ Also edit `packages/stage/src/stage.ts` line 105–112: pass the extras to the l
       });
 ```
 
-- [ ] **Step 18: Run, expect PASS** — `pnpm --filter @ds/stage exec vitest run && pnpm --filter @ds/stage typecheck && pnpm --filter @ds/brain exec vitest run src/persona.test.ts`
+- [ ] **Step 18: Run, expect PASS** — `npx vitest run --project @ds/stage && pnpm --filter @ds/stage typecheck && npx vitest run --project @ds/brain src/persona.test.ts`
   Expected: stage `Tests  N passed`, tsc 0; `persona.test.ts` still passes (its `CharacterBundleSchema.cannedLines` is a strict-by-default `z.object` that **strips** `remember`/`forget`/`mode` until Task 6 widens it — nothing fails, the keys are inert until then).
 
 - [ ] **Step 19: Commit**
@@ -8734,7 +8756,7 @@ describe('ACT_ATTRS', () => {
 });
 ```
 
-- [ ] **Step 21: Run, expect FAIL** — `pnpm --filter @ds/brain exec vitest run src/act.test.ts`
+- [ ] **Step 21: Run, expect FAIL** — `npx vitest run --project @ds/brain src/act.test.ts`
   Expected: `Error: Failed to load url ./act.ts`.
 
 - [ ] **Step 22: Create `packages/brain/src/act.ts`**
@@ -8784,7 +8806,7 @@ export function boundSay(text: string): { text: string; truncated: boolean } {
 export const ACT_ATTRS = ['emotion', 'motion', 'look', 'walkTo'] as const;
 ```
 
-- [ ] **Step 23: Run, expect PASS** — `pnpm --filter @ds/brain exec vitest run src/act.test.ts`
+- [ ] **Step 23: Run, expect PASS** — `npx vitest run --project @ds/brain src/act.test.ts`
   Expected: `Tests  9 passed (9)`.
 
 - [ ] **Step 24: Edit the tags tests for the §2.6 grammar** — in `packages/brain/src/tags.test.ts`:
@@ -8867,7 +8889,7 @@ describe('TagScanner — §2.6 look / walkTo (D14)', () => {
 });
 ```
 
-- [ ] **Step 25: Run, expect FAIL** — `pnpm --filter @ds/brain exec vitest run src/tags.test.ts`
+- [ ] **Step 25: Run, expect FAIL** — `npx vitest run --project @ds/brain src/tags.test.ts`
   Expected: `SyntaxError: The requested module './tags.ts' does not provide an export named 'ACT_ATTR'`.
 
 - [ ] **Step 26: Implement the grammar** — replace lines 1–26 of `packages/brain/src/tags.ts` with:
@@ -8946,7 +8968,7 @@ export type Tag =
 ```
 and append to `packages/brain/src/index.ts`: `export * from './act.ts';`
 
-- [ ] **Step 27: Run, expect PASS** — `pnpm --filter @ds/brain exec vitest run && pnpm --filter @ds/brain typecheck`
+- [ ] **Step 27: Run, expect PASS** — `npx vitest run --project @ds/brain && pnpm --filter @ds/brain typecheck`
   Expected: all brain tests pass (`stream-parser.test.ts`, `turn.test.ts` unchanged and green — `StreamParser` constructs `new TagScanner()` with the default no-op listener); tsc 0.
 
 - [ ] **Step 28: Commit**
@@ -9005,7 +9027,7 @@ describe('lane-metrics — the one home (§5.13)', () => {
 ```
 (Count: §5.5 = 7, §5.11 = 4, §7.4 = 5, §7.5 = 10, §7.6 = 4 → 30.)
 
-- [ ] **Step 30: Run, expect FAIL** — `pnpm --filter @ds/desktop exec vitest run src/renderer/shared/lane-metrics.test.ts`
+- [ ] **Step 30: Run, expect FAIL** — `npx vitest run --project desktop src/renderer/shared/lane-metrics.test.ts`
   Expected: `Error: Failed to load url ./lane-metrics`.
 
 - [ ] **Step 31: Create `apps/desktop/src/renderer/shared/lane-metrics.ts`**
@@ -9061,7 +9083,7 @@ export const WALK_MAX_MS = 12_000;          // hard budget; then 'unreachable' +
 export const WALK_COOLDOWN_MS = 5_000;      // research §8: at most one walkTo per 5 s
 ```
 
-- [ ] **Step 32: Run, expect PASS** — `pnpm --filter @ds/desktop exec vitest run src/renderer/shared/lane-metrics.test.ts`
+- [ ] **Step 32: Run, expect PASS** — `npx vitest run --project desktop src/renderer/shared/lane-metrics.test.ts`
   Expected: `Tests  7 passed (7)`.
 
 - [ ] **Step 33: Commit**
@@ -9093,7 +9115,7 @@ describe('fpsFor (§5.8)', () => {
 });
 ```
 
-- [ ] **Step 35: Run, expect FAIL** — `pnpm --filter @ds/desktop exec vitest run src/renderer/bubble/fps.test.ts`
+- [ ] **Step 35: Run, expect FAIL** — `npx vitest run --project desktop src/renderer/bubble/fps.test.ts`
   Expected: `AssertionError: expected 30 to be 60` (the `moving`-only case).
 
 - [ ] **Step 36: Implement** — rewrite `apps/desktop/src/renderer/bubble/fps.ts` (whole file):
@@ -9116,7 +9138,7 @@ and `apps/desktop/src/renderer/pet/main.ts` line 101:
   const fpsState = { hovering: false, speaking: false, moving: false };
 ```
 
-- [ ] **Step 37: Run, expect PASS** — `pnpm --filter @ds/desktop exec vitest run src/renderer/bubble/fps.test.ts && pnpm --filter @ds/desktop typecheck && test "$(grep -c 'setFps' apps/desktop/src/renderer/pet/main.ts)" = 1 && echo ONE-WRITER`
+- [ ] **Step 37: Run, expect PASS** — `npx vitest run --project desktop src/renderer/bubble/fps.test.ts && pnpm --filter @ds/desktop typecheck && test "$(grep -c 'setFps' apps/desktop/src/renderer/pet/main.ts)" = 1 && echo ONE-WRITER`
   Expected: `Tests  2 passed (2)`; three `tsc` runs exit 0; `ONE-WRITER`.
 
 - [ ] **Step 38: Commit**
@@ -9225,7 +9247,7 @@ describe('SfxPlayer', () => {
 });
 ```
 
-- [ ] **Step 40: Run, expect FAIL** — `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/sfx.test.ts`
+- [ ] **Step 40: Run, expect FAIL** — `npx vitest run --project desktop src/renderer/pet/stage/sfx.test.ts`
   Expected: `Error: Failed to load url ./sfx`.
 
 - [ ] **Step 41: Create `apps/desktop/src/renderer/pet/stage/sfx.ts`**
@@ -9354,7 +9376,7 @@ for (const [name, { ms, gen }] of Object.entries(SOUNDS)) {
 - [ ] **Step 43: Generate the assets** — `node scripts/make-sfx.mjs`
   Expected: four lines `wrote apps/desktop/public/sfx/<name>.ogg <bytes> bytes <ms> ms`, each `<bytes>` ≤ 24576, ms ∈ {90, 260, 140, 380}. Then `ls -l apps/desktop/public/sfx` shows exactly `tap.ogg annoyed.ogg land.ogg notify.ogg`. Listen to each once (`start apps/desktop/public/sfx/tap.ogg` etc.) — the tap must read as a soft pip, annoyed as a two-note grumble, land as a thud, notify as a rising two-tone; if any reads as a click or silence, adjust only the `gen` lambda and regenerate.
 
-- [ ] **Step 44: Run, expect PASS** — `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/sfx.test.ts && pnpm --filter @ds/desktop typecheck`
+- [ ] **Step 44: Run, expect PASS** — `npx vitest run --project desktop src/renderer/pet/stage/sfx.test.ts && pnpm --filter @ds/desktop typecheck`
   Expected: `Tests  10 passed (10)` (1 names + 4 assets + 5 player); tsc 0.
 
 - [ ] **Step 45: Append item 5 to `NOTICE`** (after line 35, one blank line then):
@@ -9405,7 +9427,9 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 
 ### Task 6: T3-C surface — mode grammar + memory commands, plain profile, dropAct parser, proactive prompt, ModeStore, personaName, tray, proactive templates + A14 linter, proactive_log store, X10/A8/E-3 eval fixtures
 
-Owner group **T3-C**, batch 2. Depends on Task 1 (`@ds/protocol` §2) and Task 2 (`DDL_V2`, `tok.ts`, `FactStore`, `extract-prompt.ts`, `memory-recall.zh.json`). Everything here is the **pre-controller** half of T3-C: Task 14 (ProactiveController + BrainService) consumes every name this task produces and wires none of them itself.
+Owner group **T3-C**, **batch 3** (moved from batch 2 by **R3-38**). Depends on Task 1 (`@ds/protocol` §2), Task 2 (`DDL_V2`, `tok.ts`, `FactStore`, `extract-prompt.ts`, `memory-recall.zh.json`) and **Task 3** (`@ds/sim`'s `nextLocalMidnight`, R3-38). Everything here is the **pre-controller** half of T3-C: Task 14 (ProactiveController + BrainService) consumes every name this task produces and wires none of them itself.
+
+**Why batch 3 (R3-38), in one paragraph the implementer must read:** in batch 2 this task and Task 5 both appended a line to `packages/brain/src/index.ts` — the only batch-disjointness violation the plan self-review found — and this task had to declare a **second** `nextLocalMidnight`, because a batch sibling's exports are not importable. Batch 3 removes both problems at zero cost (its other dependencies, Tasks 1 and 2, are batch 1): the barrel edit is now sequential after Task 5's, and `tray.ts` **imports** `nextLocalMidnight` from `@ds/sim` (Task 3, `packages/sim/src/phases.ts`, §3.9) instead of re-deriving the local-midnight rule. Nothing else about this task changes. R3-39 additionally makes both package barrels **append-only** shared files, so a barrel line is never a `BLOCKED` report.
 
 Baseline verified on `main` `d186230` before writing this section: `persona.ts` `sections()` still returns `[PLAIN_RULES, tagGrammar]` for `'plain'`; `stream-parser.ts` `StreamParser` takes one constructor argument; `tray.ts:49-58` builds the six-item Phase 2 menu once with `setContextMenu`; `packages/memory/src/index.ts` exports `db.ts`, `history.ts`, `summary.ts` only; `packages/brain/src/index.ts` has no `mode.ts` / `proactive-prompt.ts` line; `eval/lib/aggregate.mjs` already carries `trait_hit {pctMin 0.80}` and the `emojiMultiCount ≤ 0` shape gate (Phase 2 A-13), `eval/lib/fixture.mjs` already rejects a `trait_hit` prompt without `condition` (A-15), and `eval/lib/judge.mjs` `buildJudgeUser` already renders `【判定条件】`.
 
@@ -9417,13 +9441,14 @@ Baseline verified on `main` `d186230` before writing this section: `persona.ts` 
 | MODIFY | `packages/brain/src/persona.ts` (lines 64-70 `CharacterBundleSchema.cannedLines`; lines 92-96 after `PLAIN_RULES`; lines 118-131 `sections()` plain branch) + `persona.test.ts` (lines 139-152 the two plain-mode cases) | §9.2 `PLAIN_OUTPUT`, §4.10 cannedLines widening |
 | MODIFY | `packages/brain/src/stream-parser.ts` (lines 5-16 fields + constructor; lines 21-31 `push`; lines 41-47 `onText`) + `stream-parser.test.ts` (append one `describe`) | §9.4 `dropAct` |
 | CREATE | `packages/brain/src/proactive-prompt.ts` + `proactive-prompt.test.ts` | §3.10.7 |
-| MODIFY | `packages/brain/src/index.ts` (append 2 lines) | barrel exports — **CONTRACT GAP** (file absent from §1.5; without it `@ds/brain` consumers cannot import `matchModeCommand` / `proactivePrompt`) |
+| MODIFY | `packages/brain/src/index.ts` (append 2 lines **at the end**, edit no other line) | barrel exports — **append-only shared file (R3-39 / Amendment A3-4)**; Task 2 and Task 5 append their own lines to the same file, the integrator keeps both sides, and a conflict here is never a `BLOCKED` |
 | CREATE | `packages/memory/src/proactive-log.ts` + `proactive-log.test.ts` | §3.10.6 |
-| MODIFY | `packages/memory/src/index.ts` (append 1 line) | barrel export — **CONTRACT GAP** (same reason) |
+| MODIFY | `packages/memory/src/index.ts` (append 1 line **at the end**) | barrel export — **append-only shared file (R3-39 / A3-4)**; Task 2 appends its own two lines in batch 1 |
 | CREATE | `apps/desktop/src/main/mode-store.ts` + `mode-store.test.ts` | §9.3 |
 | CREATE | `apps/desktop/src/main/persona-name.ts` + `persona-name.test.ts` | §1.7 |
 | CREATE | `apps/desktop/src/main/proactive-templates.ts` + `proactive-templates.test.ts` | §4.8 |
-| MODIFY | `apps/desktop/src/main/tray.ts` (lines 29-58: signature + menu) + `tray.test.ts` (lines 1-29 mock, 31-33 actions literal, 69-86 the menu case) | §3.5, §3.10.4, §5.9, §5.12, §8.9, §9.5 tray halves |
+| MODIFY | `apps/desktop/src/main/tray.ts` (lines 29-58: signature + menu; imports `nextLocalMidnight` from `@ds/sim`, R3-38) + `tray.test.ts` (lines 1-29 mock, 31-33 actions literal, 69-86 the menu case) | §3.5, §3.10.4, §5.9, §5.12, §8.9, §9.5 tray halves |
+| MODIFY | `apps/desktop/package.json` (one `dependencies` line) and `apps/desktop/electron.vite.config.ts` (`externalizeDepsPlugin` exclude list) | **CONTRACT GAP** (both files absent from §1.5): R3-38 makes this the FIRST `apps/desktop` file to import `@ds/sim`, so the workspace dependency and the bundler exclusion must land here or `tray.ts` cannot resolve the import. Recorded in Task 13 Concern 2 before the ruling; Task 13 still adds `@ds/behaviors` the same way in batch 4. Step 14b below is the whole edit |
 | CREATE | `eval/personas/haru.json`, `eval/personas/quiet.json`, `eval/personas/blunt.json`, `eval/fixtures/persona-bleed.zh.json` | §9.6 |
 | MODIFY | `eval/fixtures/prompts.zh.json` (line 3 `mix`; append 12 prompts before the closing `]`) | §13.2 E-3 trait probes |
 | MODIFY | `eval/recorded/replies.zh.json`, `eval/recorded/judgements.json` (12 entries each) | `--dry` needs a recorded reply per prompt id (`run.mjs:96`) — **CONTRACT GAP** (files absent from §1.5) |
@@ -9437,7 +9462,8 @@ Baseline verified on `main` `d186230` before writing this section: `persona.ts` 
 **Interfaces:**
 
 Consumes —
-- Task 1 `@ds/protocol`: `PERSONA_MODES_IPC`, `PersonaModeIpc`, `PersonaModeIpcSchema`, `LIVELINESS_PRESETS`, `LivelinessPreset`, `PROACTIVE_BUCKETS`, `ProactiveBucket` (§2.1, §2.4).
+- Task 1 `@ds/protocol`: `PERSONA_MODES_IPC`, `PersonaModeIpc`, `PersonaModeIpcSchema`, `LIVELINESS_PRESETS`, `LivelinessPreset`, `PROACTIVE_BUCKETS`, `ProactiveBucket` (§2.1, §2.4). The tray's 工作模式 / 静音 checkboxes write the kv keys `ui_work_mode` / `ui_sfx_muted`; **as of R3-35 / Amendment A3-1 those two keys reach the pet renderer as `SimSnapshot.uiWorkMode` / `SimSnapshot.uiSfxMuted`** on every `sim:state` (Task 1 adds the fields, Task 15 relays them into `SimService`, Task 13 applies them). This task neither reads nor broadcasts the snapshot — it only supplies the two setters/getters in `TrayActions` — but the checkboxes are no longer write-only, so the §5.9 fade and the §5.12 mute are reachable end to end.
+- **Task 3 (`@ds/sim`, new in R3-38):** `nextLocalMidnight(nowWall: number): number` from `packages/sim/src/phases.ts` (§3.9) — the ONE home for the local-midnight rule. `tray.ts` imports it; it does **not** re-declare it, and `tray.test.ts` imports the same function, so 别打扰 ▸ 今天 and the reducer's midnight counter reset can never drift across a DST boundary. **The specifier is `'@ds/sim/src/phases.ts'`, not `'@ds/sim'`** — the package's `main`/`types` point at `src/index.ts`, which Task 3 explicitly does **not** create ("`packages/sim/src/index.ts` … are Task 9's — do not create them") and which Task 9 lands as a **batch-3 sibling** this task does not depend on. The deep path depends on nothing but Task 3's file and resolves under `moduleResolution: "Bundler"` with `allowImportingTsExtensions` (already on in `apps/desktop/tsconfig.json`, Phase 2 C1a). See Concern 10.
 - Task 2 `@ds/memory`: `DDL_V2` `proactive_log` table (§8.1), `migrate(db)`, `getKv/setKv` (Phase 2 `db.ts:82-91`), `bigramSet(s): Set<string>`, `jaccard(a, b): number` (§8.3, `tok.ts`), `FactStore` (§8.2), `openDb(path)`; `@ds/brain`: `EXTRACT_SYSTEM`, `EXTRACT_EVERY_N_USER_TURNS`, `EXTRACT_MAX_TOKENS`, `ExtractResponseSchema`, `extractUserMessage(userTurns)` (§8.5); `eval/fixtures/memory-recall.zh.json` (§8.11).
 - Phase 2 `@ds/brain`: `PERSONA_MODES`, `renderStaticSystem(card, motionKeys, mode)`, `sections()`, `PLAIN_RULES`, `tagGrammar`, `CharacterBundleSchema`, `CharacterCardSchema`, `cardTokens`, `CARD_TOKEN_BUDGET = 700`, `staticSystemTokens`, `StreamParser(turnId)`, `estimateTokens`, `DeepSeekClient`, `ChatClient.complete(req, signal)`, `assemblePrompt`, `sanitizeForDisplay`.
 - Phase 2 desktop: `createTray(actions)` (`tray.ts:29-35`), `tray.test.ts` shared `actions` literal; `eval/run.mjs`, `eval/lib/args.mjs parseArgs`, `eval/lib/judge.mjs buildJudgeUser` (A-15), `eval/lib/report.mjs stampFrom`, `eval/lib/turn.mjs runTurn/pool`.
@@ -9451,7 +9477,7 @@ Produces —
 - `apps/desktop/src/main/mode-store.ts`: `KV_MODE = 'mode'`, `type ModeReason = 'command' | 'restored' | 'tray'`, `class ModeStore { constructor(db); get(); set(mode, reason); onChange(cb): () => void }`.
 - `apps/desktop/src/main/persona-name.ts`: `personaName(bundle: CharacterBundle): string`.
 - `apps/desktop/src/main/proactive-templates.ts`: `PROACTIVE_TEMPLATES` (90 audited lines), `auditTemplate(t): string[]`, `A14_FORBIDDEN`, `PROACTIVE_TEMPLATE_FLOOR = 15`, `PROACTIVE_TEXT_MAX_CHARS = 30`, `nearDuplicate(candidate, recent): boolean`, `NEAR_DUPLICATE_JACCARD = 0.6`.
-- `apps/desktop/src/main/tray.ts`: `interface TrayActions` (17 members), `createTray(actions: TrayActions): Tray`, `DND_FOREVER_WALL = 8.64e15`, `DND_HOUR_MS = 3_600_000`, `nextLocalMidnight(nowWall)`, fixed menu order.
+- `apps/desktop/src/main/tray.ts`: `interface TrayActions` (17 members), `createTray(actions: TrayActions): Tray`, `DND_FOREVER_WALL = 8.64e15`, `DND_HOUR_MS = 3_600_000`, fixed menu order. **It no longer exports `nextLocalMidnight`** (R3-38): the function is imported from `@ds/sim` and never re-exported, so `@ds/sim` stays its single home.
 - `eval/`: `personas/{haru,quiet,blunt}.json`, `fixtures/persona-bleed.zh.json`, 12 `trait-NN` probes with `condition`, `run.mjs --persona <id>` / `--suite memory-recall|persona-bleed` / `--sessions <n>`, `judge.md` v2 rows.
 - `docs/evidence/phase3/persona-tokens.txt`.
 
@@ -9526,7 +9552,7 @@ describe('PERSONA_MODES ≡ PERSONA_MODES_IPC (§2.1)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/mode.test.ts`
+Run: `npx vitest run --project @ds/brain src/mode.test.ts`
 Expected: `Error: Failed to load url ./mode.ts` (FAIL, 1 file).
 
 - [ ] **Step 2: Implement `mode.ts`**
@@ -9583,7 +9609,7 @@ Append to `packages/brain/src/index.ts` (CONTRACT GAP — barrel, one line now, 
 export * from './mode.ts';
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/mode.test.ts`
+Run: `npx vitest run --project @ds/brain src/mode.test.ts`
 Expected: `Tests  19 passed (19)`.
 
 Commit:
@@ -9643,7 +9669,7 @@ Append inside `describe('CharacterCardSchema / parseCharacterBundle')`:
   });
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/persona.test.ts`
+Run: `npx vitest run --project @ds/brain src/persona.test.ts`
 Expected: `FAIL … plain mode drops every persona section AND the tag grammar` with `expected '…' to contain '【输出格式】'`, plus the identity, evidence (ENOENT) and cannedLines cases failing — 4 failed.
 
 - [ ] **Step 4: Implement `PLAIN_OUTPUT`, the plain branch, the cannedLines widening**
@@ -9710,7 +9736,7 @@ plain-bytes: 470
 phase2-plain-superseded: 184
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/persona.test.ts`
+Run: `npx vitest run --project @ds/brain src/persona.test.ts`
 Expected: `Tests  31 passed (31)`.
 
 Run: `pnpm -r --if-present typecheck`
@@ -9771,7 +9797,7 @@ describe('StreamParser { dropAct: true } — plain mode (§9.4)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/stream-parser.test.ts`
+Run: `npx vitest run --project @ds/brain src/stream-parser.test.ts`
 Expected: `TS2554: Expected 1 arguments, but got 2` is a typecheck error only; vitest reports `AssertionError: expected true to be false` in `consumes and discards ACT tags` — 4 failed, 13 passed.
 
 - [ ] **Step 6: Implement `StreamParserOptions`**
@@ -9816,7 +9842,7 @@ In `push()` replace the `if (item.kind === 'tag') {` block with:
 In `onText()` replace `if (!this.sawAct && !this.sawText) this.complianceMiss = true;` with
 `if (!this.dropAct && !this.sawAct && !this.sawText) this.complianceMiss = true;`.
 
-Run: `pnpm --filter @ds/brain exec vitest run src/stream-parser.test.ts`
+Run: `npx vitest run --project @ds/brain src/stream-parser.test.ts`
 Expected: `Tests  17 passed (17)`.
 
 Run: `pnpm -r --if-present typecheck` → exit 0.
@@ -9861,7 +9887,7 @@ describe('proactivePrompt (§3.10.7)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/proactive-prompt.test.ts`
+Run: `npx vitest run --project @ds/brain src/proactive-prompt.test.ts`
 Expected: `Failed to load url ./proactive-prompt.ts` (FAIL).
 
 - [ ] **Step 8: Implement `proactive-prompt.ts`**
@@ -9903,7 +9929,7 @@ export function proactivePrompt(t: ProactiveTemplate, facts: string[]): string {
 
 `MAX_FACTS` (= 5) is Phase 2 `prompt.ts`'s exported constant (bar §0 "≤ 5 retrieved facts"). Append to `packages/brain/src/index.ts`: `export * from './proactive-prompt.ts';`
 
-Run: `pnpm --filter @ds/brain exec vitest run` → `Test Files  N passed`, all green; `pnpm -r --if-present typecheck` → 0.
+Run: `npx vitest run --project @ds/brain` → `Test Files  N passed`, all green; `pnpm -r --if-present typecheck` → 0.
 
 Commit:
 ```
@@ -9990,7 +10016,7 @@ describe('ProactiveLogStore (§3.10.6)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/memory exec vitest run src/proactive-log.test.ts`
+Run: `npx vitest run --project @ds/memory src/proactive-log.test.ts`
 Expected: `Failed to load url ./proactive-log.ts` (FAIL).
 
 - [ ] **Step 10: Implement `proactive-log.ts`**
@@ -10108,7 +10134,7 @@ export class ProactiveLogStore {
 
 Append to `packages/memory/src/index.ts`: `export * from './proactive-log.ts';`
 
-Run: `pnpm --filter @ds/memory exec vitest run src/proactive-log.test.ts` → `Tests  6 passed (6)`. `pnpm -r --if-present typecheck` → 0.
+Run: `npx vitest run --project @ds/memory src/proactive-log.test.ts` → `Tests  6 passed (6)`. `pnpm -r --if-present typecheck` → 0.
 
 Commit:
 ```
@@ -10184,7 +10210,7 @@ describe('personaName (R3-19, §1.7)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/mode-store.test.ts src/main/persona-name.test.ts`
+Run: `npx vitest run --project desktop src/main/mode-store.test.ts src/main/persona-name.test.ts`
 Expected: two `Failed to load url` errors (FAIL).
 
 - [ ] **Step 12: Implement `mode-store.ts` and `persona-name.ts`**
@@ -10237,7 +10263,7 @@ import type { CharacterBundle } from '@ds/brain';
 export function personaName(bundle: CharacterBundle): string { return bundle.card.name; }
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/mode-store.test.ts src/main/persona-name.test.ts` → `Tests  5 passed (5)`.
+Run: `npx vitest run --project desktop src/main/mode-store.test.ts src/main/persona-name.test.ts` → `Tests  5 passed (5)`.
 
 Note for the wiring task (Task 15): §9.3 says `index.ts` calls `set(get(), 'restored')` after the windows exist "so the `mode:changed` broadcast lands" — with the no-op rule that call never notifies. See Concerns.
 
@@ -10344,7 +10370,7 @@ describe('nearDuplicate', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/proactive-templates.test.ts`
+Run: `npx vitest run --project desktop src/main/proactive-templates.test.ts`
 Expected: `Failed to load url ./proactive-templates` (FAIL).
 
 - [ ] **Step 14: Implement `proactive-templates.ts` — 90 audited lines + linter**
@@ -10503,7 +10529,7 @@ export const PROACTIVE_TEMPLATES: readonly ProactiveTemplate[] = [
 ];
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/proactive-templates.test.ts` → `Tests  17 passed (17)`.
+Run: `npx vitest run --project desktop src/main/proactive-templates.test.ts` → `Tests  17 passed (17)`.
 Run: `grep -rn '小春' apps/desktop/src/main` → no output (R3-19).
 
 Commit:
@@ -10515,6 +10541,41 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe
 ```
 
 **R3-30 review handoff (not a plan step — the plan author dispatches nobody):** the controller assigns a separate review agent to read every line of `PROACTIVE_TEMPLATES` against `characters/haru/character.json` (voice, 主人 address, whale motifs, no 颜文字, A18: zero emoji) and the exquisite-bar A-criteria (A3 no user narration, A5 no moral, A14). Rejected lines are rewritten in a follow-up commit; the count per bucket never drops below 15.
+
+- [ ] **Step 14b: Make `@ds/sim` resolvable from `apps/desktop` (R3-38 prerequisite)**
+
+`tray.ts` is about to import `nextLocalMidnight` from `@ds/sim`. `apps/desktop/package.json` on `main` lists `@ds/brain`, `@ds/memory`, `@ds/protocol`, `@ds/stage` and no `@ds/sim`, so pnpm creates no `node_modules/@ds/sim` symlink and both vitest and the electron-vite build fail to resolve it. **CONTRACT GAP:** neither file is in §1.5; Task 13 Concern 2 asked for exactly this edit before R3-38 existed, and Task 13 still adds `@ds/behaviors` in batch 4. Two one-line edits, nothing else:
+
+1. `apps/desktop/package.json` — inside `"dependencies"`, keeping the keys alphabetical, insert after the `"@ds/protocol"` line:
+
+```json
+    "@ds/sim": "workspace:*",
+```
+
+2. `apps/desktop/electron.vite.config.ts` — the `externalizeDepsPlugin` exclusion list (the same array that already carries `@ds/protocol`, around line 40) gains `'@ds/sim'`, so the TypeScript-source package is bundled rather than externalised:
+
+```ts
+externalizeDepsPlugin({ exclude: ['@ds/protocol', '@ds/brain', '@ds/memory', '@ds/stage', '@ds/sim'] }),
+```
+
+Read the array on `main` first and add **only** `'@ds/sim'` to whatever is already there — do not retype the other entries from this plan.
+
+**The import is a deep path, and this is why.** `packages/sim/package.json` (Task 3) points `main` and `types` at `src/index.ts`, but Task 3's own Files list says *"`packages/sim/src/index.ts` … are Task 9's — do not create them"*, and Task 9 is a **batch-3 sibling** of this task. So at the moment this task runs, `@ds/sim`'s entry point does not exist and `from '@ds/sim'` fails with TS2307 / `Failed to resolve entry for package @ds/sim`. `tray.ts` and `tray.test.ts` therefore import **`'@ds/sim/src/phases.ts'`** — exactly the file R3-38 names — which needs nothing from Task 9. `tsconfig.base.json` sets `moduleResolution: "Bundler"` and `apps/desktop/tsconfig.json` already sets `allowImportingTsExtensions` (Phase 2 C1a), and `packages/sim/package.json` has no `exports` field, so the subpath resolves through the pnpm workspace link in all three consumers (tsc, vitest, electron-vite). Recorded as Concern 10; if the controller would rather have the bare specifier, the fix is to let Task 3 create the barrel with its own eight exports and have Task 9 append to it.
+
+Run: `pnpm install` → expect `Done in …`.
+Run: `test -d apps/desktop/node_modules/@ds/sim && echo LINKED` → prints `LINKED`.
+Run: `test -f apps/desktop/node_modules/@ds/sim/src/phases.ts && echo PHASES-RESOLVES` → prints `PHASES-RESOLVES` (this is the file the import names; `src/index.ts` is expected to be **absent** until Task 9 lands).
+Run: `pnpm -r --if-present typecheck` → exit 0 (nothing imports `@ds/sim` from the desktop app yet; this only proves the workspace still type-checks).
+
+Commit:
+```
+build(desktop): depend on @ds/sim and bundle it, so tray.ts can import the one nextLocalMidnight (R3-38)
+
+CONTRACT GAP: apps/desktop/package.json and electron.vite.config.ts are absent from §1.5.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe
+```
 
 - [ ] **Step 15: Failing test — the tray**
 
@@ -10554,7 +10615,12 @@ vi.mock('electron', () => ({
   },
 }));
 
-const { createTray, DND_FOREVER_WALL, DND_HOUR_MS, nextLocalMidnight } = await import('./tray');
+const { createTray, DND_FOREVER_WALL, DND_HOUR_MS } = await import('./tray');
+// R3-38: the ONE home for the local-midnight rule is Task 3's packages/sim/src/phases.ts. The tray
+// imports it; this test imports the same function, so 别打扰 ▸ 今天 and the reducer's midnight reset
+// are asserted against one implementation and cannot drift by an hour across a DST boundary.
+// Deep path, same reason as tray.ts: `@ds/sim`'s barrel is Task 9's, a batch-3 sibling.
+const { nextLocalMidnight } = await import('@ds/sim/src/phases.ts');
 
 /** The shared literal: every member of §3.5's signature, or `tsc -p tsconfig.json` fails. */
 const makeActions = () => ({
@@ -10620,7 +10686,9 @@ Replace the case `'offers 打开对话 and 设置 API Key above the separator, w
     expect(local.setDnd).toHaveBeenLastCalledWith(now + DND_HOUR_MS);
     items[1].click?.();
     expect(local.setDnd).toHaveBeenLastCalledWith(new Date(2026, 7, 31, 0, 0, 0).getTime());
+    // R3-38: the value the tray sends IS @ds/sim's, not a second local derivation.
     expect(nextLocalMidnight(now)).toBe(new Date(2026, 7, 31, 0, 0, 0).getTime());
+    expect(local.setDnd).toHaveBeenLastCalledWith(nextLocalMidnight(now));
     items[2].click?.();
     expect(local.setDnd).toHaveBeenLastCalledWith(DND_FOREVER_WALL);
     expect(DND_FOREVER_WALL).toBe(8.64e15);
@@ -10668,7 +10736,7 @@ Replace the case `'offers 打开对话 and 设置 API Key above the separator, w
   });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/tray.test.ts`
+Run: `npx vitest run --project desktop src/main/tray.test.ts`
 Expected: `builds the fixed Phase 3 menu order` fails with `expected [ '显示/隐藏', '打开对话', '设置 API Key', … ] to deeply equal […]`; 5 failed, 3 passed.
 
 - [ ] **Step 16: Implement the tray**
@@ -10678,6 +10746,16 @@ In `apps/desktop/src/main/tray.ts` replace line 1 with
 ```ts
 import { app, Menu, Tray, nativeImage, type MenuItemConstructorOptions, type NativeImage } from 'electron';
 import { LIVELINESS_PRESETS, type LivelinessPreset, type PersonaModeIpc } from '@ds/protocol';
+// R3-38: one home for the local-midnight rule (Task 3, packages/sim/src/phases.ts, §3.9). Batch 3
+// makes Task 3 a merged dependency, so this is an import, not a second implementation.
+//
+// The specifier is the FILE, not the package root, and that is deliberate: `@ds/sim`'s package.json
+// points `main`/`types` at `src/index.ts`, and that barrel is **Task 9's** (a batch-3 sibling this
+// task does not depend on) — a bare `from '@ds/sim'` would resolve to a file that does not exist yet
+// and fail with TS2307 / "Failed to resolve entry for package @ds/sim". The deep path needs nothing
+// from Task 9, and `moduleResolution: "Bundler"` + `allowImportingTsExtensions` (already set in
+// apps/desktop/tsconfig.json, Phase 2 C1a) resolve it through the pnpm workspace link.
+import { nextLocalMidnight } from '@ds/sim/src/phases.ts';
 ```
 
 and replace lines 29-58 (`export function createTray(…) { … }` through the closing brace) with:
@@ -10706,11 +10784,9 @@ export interface TrayActions {
 export const DND_FOREVER_WALL = 8.64e15;
 export const DND_HOUR_MS = 3_600_000;
 
-/** Next local midnight after `nowWall`, epoch ms (the machine's local calendar day, R3-7). */
-export function nextLocalMidnight(nowWall: number): number {
-  const d = new Date(nowWall);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0, 0).getTime();
-}
+// `nextLocalMidnight(nowWall)` is NOT declared here (R3-38). It is `@ds/sim`'s
+// (packages/sim/src/phases.ts, §3.9), imported above and never re-exported: the tray's 今天 and the
+// reducer's midnight counter reset must be the same rule or they drift by an hour across DST.
 
 const LIVELINESS_ITEMS: readonly { label: string; preset: LivelinessPreset }[] = [
   { label: '安静', preset: 'quiet' }, { label: '默认', preset: 'default' }, { label: '活泼', preset: 'lively' },
@@ -10787,7 +10863,7 @@ export function createTray(actions: TrayActions): Tray {
 }
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/tray.test.ts` → `Tests  8 passed (8)`.
+Run: `npx vitest run --project desktop src/main/tray.test.ts` → `Tests  8 passed (8)`.
 Run: `pnpm --filter @ds/desktop typecheck` — **expected to FAIL in `src/main/index.ts`** with `TS2345: Argument of type '{ toggleVisible…quit }' is not assignable to parameter of type 'TrayActions'` — the same breaking-signature mechanism Phase 2 §6.6 used for `openChat/openKey`. That is the intended hand-off: `index.ts` is Task 15's (T3-A, §1.5 wiring) and Task 15 supplies the twelve members. Record the exact `tsc` line in the commit body. **Do not** touch `index.ts` here (`BLOCKED: apps/desktop/src/main/index.ts is owned by T3-A`).
 Run: `grep -rn '小春' apps/desktop/src/main` → empty.
 
@@ -11424,10 +11500,12 @@ No commit (verification only). If any line differs, the step that owns it is re-
 - [ ] `docs/evidence/phase3/persona-tokens.txt` exists, starts with `cwd: D:\ds`, carries `character:` and `plain:` lines, and `persona.test.ts` pins both numbers (R3-21).
 - [ ] `PROACTIVE_TEMPLATES`: 90 entries, 15 per bucket, all `audited: true`, `auditTemplate` `[]` for each, ids unique `/^[a-z0-9_]{2,48}$/`, texts ≤ 30 graphemes, instruction ⇒ `bucket === 'callback'`, no persona name, and the R3-30 separate-agent review is recorded (commit hash of the review's rewrites, or "no rewrites") before merge.
 - [ ] Tray: the 14-entry fixed order, six submenus, twelve new `TrayActions` members; `tray.test.ts`'s literal lists all 17; `别打扰` values `now + 3_600_000` / next local midnight / `8.64e15` / `null` on re-click.
+- [ ] **R3-38:** `grep -c 'function nextLocalMidnight' apps/desktop/src/main/tray.ts` → `0`; `grep -c "from '@ds/sim/src/phases.ts'" apps/desktop/src/main/tray.ts` → `1` and `grep -c "from '@ds/sim'" apps/desktop/src/main/tray.ts` → `0` (the barrel is Task 9's, a batch-3 sibling — Concern 10); `apps/desktop/package.json` lists `"@ds/sim": "workspace:*"` and `electron.vite.config.ts` excludes it from externalisation (Step 14b); `npx vitest run --project desktop src/main/tray.test.ts` green with the 今天 case asserting against `@ds/sim`'s function.
+- [ ] **R3-39:** the two barrel edits append at the end of the file and touch no existing line — `git diff packages/brain/src/index.ts packages/memory/src/index.ts` shows only `+` lines.
 - [ ] `ModeStore`: default `'character'`, kv key `'mode'`, no-op `set` does not notify.
 - [ ] Eval: `eval/personas/haru.json` regenerates byte-identical from the script; `quiet`/`blunt` pass `CharacterCardSchema` and `cardTokens ≤ 700`; `persona-bleed.zh.json` has 20 `pbNN` prompts; `prompts.zh.json` has 12 `trait-NN` probes each with `condition`, `mix.trait = 12`, `--dry` green; both live suites exit 2 without `DEEPSEEK_API_KEY` and are listed in `docs/evidence/phase3/not-measured.md` by Task 17 (T3-E) as NOT MEASURED — never estimated.
 - [ ] Criteria closed/advanced as stated in **Contract**: A14 (linter + lines), §0 30-day no-repeat (query), A8 / E-3 / A11 (fixtures + harness, NOT MEASURED), A18 note, X4 command grammar + tray items, X10 personas + plain profile, D12/D13 tray, P3 toggle without hotkey.
-- [ ] CONTRACT GAP lines recorded in `plan-header.md` by the controller: (1) `packages/brain/src/index.ts` and `packages/memory/src/index.ts` barrel exports; (2) `docs/evidence/phase3/persona-tokens.txt` path; (3) `eval/lib/args.mjs` + `args.test.mjs`; (4) `eval/lib/memory-recall.mjs`, `persona-bleed.mjs` + tests; (5) `eval/recorded/replies.zh.json`, `judgements.json`; (6) `ProactiveLogStore` naming and the homes of `PROACTIVE_RESERVATION_STALE_MS` / `PROACTIVE_NO_REPEAT_MS`; (7) `--suite persona-bleed` and the attribution prompt shape; (8) `eval/lib/shape.mjs` needs no edit (M-20 already closed by A-13).
+- [ ] CONTRACT GAP lines recorded in `plan-header.md` by the controller: (1) `packages/brain/src/index.ts` and `packages/memory/src/index.ts` barrel exports — **closed by R3-39 / A3-4** (append-only, integrator keeps both sides); (1b) `apps/desktop/package.json` + `electron.vite.config.ts` (Step 14b, still an open §1.5 gap); (2) `docs/evidence/phase3/persona-tokens.txt` path; (3) `eval/lib/args.mjs` + `args.test.mjs`; (4) `eval/lib/memory-recall.mjs`, `persona-bleed.mjs` + tests; (5) `eval/recorded/replies.zh.json`, `judgements.json`; (6) `ProactiveLogStore` naming and the homes of `PROACTIVE_RESERVATION_STALE_MS` / `PROACTIVE_NO_REPEAT_MS`; (7) `--suite persona-bleed` and the attribution prompt shape; (8) `eval/lib/shape.mjs` needs no edit (M-20 already closed by A-13).
 
 **Concerns for the controller:**
 
@@ -11440,17 +11518,23 @@ No commit (verification only). If any line differs, the step that owns it is re-
 7. **The memory-recall harness re-implements the N = 6 cadence** with `@ds/brain`'s `extract-prompt.ts` constants and `FactStore.upsert`, because `FactExtractor` lives in `apps/desktop/src/main` (not importable from `@ds/eval`). It therefore does **not** exercise the extractor's imperative-rejection or Jaccard-merge rules; A11 measures retrieval, which is what §8.11 asks. Flagged so nobody reads the number as an extractor test. `--out` for this suite is honoured only when it ends in `.json` (the contract's example does); otherwise it is a directory.
 8. **`--dry` recordings for the 12 trait probes are synthetic.** They keep the offline lane green (`run.mjs:96` refuses a missing recording); the `trait_hit: true` overrides are fixtures, not measurements, exactly like Phase 2's other overrides. Alternative: make `--dry` skip unrecorded prompts — that changes Phase 2 harness semantics and was not chosen.
 9. **`judge.md` body is the judge's system prompt.** Adding the three gate notes changes the live judge prompt (hence `version: 2`). If the controller prefers the notes outside the prompt, `loadJudge` would need a second frontmatter/section convention (`judge.mjs`, T3-C-unowned).
-10. **§5.13 two homes for `nextLocalMidnight`** (found in the plan self-review). Task 3 lands
-    `nextLocalMidnight(nowWall)` in `packages/sim/src/phases.ts` (§3.9) and this task declares an
-    identical one in `apps/desktop/src/main/tray.ts` for the 别打扰 今天 item. `apps/desktop` *can*
-    import `@ds/sim`, but this task's `dependsOn` is [1, 2] and Task 3 is a **sibling in batch 2**, so
-    importing it would create a cross-batch dependency. Cheapest resolutions, controller's choice:
-    (a) move this task to batch 3 with `dependsOn: [1, 2, 3]` and import the §3.9 helper (this also
-    resolves the `packages/brain/src/index.ts` batch-2 collision with Task 5), or (b) keep both and
-    have Task 15 — which depends on 6 and 12, and therefore sees both packages — assert
-    `nextLocalMidnight(t) === simNextLocalMidnight(t)` in `index.test.ts` over a DST boundary.
-    The two implementations must agree on the local-midnight rule, or 别打扰 今天 and the reducer's
-    midnight counter reset drift apart by an hour twice a year.
+10. **CLOSED by R3-38 — `nextLocalMidnight` has one home again.** The self-review found this task
+    re-declaring `packages/sim/src/phases.ts`'s `nextLocalMidnight(nowWall)` (§3.9) inside
+    `apps/desktop/src/main/tray.ts`, because Task 3 was a batch-2 sibling. The controller took
+    option (a): **this task is batch 3 with `dependsOn: [1, 2, 3]`**, `tray.ts` imports the §3.9
+    helper, `tray.test.ts` imports the same function, and no second implementation exists — so
+    别打扰 今天 and the reducer's midnight counter reset cannot drift by an hour across DST. The move
+    also cleared the batch-2 `packages/brain/src/index.ts` collision with Task 5. **Two residues the
+    controller should rule on:** (a) Step 14b's gap edit (`apps/desktop/package.json`,
+    `electron.vite.config.ts`), which §1.5 does not cover and which needs an owner row; (b) the import
+    had to be the **deep** specifier `'@ds/sim/src/phases.ts'`, because `@ds/sim`'s `main`/`types`
+    point at `src/index.ts` and that barrel belongs to **Task 9 — a batch-3 sibling this task does not
+    depend on** (Task 3's Files list forbids Task 3 from creating it). The deep path works in all
+    three consumers and needs nothing from Task 9, but it is the only deep workspace import in the
+    repo. The two alternatives, both bigger: let **Task 3** create `src/index.ts` with its own eight
+    exports and have Task 9 append to it (then a bare `'@ds/sim'` works from batch 3 onward), or give
+    this task `dependsOn: 9` and move it to batch 4 — which collides with Task 12 and Task 13 on
+    `apps/desktop/package.json` and is therefore worse.
 11. **§5.13 two homes for the two ledger constants.** `PROACTIVE_RESERVATION_STALE_MS` and
     `PROACTIVE_NO_REPEAT_MS` in `packages/memory/src/proactive-log.ts` duplicate
     `SIM_DEFAULTS.PROACTIVE_RESERVATION_STALE_MS` / `.PROACTIVE_TEMPLATE_NO_REPEAT_MS` (Task 3).
@@ -11720,7 +11804,7 @@ describe('TraceWriter — buffering, rotation, env', () => {
 - [ ] **Step 2: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/trace.test.ts
+npx vitest run --project desktop src/main/trace.test.ts
 ```
 Expected: `Error: Failed to resolve import "./trace" from "src/main/trace.test.ts". Does the file exist?`
 
@@ -11935,7 +12019,7 @@ export class TraceWriter {
 - [ ] **Step 4: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/trace.test.ts
+npx vitest run --project desktop src/main/trace.test.ts
 ```
 Expected: `Test Files  1 passed (1)` · `Tests  13 passed (13)`
 
@@ -12227,7 +12311,7 @@ describe('replay on recreate (§11.3)', () => {
 - [ ] **Step 7: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/window-lifecycle.test.ts
+npx vitest run --project desktop src/main/window-lifecycle.test.ts
 ```
 Expected: `Error: Failed to resolve import "./window-lifecycle" from "src/main/window-lifecycle.test.ts". Does the file exist?`
 
@@ -12429,7 +12513,7 @@ export function replayWhenLoaded(win: BrowserWindow, send: () => void): void {
 - [ ] **Step 9: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/window-lifecycle.test.ts
+npx vitest run --project desktop src/main/window-lifecycle.test.ts
 ```
 Expected: `Test Files  1 passed (1)` · `Tests  16 passed (16)`
 
@@ -12545,7 +12629,7 @@ describe('sampleTreeMemory — §11.1 binding metric', () => {
 - [ ] **Step 12: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/memory-metric.test.ts
+npx vitest run --project desktop src/main/memory-metric.test.ts
 ```
 Expected: `Error: Failed to resolve import "./memory-metric" from "src/main/memory-metric.test.ts". Does the file exist?`
 
@@ -12688,7 +12772,7 @@ export function sampleTreeMemory(pids: readonly number[], memoryApi: MemoryApi |
 - [ ] **Step 14: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/memory-metric.test.ts
+npx vitest run --project desktop src/main/memory-metric.test.ts
 ```
 Expected: `Test Files  1 passed (1)` · `Tests  6 passed (6)`
 
@@ -12773,7 +12857,7 @@ describe('§11.2 getter form — the window list is looked up at event time', ()
 - [ ] **Step 17: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/ipc.test.ts
+npx vitest run --project desktop src/main/ipc.test.ts
 ```
 Expected: `Tests  3 failed | 26 passed (29)` with `TypeError: windows.find is not a function` (getter cases) and `TypeError: Cannot read properties of null (reading 'isDestroyed')` (null-entry case).
 
@@ -12863,7 +12947,7 @@ export function handleInvoke<C extends InvokeChannel>(
 - [ ] **Step 20: Run the whole desktop main suite, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main
+npx vitest run --project desktop src/main
 ```
 Expected: every `src/main/*.test.ts` file passes; `ipc.test.ts` reports `29 passed`; no existing case changed (`git diff --stat apps/desktop/src/main/ipc.test.ts` shows only additions: `1 file changed, N insertions(+)`, 0 deletions).
 
@@ -12896,7 +12980,7 @@ Expected: all projects green (`Test Files  N passed`, `Tests  M passed`, no `fai
 **Acceptance:**
 
 - [ ] Files created exactly: `apps/desktop/src/main/{trace,window-lifecycle,memory-metric}.ts` + their `.test.ts`; files modified exactly: `apps/desktop/src/main/{invoke,ipc}.ts`, `ipc.test.ts` (append-only). Nothing else in the diff (`git diff --stat main..HEAD` lists 8 paths; all T3-E in §1.5 / plan-header convention).
-- [ ] `pnpm --filter @ds/desktop exec vitest run src/main/trace.test.ts src/main/window-lifecycle.test.ts src/main/memory-metric.test.ts src/main/ipc.test.ts` → 13 + 16 + 6 + 29 passing; `pnpm test` green; `pnpm -r --if-present typecheck` exit 0.
+- [ ] `npx vitest run --project desktop src/main/trace.test.ts src/main/window-lifecycle.test.ts src/main/memory-metric.test.ts src/main/ipc.test.ts` → 13 + 16 + 6 + 29 passing; `pnpm test` green; `pnpm -r --if-present typecheck` exit 0.
 - [ ] §12.2: `TRACE_KINDS` has exactly the 16 kinds; the allow-list table in `trace.test.ts` is a hand copy (grep: `trace.test.ts` does not import `ALLOWED`/`TRACE_FIELDS` from `trace.ts`); the "has teeth" test proves an extra key fails; the deny regex runs over the same real-writer session; `resource` lines are dropped without `DS_TRACE_RESOURCE=1`; `TraceWriter.fromEnv({})` is disabled and performs no io.
 - [ ] §11.2/§11.3: the four constants equal 60_000 / 400 / 3_000 / 600_000; the cycle test asserts exactly one destroy at t+80 s and zero at t+60 s; retire ordering test asserts `['retire','destroy']`; the D10 test asserts `isVisible() === false` and an empty call log; `LazyWindow` does not import a runtime value from `electron` (`import type` only).
 - [ ] §11.1: `CloseHandle` is inside `finally` (visible in the source); exited pids are skipped without a close; `degraded: true` on `false` and on `api === null`; `privateCommitMb` is never summed into `privateWorkingSetMb` (test asserts 200.5 vs 290).
@@ -12933,7 +13017,7 @@ Owner **T3-B**, batch 3. Depends on Task 1 (protocol) and Task 5 (lane-metrics).
 - MODIFY: none. Read-only: `packages/stage/src/gaze-driver.ts` (GazeDriver.setTarget), `packages/stage/src/companion-model.ts:293` (`setExpression(name | null)`), `apps/desktop/src/renderer/pet/hover.ts` (Phase 1 HoverTracker, untouched).
 
 **Interfaces:**
-- Consumes — Task 1 (`@ds/protocol`): `LANE_TTL_MAX_MS = 90_000`, `type Lane`, `type LaneSource` (`'touch'|'llm'|'behaviour'|'drag'|'sim'|'idle'`), `type LaneResult` (`'completed'|'expired'|'preempted'|'cancelled'|'renderer_lost'`), `LOOK_ANCHORS`/`type LookAnchor`, `type LookTarget` (§2.6 — Task 1's `z.infer<typeof LookTargetSchema>`; this file imports it and never redeclares it), `type PresentationMode`. Task 5 (`apps/desktop/src/renderer/shared/lane-metrics.ts`): `TOUCH_EXPR_MS = 1_400`. Phase 1 `GazeDriver.setTarget(x, y)` and `CompanionModel.setExpression(name: string | null)`; Task 5 `CompanionModel.setExpressionWeight(name, w)` — both injected as callbacks, never imported here. Task 3's `LivelinessMap` reaches `GazeLane.setLiveliness(map)` as **one object** with the `saccadeIntervalMs` / `saccadeAmplitude` fields (structural, no `@ds/sim` import) — not as two positional numbers.
+- Consumes — Task 1 (`@ds/protocol`): `LANE_TTL_MAX_MS = 90_000`, `type Lane`, `type LaneSource` (`'touch'|'llm'|'behaviour'|'drag'|'sim'|'idle'`), `type LaneResult` (`'completed'|'expired'|'preempted'|'cancelled'|'renderer_lost'`), `LOOK_ANCHORS`/`type LookAnchor`, `type LookTarget` (§2.6 — Task 1's `z.infer<typeof LookTargetSchema>`; this file imports it and never redeclares it), `type PresentationMode`, and — **new in R3-35 / contract Amendment A3-1** — `SimSnapshot.uiWorkMode: boolean` (default `false`), the field `HoverAckDeps.workMode()` returns. `uiWorkMode` is broadcast on every `sim:state`, sourced from the `ui_work_mode` kv key the tray's 工作模式 checkbox writes (Task 6 → Task 15 → `SimService`), and Task 13's `pet/main.ts` is what feeds it into this machine; **nothing in this file imports it** — the machine stays clock- and IPC-free and reads the flag through the injected getter, at tick time. Task 5 (`apps/desktop/src/renderer/shared/lane-metrics.ts`): `TOUCH_EXPR_MS = 1_400`. Phase 1 `GazeDriver.setTarget(x, y)` and `CompanionModel.setExpression(name: string | null)`; Task 5 `CompanionModel.setExpressionWeight(name, w)` — both injected as callbacks, never imported here. Task 3's `LivelinessMap` reaches `GazeLane.setLiveliness(map)` as **one object** with the `saccadeIntervalMs` / `saccadeAmplitude` fields (structural, no `@ds/sim` import) — not as two positional numbers.
 - Produces — `lanes.ts`: `LaneCommand<P>`, `LaneLease<P>`, `LaneRequest<P>`, `LanePolicy<P>`, `clampTtl(ttlMs)`, `LaneHolder<P>{ constructor(lane, policy?), request(cmd, nowMs), tick(nowMs), end(result, nowMs), endIf(generation, result, nowMs), detach(), restore(lease, nowMs), current, generation, lane }`. `expression-lease.ts`: `EXPR_INTENSITY_CLAMP=0.65`, `EXPR_SURPRISED_MAX=1.0`, `EXPR_HOLD_AFTER_UTTERANCE_MS=3_000`, `EXPR_HOLD_CEILING_MS=82_000`, `EXPR_DECAY_MS=8_000`, `EXPR_TOTAL_CEILING_MS=90_000`, `EXPR_FADE_MS=300`, `easeOutCubic(t)`, `expressionWeightAt(lease, nowMs)`, `baselineExpression(valence)`, `clampExpressionWeight(emotion, w)`, `ExpressionPayload`, `ExpressionSink`, `ExpressionLane`. `gaze-lane.ts`: `GazeState`, `CURSOR_REST_MS=5_000`, `CURSOR_REST_EPS_DIP=2`, `SACCADE_MIN_MS=8_000`, `SACCADE_MAX_MS=20_000`, `SACCADE_SIGMA_MS=4_000`, `SACCADE_SUPPRESS_MS=4_000`, `SACCADE_TYPES`, `SaccadeType`, `EYES_ONLY_THRESHOLD_DEG=12`, `GAZE_HEAD_DELAY_MS=100`, `GAZE_HEAD_FRACTION=0.65`, `GAZE_BODY_DELAY_MS=480`, `GAZE_BODY_FRACTION=0.20`, `LOOK_LEASE_TTL_MS=6_000`, `GAZE_DEG_FULL_SCALE=30`, `AWAY_OFFSET_DEG=[20,30]`, `lognormalDraw`, `drawSaccadeInterval`, `pickSaccadeType`, `anchorTarget`, `GazePayload`, `GazeTargets`, `GazeLaneDeps`, `GazeLane`. `hover-ack.ts`: `HoverState`, `HOVER_ACK_MAX_MS=250`, `HOVER_ACK_GLANCE_MS=400`, `WORK_MODE_FADE_AFTER_MS=3_000`, `WORK_MODE_FADE_OPACITY=0.35`, `WORK_MODE_FADE_MS=250`, `WORK_MODE_DEFAULT=false`, `HoverAckDeps`, `HoverAckMachine`. Fixture: `TOUCH_PREEMPT_RESTORE`.
 
 **Contract:** §5.2 (envelope, lease rules), §5.4 (R3-4 curve), §5.6 (D3), §5.9 (D7), §5.1 rows enforced inside the expression/gaze holders (touch covers llm expression; llm refused under touch; behaviour refused under llm/touch; newer llm wins), §12.7 B-05, §2.6 (`look` consumer). Bar criteria closed at unit level: **D14** "LLM expressions persist until the next ACT or 90 s, then decay to neutral" (weight is 0 by `issuedAt + 90_000`); bar §0 "expressions ≤ 300 ms" (`EXPR_FADE_MS = 300`, applied by Task 5's `setExpressionFades`); **D3** "head 30° / eyes 1.0 / body 10°" unchanged, "broken every 8–20 s" (`drawSaccadeInterval` clamped to `[8_000, 20_000]`), "stops following after 5 s of cursor rest" (`CURSOR_REST_MS`); **D7 / bar §0** "hover < 250 ms → acknowledge (glance) and freeze wandering; click before any fade → opens chat; rest > 3 s while work-mode on → fade to 35 % + pass-through (opt-in, default off); a faded pet regains clickability the moment the cursor leaves and re-enters". D16's "≥ 1 gaze break" is asserted by Task 17 on the `gazeBreak` records this lane emits.
@@ -13059,7 +13143,7 @@ describe('LaneHolder', () => {
 
 - [ ] **Step 2: Run it, expect the import failure**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/lanes.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/lanes.test.ts`
 Expect: `Error: Failed to resolve import "./lanes" from "src/renderer/pet/stage/lanes.test.ts". Does the file exist?` and `Test Files  1 failed (1)`.
 
 - [ ] **Step 3: Implement `lanes.ts`**
@@ -13191,7 +13275,7 @@ function once(fn: ((r: LaneResult) => void) | undefined): (r: LaneResult) => voi
 
 - [ ] **Step 4: Run, expect PASS**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/lanes.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/lanes.test.ts`
 Expect: `Test Files  1 passed (1)` and `Tests  9 passed (9)`.
 
 - [ ] **Step 5: Typecheck and commit**
@@ -13406,7 +13490,7 @@ describe('ExpressionLane', () => {
 
 - [ ] **Step 8: Run it, expect the import failure**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/expression-lease.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/expression-lease.test.ts`
 Expect: `Error: Failed to resolve import "./expression-lease" from "src/renderer/pet/stage/expression-lease.test.ts". Does the file exist?`
 
 - [ ] **Step 9: Implement `expression-lease.ts`**
@@ -13572,7 +13656,7 @@ export class ExpressionLane {
 
 - [ ] **Step 10: Run, expect PASS**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/expression-lease.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/expression-lease.test.ts`
 Expect: `Test Files  1 passed (1)` and `Tests  12 passed (12)`.
 
 - [ ] **Step 11: Typecheck and commit**
@@ -13793,7 +13877,7 @@ describe('GazeLane', () => {
 
 - [ ] **Step 13: Run it, expect the import failure**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/gaze-lane.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/gaze-lane.test.ts`
 Expect: `Error: Failed to resolve import "./gaze-lane" from "src/renderer/pet/stage/gaze-lane.test.ts". Does the file exist?`
 
 - [ ] **Step 14: Implement `gaze-lane.ts`**
@@ -14070,7 +14154,7 @@ export class GazeLane {
 
 - [ ] **Step 15: Run, expect PASS**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/gaze-lane.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/gaze-lane.test.ts`
 Expect: `Test Files  1 passed (1)` and `Tests  10 passed (10)`. If the seeded break test's `firstBreakAt` lands outside `[8000, 20016]` the draw is wrong (the clamp is the spec), not the seed — do not change the seed.
 
 - [ ] **Step 16: Typecheck and commit**
@@ -14098,18 +14182,25 @@ import {
   WORK_MODE_FADE_MS, WORK_MODE_FADE_OPACITY, type HoverAckDeps,
 } from './hover-ack';
 
+/**
+ * `flags` stands in for the relayed snapshot: R3-35/A3-1 makes `SimSnapshot.uiWorkMode` the source
+ * of `workMode()`, and `pet/main.ts` (Task 13) assigns it on every `sim:state`. It is a mutable box,
+ * not a captured constant, because the machine reads the getter at TICK time — a tray toggle that
+ * lands mid-hover must take effect on the very next tick, in both directions.
+ */
 function harness(workMode = WORK_MODE_DEFAULT) {
   const log: string[] = [];
+  const flags = { workMode };
   const deps: HoverAckDeps = {
     glance: (ttl) => log.push(`glance:${ttl}`),
     setFrozen: (f) => log.push(`frozen:${f}`),
     setModelOapcity: (o, ms) => log.push(`opacity:${o}:${ms}`),
     sendPassthrough: (faded) => log.push(`passthrough:${faded}`),
     openChat: () => log.push('chat:open'),
-    workMode: () => workMode,
+    workMode: () => flags.workMode,
     trace: (rec) => log.push(`trace:${rec.kind}:${rec.label}`),
   };
-  return { m: new HoverAckMachine(deps), log };
+  return { m: new HoverAckMachine(deps), log, flags };
 }
 
 describe('constants (§5.9, bar §0)', () => {
@@ -14189,6 +14280,31 @@ describe('HoverAckMachine', () => {
     expect(log.slice(-3)).toEqual([`opacity:${WORK_MODE_FADE_OPACITY}:${WORK_MODE_FADE_MS}`, 'passthrough:true', 'trace:hoverAck:faded']);
   });
 
+  // R3-35 / A3-1: work mode is `SimSnapshot.uiWorkMode`, relayed on every `sim:state`, and the
+  // machine reads it at tick time. Both edges matter: a toggle arriving DURING a hover must arm the
+  // fade, and a toggle arriving before the deadline must cancel it. Without this the bar §0 row
+  // "rest > 3 s while a 'work-mode' toggle is on → fade to 35 % + pass-through" is unreachable,
+  // because nothing else in Phase 3 can change the flag while the cursor is on her.
+  it('reads the relayed uiWorkMode at tick time: ON mid-hover arms the fade, OFF before the deadline cancels it', () => {
+    const { m, log, flags } = harness(false);
+    m.enter(0);
+    m.tick(400);
+    expect(m.state).toBe('held');
+    flags.workMode = true;                       // sim:state arrives with uiWorkMode true
+    m.tick(3_001);
+    expect(m.state).toBe('faded');
+    expect(log.slice(-3)).toEqual([`opacity:${WORK_MODE_FADE_OPACITY}:${WORK_MODE_FADE_MS}`, 'passthrough:true', 'trace:hoverAck:faded']);
+
+    const b = harness(true);
+    b.m.enter(0);
+    b.m.tick(400);
+    b.flags.workMode = false;                    // the tray unchecked 工作模式 while she is hovered
+    b.m.tick(9_999);
+    expect(b.m.state).toBe('held');
+    expect(b.log.filter((l) => l.startsWith('opacity'))).toEqual([]);
+    expect(b.log.filter((l) => l.startsWith('passthrough'))).toEqual([]);
+  });
+
   it('faded → out on leave restores opacity, pass-through and wandering; re-entry is an ordinary enter', () => {
     const { m, log } = harness(true);
     m.enter(0); m.tick(400); m.tick(3_401);
@@ -14205,7 +14321,7 @@ describe('HoverAckMachine', () => {
 
 - [ ] **Step 18: Run it, expect the import failure**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/hover-ack.test.ts`
+Run: `npx vitest run --project desktop src/renderer/pet/stage/hover-ack.test.ts`
 Expect: `Error: Failed to resolve import "./hover-ack" from "src/renderer/pet/stage/hover-ack.test.ts". Does the file exist?`
 
 - [ ] **Step 19: Implement `hover-ack.ts`**
@@ -14233,7 +14349,13 @@ export interface HoverAckDeps {
   sendPassthrough(faded: boolean): void;
   /** `chat:open {source:'pet', focusComposer:true}` (FW-4: main answers requestChat('pet', true)). */
   openChat(): void;
-  /** The `ui_work_mode` kv flag as main last relayed it. */
+  /**
+   * `SimSnapshot.uiWorkMode` as of the last `sim:state` (R3-35 / contract Amendment A3-1): the tray's
+   * 工作模式 checkbox writes the `ui_work_mode` kv key (Task 6 → Task 15), `SimService` puts it on
+   * every snapshot, and Task 13's `pet/main.ts` assigns it into the box this getter reads. It is
+   * READ AT TICK TIME, never latched at `enter()`, so a toggle arriving mid-hover takes effect on
+   * the next tick in both directions (pinned by `hover-ack.test.ts`).
+   */
   workMode(): boolean;
   /** `arb:trace {kind:'hoverAck', label: state}`. */
   trace(rec: { kind: 'hoverAck'; label: HoverState }): void;
@@ -14301,12 +14423,12 @@ export class HoverAckMachine {
 
 - [ ] **Step 20: Run, expect PASS**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/hover-ack.test.ts`
-Expect: `Test Files  1 passed (1)` and `Tests  8 passed (8)`.
+Run: `npx vitest run --project desktop src/renderer/pet/stage/hover-ack.test.ts`
+Expect: `Test Files  1 passed (1)` and `Tests  9 passed (9)` (8 as generated + the R3-35 `uiWorkMode` tick-time case).
 
 - [ ] **Step 21: Whole-project check, typecheck, commit**
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage` — expect `Test Files  4 passed (4)` and `Tests  39 passed (39)`.
+Run: `npx vitest run --project desktop src/renderer/pet/stage` — expect `Test Files  4 passed (4)` and `Tests  40 passed (40)` (39 as generated + the R3-35 case).
 Run: `pnpm -r --if-present typecheck` — expect exit 0.
 Run: `grep -rn '小春' apps/desktop/src/renderer/pet/stage apps/desktop/tests/fixtures/arbiter` — expect no output (R3-19).
 Run: `grep -rn "from '@ds/sim'\|from '@ds/behaviors'\|from 'electron'" apps/desktop/src/renderer/pet/stage` — expect no output (these units take liveliness as numbers and never import the sim).
@@ -14325,11 +14447,11 @@ No `docs/evidence/phase3/` artefact belongs to this task: the contract names non
 
 **Acceptance:**
 - Files created are exactly the nine listed; every path is T3-B's under §1.5 except the fixture (recorded as a CONTRACT GAP in plan-header.md); no MODIFY; `pet/main.ts` untouched.
-- `pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage` → 4 files / 39 tests green; `pnpm -r --if-present typecheck` exit 0; four commits with both trailers.
+- `npx vitest run --project desktop src/renderer/pet/stage` → 4 files / **40** tests green; `pnpm -r --if-present typecheck` exit 0; four commits with both trailers.
 - `lanes.test.ts` pins: ttl clamp to `LANE_TTL_MAX_MS`, monotonic per-lane generation, deadline = `nowMs + ttl` in the owner clock, `preempted`/`expired` results, one terminal result per lease (repeat calls ignored), `endIf` stale-generation ignore, refusal reports `preempted` for the incoming, `detach`/`restore` keep `issuedAt`/`deadline`, restore of an expired lease reports `expired` and grants nothing.
 - `expression-lease.test.ts` pins the seven `EXPR_*` numbers, `EXPR_TOTAL_CEILING_MS === 82_000 + 8_000`, the curve (hold to `min(utteranceEnd+3 s, issuedAt+82 s)`, 0 by `issuedAt+90 s`), `baselineExpression` thresholds 0.35 / −0.20, the incoming clamp (surprised ≤ 1.0, else ≤ 0.65), weight reset to 1.0 on release, the §5.1 refusal rows, and B-05 verbatim through the fixture (touch → `preempted` only; LLM lease silent until its own end; restored `deadline` 90 000; weight 0.55729375 at 3 400 ms).
 - `gaze-lane.test.ts` pins all twelve §5.6 constants and `SACCADE_TYPES` weights, the clamp `[8_000, 20_000]` over 10 000 draws with the mean in range, the anchor map, cursor rest at 5 s with the 2-DIP epsilon, a break inside 8–20 s with a `gazeBreak` trace carrying degrees, the 6 000 ms look lease, touch > llm > refusal, `SACCADE_SUPPRESS_MS` after a lease, the eyes-only threshold and head/body lag fractions, `sleep`.
-- `hover-ack.test.ts` pins the six constants and all seven table rows, exactly one `chat:open` per click before the fade, none when `out` or `faded`, strict `> 3 000 ms` rest, opacity 0.35 over 250 ms, `arb:passthrough` true/false, re-entry after fade is an ordinary enter.
+- `hover-ack.test.ts` pins the six constants and all seven table rows, exactly one `chat:open` per click before the fade, none when `out` or `faded`, strict `> 3 000 ms` rest, opacity 0.35 over 250 ms, `arb:passthrough` true/false, re-entry after fade is an ordinary enter, **and (R3-35) that `workMode()` is read at tick time so a `sim:state` carrying `uiWorkMode: true` mid-hover arms the fade and one carrying `false` cancels it**.
 - Bar criteria closed at unit level: D14 90-s ceiling, bar §0 expression ≤ 300 ms constant, D3 8–20 s / 5-s rest, D7 250 ms ack / 3 s / 35 % / default off. D16's ≥ 1 gaze break is Task 17's.
 - No literal `小春`; no `@ds/sim`, `@ds/behaviors`, `electron` imports under `stage/`.
 
@@ -14463,7 +14585,7 @@ describe('§3.2 SimEvent union', () => {
 
 - [ ] **Step 2: Run it, expect FAIL**
 
-Command: `pnpm --filter @ds/sim exec vitest run src/events.test.ts`
+Command: `npx vitest run --project @ds/sim src/events.test.ts`
 Expected: `Error: Failed to load url ./events.ts` (or `Cannot find module './events.ts'`), `1 failed`.
 
 - [ ] **Step 3: Write events.ts (§3.2 verbatim + the gap event)**
@@ -14531,7 +14653,7 @@ export interface ReduceResult { state: SimState; effects: SimEffect[] }
 
 - [ ] **Step 4: Run, expect PASS**
 
-Command: `pnpm --filter @ds/sim exec vitest run src/events.test.ts` → `Test Files  1 passed`, `Tests  2 passed`.
+Command: `npx vitest run --project @ds/sim src/events.test.ts` → `Test Files  1 passed`, `Tests  2 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -14671,7 +14793,7 @@ describe('§3.10.5 bucketFor', () => {
 
 - [ ] **Step 7: Run it, expect FAIL**
 
-Command: `pnpm --filter @ds/sim exec vitest run src/proactive.test.ts` → `Failed to load url ./proactive.ts`.
+Command: `npx vitest run --project @ds/sim src/proactive.test.ts` → `Failed to load url ./proactive.ts`.
 
 - [ ] **Step 8: Write proactive.ts (§3.10.2 verbatim algorithm)**
 
@@ -14797,7 +14919,7 @@ export function bucketFor(state: SimState, ext?: BucketExternals): ProactiveBuck
 
 - [ ] **Step 9: Run, expect PASS**
 
-`pnpm --filter @ds/sim exec vitest run src/proactive.test.ts` → `Tests  26 passed` (2 shape + 20 layer cases incl. the 11 `it.each` rows + 1 back-off + 3 bucket).
+`npx vitest run --project @ds/sim src/proactive.test.ts` → `Tests  26 passed` (2 shape + 20 layer cases incl. the 11 `it.each` rows + 1 back-off + 3 bucket).
 
 - [ ] **Step 10: Commit**
 
@@ -15042,7 +15164,7 @@ describe('§3.6 fuzz: 10 000 random events never decrease affection (R3-8)', () 
 
 - [ ] **Step 12: Run it, expect FAIL**
 
-`pnpm --filter @ds/sim exec vitest run src/reduce.test.ts` → `Failed to load url ./reduce.ts`.
+`npx vitest run --project @ds/sim src/reduce.test.ts` → `Failed to load url ./reduce.ts`.
 
 - [ ] **Step 13: Write reduce.ts**
 
@@ -15267,7 +15389,7 @@ export const reduce = (state: SimState, event: SimEvent, nowMono: number, nowWal
 
 - [ ] **Step 14: Run, expect PASS**
 
-`pnpm --filter @ds/sim exec vitest run src/reduce.test.ts` → `Test Files  1 passed`, `Tests  21 passed`. (If Task 3's `nextRandom` has another name, the test's import in Step 11 and `proactive.ts` change together — one identifier, two files.)
+`npx vitest run --project @ds/sim src/reduce.test.ts` → `Test Files  1 passed`, `Tests  21 passed`. (If Task 3's `nextRandom` has another name, the test's import in Step 11 and `proactive.ts` change together — one identifier, two files.)
 
 - [ ] **Step 15: Commit**
 
@@ -15348,14 +15470,27 @@ describe('§2.4 SimSnapshot builder', () => {
     expect(snap.affection).toBe(affectionShown(s)); expect(snap.affection).toBe(55);
     expect(snap.energy).toBeGreaterThanOrEqual(0); expect(snap.energy).toBeLessThanOrEqual(100);
     expect(Object.keys(snap).sort()).toEqual(['affection', 'arousal', 'battery', 'cursorNear', 'dnd', 'energy', 'liveliness', 'localDate',
-      'mode', 'nearEdge', 'onFloor', 'phase', 'presence', 'presentationMode', 'probableTyping', 'userIdleS', 'valence', 'tsMain'].sort());
+      'mode', 'nearEdge', 'onFloor', 'phase', 'presence', 'presentationMode', 'probableTyping', 'userIdleS', 'valence', 'tsMain',
+      'uiWorkMode', 'uiSfxMuted'].sort());
+  });
+
+  // R3-35 / A3-1: the two UI booleans are on the SNAPSHOT, not on SimState. Task 1 landed them as
+  // REQUIRED `z.boolean()` (no `.default()`), so this builder must emit them or the payload fails
+  // `SimSnapshotSchema.parse`; it emits `false`, the shipped off state, and `SimService` overlays the
+  // tray's live values (Task 12's `setUiFlags`). The reducer must never integrate either.
+  it('emits uiWorkMode/uiSfxMuted as false — required fields the reducer has no state for', () => {
+    const snap = toSnapshot(live(), 1, T0);
+    expect(snap.uiWorkMode).toBe(false);
+    expect(snap.uiSfxMuted).toBe(false);
+    expect(Object.keys(SimStateSchema.shape)).not.toContain('uiWorkMode');
+    expect(Object.keys(SimStateSchema.shape)).not.toContain('uiSfxMuted');
   });
 });
 ```
 
 - [ ] **Step 17: Run it, expect FAIL**
 
-`pnpm --filter @ds/sim exec vitest run src/snapshot.test.ts` → `Failed to load url ./snapshot.ts`.
+`npx vitest run --project @ds/sim src/snapshot.test.ts` → `Failed to load url ./snapshot.ts`.
 
 - [ ] **Step 18: Write snapshot.ts (§3.12 schema verbatim)**
 
@@ -15445,7 +15580,18 @@ export function restoreSim(raw: unknown, nowMono: number, nowWall: number, opts?
   return { state: fromPersisted(parsed.data, nowMono, nowWall), discarded: null };
 }
 
-/** The `sim:state` payload (§2.4). Gate counters, rng and the reservation never cross to a renderer. */
+/**
+ * The `sim:state` payload (§2.4). Gate counters, rng and the reservation never cross to a renderer.
+ *
+ * R3-35 / contract Amendment A3-1: `uiWorkMode` and `uiSfxMuted` are on `SimSnapshot` but NOT on
+ * `SimState` — they are UI toggles read from kv (`ui_work_mode` / `ui_sfx_muted`) that the reducer
+ * has no opinion about and must never integrate. Task 1 landed them as REQUIRED `z.boolean()` (no
+ * `.default()`), so this builder MUST write them or the payload fails `SimSnapshotSchema.parse`; it
+ * writes `false`, the shipped-off state, and `SimService.snapshot()` overlays the live values it was
+ * handed by the tray relay (`setUiFlags`, Task 12). Emitting them here rather than omitting them
+ * keeps the return type a whole `SimSnapshot`, so `tsc` catches the day a third UI flag is added and
+ * nobody overlays it.
+ */
 export function toSnapshot(state: SimState, nowMono: number, nowWall: number): SimSnapshot {
   return {
     tsMain: nowMono,
@@ -15459,13 +15605,16 @@ export function toSnapshot(state: SimState, nowMono: number, nowWall: number): S
     cursorNear: state.cursorNear, onFloor: state.onFloor, nearEdge: state.nearEdge,
     dnd: state.dnd, battery: { charging: state.battery.charging, level: state.battery.level },
     mode: state.mode, localDate: state.localDate,
+    // R3-35 / A3-1 — required on the schema (Task 1 shipped them without `.default()`), so they are
+    // written here as the shipped-off state; SimService.setUiFlags supplies the live values.
+    uiWorkMode: false, uiSfxMuted: false,
   };
 }
 ```
 
 - [ ] **Step 19: Run, expect PASS**
 
-`pnpm --filter @ds/sim exec vitest run src/snapshot.test.ts` → `Tests  5 passed`.
+`npx vitest run --project @ds/sim src/snapshot.test.ts` → `Tests  6 passed` (5 as generated + the R3-35 `uiWorkMode`/`uiSfxMuted` case).
 
 - [ ] **Step 20: Commit**
 
@@ -15517,7 +15666,7 @@ describe('§5.13 lane-metrics mirror', () => {
 
 - [ ] **Step 22: Run the whole package and the typecheck**
 
-`pnpm --filter @ds/sim exec vitest run` → every file `passed`, `0 failed`.
+`npx vitest run --project @ds/sim` → every file `passed`, `0 failed`.
 `pnpm -r --if-present typecheck` → exits 0 (the `@ds/sim` `tsc -p tsconfig.json` line included). Expected typecheck note: `state.test.ts`'s extensionless import into `apps/desktop` resolves because `tsconfig.base.json` uses bundler/node16 resolution as Phase 2's `chat-metrics` precedent does for `packages/brain` tests; if `tsc` reports TS2835 there, add `"apps/desktop/src/renderer/shared/*.ts"` to `packages/sim/tsconfig.json`'s `include` — that file is Task 3's, same owner group.
 
 - [ ] **Step 23: Commit**
@@ -15696,7 +15845,7 @@ describe('§12.7 pure boundary fixtures', () => {
 
 - [ ] **Step 25: Run, expect PASS**
 
-`pnpm --filter @ds/sim exec vitest run src/fixtures` → `Tests  4 passed`. Then the full gate: `pnpm --filter @ds/sim exec vitest run` → all files passed; `pnpm -r --if-present typecheck` → exit 0; `grep -rn '小春' packages/sim` → empty; `grep -rn "from '\(electron\|node:\)" packages/sim/src` → empty.
+`npx vitest run --project @ds/sim src/fixtures` → `Tests  4 passed`. Then the full gate: `npx vitest run --project @ds/sim` → all files passed; `pnpm -r --if-present typecheck` → exit 0; `grep -rn '小春' packages/sim` → empty; `grep -rn "from '\(electron\|node:\)" packages/sim/src` → empty.
 
 - [ ] **Step 26: Commit**
 
@@ -15712,11 +15861,12 @@ MSG
 
 **Acceptance:**
 
-- Tests named and green: `events.test.ts` (2), `proactive.test.ts` (24), `reduce.test.ts` (22 incl. the 10 000-event fuzz), `snapshot.test.ts` (5), `state.test.ts` §5.13 block (1), `fixtures/sim/boundary.test.ts` (4); `pnpm --filter @ds/sim exec vitest run` and `pnpm -r --if-present typecheck` both exit 0.
+- Tests named and green: `events.test.ts` (2), `proactive.test.ts` (24), `reduce.test.ts` (22 incl. the 10 000-event fuzz), `snapshot.test.ts` (6 — 5 as generated + the R3-35 UI-flag case), `state.test.ts` §5.13 block (1), `fixtures/sim/boundary.test.ts` (4); `npx vitest run --project @ds/sim` and `pnpm -r --if-present typecheck` both exit 0.
 - Files touched are exactly the list under **Files**; nothing outside `packages/sim/src/**` is edited; `state.ts`, `rng.ts`, `mood.ts`, etc. (Task 3) are read only. Only `state.test.ts` is modified and only by appending.
 - §3.2 union verbatim + the one gap event; §3.10.2 layer order verbatim (test `plain-mode` before `typing`, `it.each` covers every layer-4 code); `GATE_REASONS` has exactly 18 codes; GateVerdict ⊂ ProactiveVerdict asserted.
 - Reducer invariants proven: delta cap 2 s, negative delta 0, PRESENT predicate, `returned` in the same dispatch as `USER_INPUT` (B-01 400 ms ≤ 1 000 ms), mood frozen when idle/locked/suspended (B-02), settle only on the adverse component, neglect floor −0.2 via the schema range, affection monotonic (fuzz, every event type, random clocks, rollbacks), `firedToday` keyed by `localDate` (B-03), counters reset once at midnight (B-10), persist effect per 60-s wall boundary, structural sharing (no-op event returns the same reference).
 - `toPersisted` output carries no `*Mono` key (regex test); `fromPersisted` rebases on the new `nowMono`, clamps `sinceInteractionMs`, keeps `lastWall/localDate`; `restoreSim` discards on version mismatch / zod failure with a reason string.
+- **R3-35 / A3-1:** `toSnapshot` returns a whole `SimSnapshot` including `uiWorkMode` / `uiSfxMuted` written as `false` (Task 1 made both **required**, not defaulted), and `SimStateSchema` has **neither** field — the reducer never integrates a UI toggle. `SimService.setUiFlags` (Task 12) overlays the live values before the broadcast.
 - No `小春`; no `electron`/`node:` imports in `packages/sim/src`; every relative import carries `.ts`; erasable TS only.
 - Criteria closed: §0 Absence economics, §0 Proactive caps (layers), D4 (`asleep`, one-shots), D5 (nap at 300 s, `returned` ≤ 1 s), A14 gate half. R3-1, R3-7, R3-8, R3-16 satisfied for the pure half.
 
@@ -16406,7 +16556,7 @@ export function runRendererReload(h: MotionHarness): {
 - [ ] **Step 3: Run the motor suite, expect it to fail on the missing module**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/window-motion.test.ts
+npx vitest run --project desktop src/main/window-motion.test.ts
 ```
 
 Expected: `FAIL src/main/window-motion.test.ts` with `Error: Failed to load url ./window-motion` (or `Cannot find module '../../../src/main/window-motion'` from the fixture import).
@@ -16866,7 +17016,7 @@ export class WindowMotionController {
 - [ ] **Step 5: Run the motor suite, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/window-motion.test.ts
+npx vitest run --project desktop src/main/window-motion.test.ts
 ```
 
 Expected: `Test Files  1 passed (1)` and `Tests  30 passed (30)`.
@@ -16930,7 +17080,7 @@ and append, immediately after the `'restores click-through when the render proce
 - [ ] **Step 9: Run, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/pet-window.test.ts
+npx vitest run --project desktop src/main/pet-window.test.ts
 ```
 
 Expected: `2 failed` — `AssertionError: expected "spy" to be called 1 times, but got 0 times` for both new tests.
@@ -17009,7 +17159,7 @@ export function moveBy(win: BrowserWindow, dx: number, dy: number): void {
 - [ ] **Step 11: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/main/pet-window.test.ts src/main/window-motion.test.ts
+npx vitest run --project desktop src/main/pet-window.test.ts src/main/window-motion.test.ts
 ```
 
 Expected: `Test Files  2 passed (2)`; pet-window shows `23 passed` (21 existing + 2 new).
@@ -17184,7 +17334,7 @@ describe('applySquash (§5.5)', () => {
 - [ ] **Step 14: Run, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/drag-visual.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/drag-visual.test.ts
 ```
 
 Expected: `FAIL src/renderer/pet/stage/drag-visual.test.ts` with `Error: Failed to load url ./drag-visual`.
@@ -17361,7 +17511,7 @@ export class DragVisual {
 - [ ] **Step 16: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/drag-visual.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/drag-visual.test.ts
 ```
 
 Expected: `Test Files  1 passed (1)`, `Tests  11 passed (11)`.
@@ -17369,7 +17519,7 @@ Expected: `Test Files  1 passed (1)`, `Tests  11 passed (11)`.
 - [ ] **Step 17: Full desktop suite, typecheck, commit**
 
 ```
-pnpm --filter @ds/desktop exec vitest run
+npx vitest run --project desktop
 pnpm -r --if-present typecheck
 git add apps/desktop/src/renderer/pet/stage/drag-visual.ts apps/desktop/src/renderer/pet/stage/drag-visual.test.ts
 git commit -m "feat(desktop): drag-visual — lean/sway interpolation, generation-gated landing squash, fling tumble and stand-up (§5.5, §7.5)
@@ -17384,7 +17534,7 @@ Expected: the desktop project reports `Test Files  N passed (N)` with zero failu
 
 **Acceptance:**
 
-- [ ] `pnpm --filter @ds/desktop exec vitest run src/main/window-motion.test.ts` → 30 passed; `src/main/pet-window.test.ts` → 23 passed; `src/renderer/pet/stage/drag-visual.test.ts` → 11 passed; `pnpm -r --if-present typecheck` exits 0.
+- [ ] `npx vitest run --project desktop src/main/window-motion.test.ts` → 30 passed; `src/main/pet-window.test.ts` → 23 passed; `src/renderer/pet/stage/drag-visual.test.ts` → 11 passed; `pnpm -r --if-present typecheck` exits 0.
 - [ ] Files touched are exactly the nine in the table; all are T3-B rows in §1.5 (`window-motion.ts + .test.ts`, `pet-window.ts` (+ its test), `drag-visual.ts + .test.ts`) or the §12.7 fixture names (`motion/stale-generation.fixture.ts`, `motion/display-unplug.fixture.ts`, `arbiter/renderer-reload.fixture.ts`). `index.ts`, `press.ts`, `pet/main.ts`, `lane-metrics.ts`, `packages/protocol` untouched.
 - [ ] §5.13 discipline: `window-motion.ts` declares only `MOTOR_HZ`, `MOTOR_SUBSTEP_S`, `MOTOR_FRAME_CLAMP_S`, `SNAPSHOT_HZ`; every DRAG_/FLING_/GRAVITY_/BOUNCE_/REST_/AIR_/LANDING_/WALK_/TAP_SLOP name is a re-export (`grep -n "^export const" apps/desktop/src/main/window-motion.ts` shows exactly the four).
 - [ ] §7.3: `vi.getTimerCount()` is 0 at rest in every rest assertion; the interval is `1000 / MOTOR_HZ`; the frame clamp is `MOTOR_FRAME_CLAMP_S`; the position is written once per motor frame.
@@ -17662,7 +17812,7 @@ describe('hysteresis helpers (R3-6d)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/stage exec vitest run src/picker.test.ts`
+Run: `npx vitest run --project @ds/stage src/picker.test.ts`
 Expected: `Error: Failed to resolve import "./picker" from "src/picker.test.ts". Does the file exist?`
 
 - [ ] **Step 2: Implement `packages/stage/src/picker.ts`**
@@ -17970,7 +18120,7 @@ export async function loadPickerTextures(baseUrl: string, modelJson: string): Pr
 }
 ```
 
-Run: `pnpm --filter @ds/stage exec vitest run src/picker.test.ts`
+Run: `npx vitest run --project @ds/stage src/picker.test.ts`
 Expected: `Test Files  1 passed (1)` / `Tests  17 passed (17)`
 
 - [ ] **Step 3: Export from the barrel and typecheck**
@@ -18059,7 +18209,7 @@ describe('FBO constants (§6.6)', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/stage exec vitest run src/picker-gpu.test.ts`
+Run: `npx vitest run --project @ds/stage src/picker-gpu.test.ts`
 Expected: `Error: Failed to resolve import "./picker-gpu" from "src/picker-gpu.test.ts". Does the file exist?`
 
 - [ ] **Step 6: Implement `GpuPressReader` (and the §6.6 constants) in `packages/stage/src/picker-gpu.ts`**
@@ -18110,7 +18260,7 @@ void PART_ATTRIBUTION_MIN;
 export type { CubismMatrix44 as _CubismMatrix44, PickSource as _PickSource };
 ```
 
-Run: `pnpm --filter @ds/stage exec vitest run src/picker-gpu.test.ts`
+Run: `npx vitest run --project @ds/stage src/picker-gpu.test.ts`
 Expected: `Tests  5 passed (5)`
 
 Run: `pnpm -r --if-present typecheck`
@@ -18175,7 +18325,7 @@ with
 
 Run: `pnpm -r --if-present typecheck`
 Expected: exit 0.
-Run: `pnpm --filter @ds/stage exec vitest run`
+Run: `npx vitest run --project @ds/stage`
 Expected: `Test Files  N passed (N)` with no failures (the stage has no unit test of its own; the hook is exercised in the browser by Step 10's `press read` test).
 
 Commit:
@@ -18340,7 +18490,7 @@ function renderIdPassImpl(gl: WebGL2RenderingContext, input: IdPassInput): IdPas
 export const renderIdPass: ((gl: WebGL2RenderingContext, input: IdPassInput) => IdPass) | null = DEV ? renderIdPassImpl : null;
 ```
 
-Run: `pnpm -r --if-present typecheck` → exit 0. Run: `pnpm --filter @ds/stage exec vitest run` → all pass (the id pass is exercised by Step 10 in the browser; vitest has no GL).
+Run: `pnpm -r --if-present typecheck` → exit 0. Run: `npx vitest run --project @ds/stage` → all pass (the id pass is exercised by Step 10 in the browser; vitest has no GL).
 
 Commit:
 ```
@@ -18691,7 +18841,7 @@ describe('FboPicker (§6.6, conditional)', () => {
 });
 ```
 
-Run `pnpm --filter @ds/stage exec vitest run` → all pass; `pnpm -r --if-present typecheck` → exit 0. Re-run Step 11's oracle with `picker` in the spec replaced by `new S.FboPicker(model, new S.Picker(model, map, textures.map(() => opaque1x1), canvas), canvas)` where `opaque1x1 = { width: 1, height: 1, data: new Uint8ClampedArray([0,0,0,255]) }`, calling `fbo.capture(gl, proj); fbo.poll(gl, 0); await new Promise(r => setTimeout(r, 50)); fbo.poll(gl, 1000)` after each pose's freeze, and the `.md` line "Renderer under test" set to `FboPicker`. Same gates. Commit:
+Run `npx vitest run --project @ds/stage` → all pass; `pnpm -r --if-present typecheck` → exit 0. Re-run Step 11's oracle with `picker` in the spec replaced by `new S.FboPicker(model, new S.Picker(model, map, textures.map(() => opaque1x1), canvas), canvas)` where `opaque1x1 = { width: 1, height: 1, data: new Uint8ClampedArray([0,0,0,255]) }`, calling `fbo.capture(gl, proj); fbo.poll(gl, 0); await new Promise(r => setTimeout(r, 50)); fbo.poll(gl, 1000)` after each pose's freeze, and the `.md` line "Renderer under test" set to `FboPicker`. Same gates. Commit:
 
 ```
 git add packages/stage/src/picker-gpu.ts packages/stage/src/picker-gpu.test.ts packages/stage/src/stage.ts apps/desktop/tests/picker-oracle.spec.ts docs/evidence/phase3/picker-oracle.json docs/evidence/phase3/picker-oracle.md
@@ -18704,7 +18854,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 ---
 
 **Acceptance:**
-- `pnpm --filter @ds/stage exec vitest run` passes with `src/picker.test.ts` (17 tests) and `src/picker-gpu.test.ts` (5 tests; 6 after Step 12).
+- `npx vitest run --project @ds/stage` passes with `src/picker.test.ts` (17 tests) and `src/picker-gpu.test.ts` (5 tests; 6 after Step 12).
 - `pnpm -r --if-present typecheck` exits 0 (`@ds/stage` tsconfig, desktop `tsconfig.renderer.json` which includes `tests/` and `packages/stage/src`).
 - `pnpm --filter @ds/desktop test:e2e -- tests/picker-oracle.spec.ts` → `1 passed`; `docs/evidence/phase3/picker-oracle.json` has `verdict`, `cwd` starting `D:\ds`, `samples ≥ 20000`, `boundaryShare ≥ 0.5`, every `parts[*] ≥ 200`, `poses[*].pressAlphaAgrees === true`; `picker-oracle.md` has the `HARDWARE:` line with Windows build, CPU, GPU/driver string and `150 %`.
 - Files touched are exactly: `packages/stage/src/{picker,picker-gpu}.ts` + tests, `packages/stage/src/stage.ts`, `packages/stage/src/index.ts` (gap, recorded), `apps/desktop/tests/picker-oracle.spec.ts`, `docs/evidence/phase3/picker-oracle.{json,md}` (gap, recorded). No edit to `pet/main.ts`, `press.ts`, `character.ts`, `companion-model.ts`, `@ds/protocol`.
@@ -18756,13 +18906,13 @@ Consumes (exact, with origin):
 
 Produces (exact):
 - `notification-state.ts`: `QUNS = {NOT_PRESENT:1, BUSY:2, RUNNING_D3D_FULL_SCREEN:3, PRESENTATION_MODE:4, ACCEPTS_NOTIFICATIONS:5, QUIET_TIME:6, APP:7} as const`; `isDnd(state: number): boolean`; `type NotificationQuery = () => number | null`; `loadNotificationQuery(): NotificationQuery | null` (koffi, lazy); `interface NotificationState { readonly dnd: boolean | null; poll(): void; onChange(cb: (dnd: boolean) => void): () => void }`; `createNotificationState(query: NotificationQuery | null): NotificationState`. **No timer of its own** — `ActivitySensor` calls `poll()` every `DND_EVERY_N_TICKS` (§10.3's one timer).
-- `activity-sensor.ts`: `SENSOR_TICK_MS=500`, `DND_EVERY_N_TICKS=10`, `POWER_EVERY_N_TICKS=20`, `WRAP_SANITY_MS=7*24*3_600_000`, `KV_SENSING_TIER='sensing_tier'`, `EXE_CATEGORIES`, `type ExeCategory`, `foregroundCategory(basename: string): ExeCategory | null` (wired to nothing), `WIGGLE_WINDOW_MS=1_500`, `WIGGLE_MIN_REVERSALS=3`, `WIGGLE_MIN_TRAVEL_DIP=24`, `WIGGLE_MAX_NET_DIP=40`, `WIGGLE_COOLDOWN_MS=45_000`; `interface ActivitySample`, `interface ActivityDerived` (§10.4 verbatim); `interface ActivityWin32`; `interface ActivitySensor` (§10.5 verbatim); `createActivitySensor(deps)`; `inputAgeFrom(now: number, dwTime: number): number` (the wrap-safe subtraction, exported for its test).
+- `activity-sensor.ts`: `SENSOR_TICK_MS=500`, `DND_EVERY_N_TICKS=10`, `POWER_EVERY_N_TICKS=20`, `WRAP_SANITY_MS=7*24*3_600_000`, `KV_SENSING_TIER='sensing_tier'`, `EXE_CATEGORIES`, `type ExeCategory`, `foregroundCategory(basename: string): ExeCategory | null` (wired to nothing); **the R3-36 wiggle predicate and its seven constants** `WIGGLE_NEAR_DIP=240`, `WIGGLE_FAST_TICK_MS=100`, `WIGGLE_SUBTICKS_PER_FULL=5`, `WIGGLE_RING=15`, `WIGGLE_MIN_DX_DIP=6`, `WIGGLE_MIN_REVERSALS=4`, `WIGGLE_WINDOW_MS=1_500`, `WIGGLE_COOLDOWN_MS=20_000`; `interface ActivitySample`, `interface ActivityDerived` (§10.4 **plus `wiggle: boolean`**, A3-2); `interface ActivityWin32`; `interface ActivitySensor` (§10.5 **plus `onWiggle(cb): () => void`**); `ActivitySensorDeps` **plus `petCentre?(): {x, y} | null`**; `createActivitySensor(deps)`; `inputAgeFrom(now: number, dwTime: number): number` (the wrap-safe subtraction, exported for its test).
 - `foreground.ts`: `ForegroundWatch.onForegroundChanged(cb: () => void): () => void`.
 - `docs/PRIVACY-SENSING.md`: §10.7's section verbatim.
-- `sim-service.ts`: `interface SimServiceDeps`, `class SimService { start(); dispatch(event); snapshot(); preamble(sinceLastChat); readonly liveliness; dispose(): Promise<void>; resend(); onProactiveEvaluate(cb) }`; `KV_SIM_SNAPSHOT='sim_snapshot'`, `KV_SIM_AFFECTION='sim_affection'`, `KV_SIM_DAYS_SEEN='sim_days_seen'`, `KV_SIM_LIVELINESS='sim_liveliness'`, `KV_SIM_PHASES='sim_phases'`, `KV_SIM_PROACTIVE_MUTED='sim_proactive_muted'`, `ON_FLOOR_TOLERANCE_DIP=2`, `RESOURCE_EVERY_N_TICKS=2`; kv writes `sim_snapshot` / `sim_affection` / `sim_days_seen` in one transaction; channels `sim:state` (coalesced ≤ 1 per `TICK_MS`) and `sim:event` (immediate).
+- `sim-service.ts`: `interface SimServiceDeps`, `class SimService { start(); dispatch(event); snapshot(); preamble(sinceLastChat); readonly liveliness; setUiFlags({workMode, sfxMuted}) (R3-35/A3-1); dispose(): Promise<void>; resend(); onProactiveEvaluate(cb) }`; `KV_SIM_SNAPSHOT='sim_snapshot'`, `KV_SIM_AFFECTION='sim_affection'`, `KV_SIM_DAYS_SEEN='sim_days_seen'`, `KV_SIM_LIVELINESS='sim_liveliness'`, `KV_SIM_PHASES='sim_phases'`, `KV_SIM_PROACTIVE_MUTED='sim_proactive_muted'`, `ON_FLOOR_TOLERANCE_DIP=2`, `RESOURCE_EVERY_N_TICKS=2`; kv writes `sim_snapshot` / `sim_affection` / `sim_days_seen` in one transaction; channels `sim:state` (coalesced ≤ 1 per `TICK_MS`) and `sim:event` (immediate).
 
 **Contract:** §10.1–§10.7, §3.11, §3.12 (restore/persist), §3.3 (TICK inputs), §2.3 (`sim:state` / `sim:event` producer rules), §12.2 (`presence` / `resource` records), §13.1 item 1. Criteria closed (thresholds quoted from §0.4):
-- **D11** "Reacts to real activity: typing → glances at the screen; … battery low / on charger → micro-reaction. … **no key logging by default**." — the sensor half: `probableTyping` from `GetLastInputInfo` (no hook, asserted by the grep test), battery from `GetSystemPowerStatus`, the glance forwarded as `sim:event {kind:'typingGlance'}`. (The wiggle predicate's producer is a CONTRACT GAP — constants only, see Concerns.)
+- **D11** "Reacts to real activity: typing → glances at the screen; **wiggle near her → curiosity**; battery low / on charger → micro-reaction. … **no key logging by default**." — the sensor half: `probableTyping` from `GetLastInputInfo` (no hook, asserted by the grep test), battery from `GetSystemPowerStatus`, the glance forwarded as `sim:event {kind:'typingGlance'}`, **and the wiggle predicate, which R3-36 / contract Amendment A3-2 gives this task as its owner** — 240 DIP radius around the pet centre, 10 Hz sampling into a 15-sample ring, a reversal = an x-delta sign change with `|dx| >= 6 DIP`, `>= 4` reversals inside 1.5 s → `sim:event {kind:'cursorWiggle'}`, 20 s cooldown, 2 Hz outside the radius. `ActivityDerived.wiggle` carries the edge; `SimService` fans it out to the pet, and Task 13's arbiter answers it with the gaze + `F06` curiosity lease.
 - **D5** "on return, visibly notices the user **within 1 s**" — structural half: `onInput` fires the moment `inputAgeMs < SENSOR_TICK_MS` (≤ 500 ms), `dispatch` never queues, `sim:event` is sent in the same call (§3.3 item 5).
 - **§0 Proactive caps** "suppressed while typing, in fullscreen, locked, DND, or **within 60 s** of user input" — the inputs: `dnd` (null ⇒ on), `probableTyping`, `typingFellAtMono` (breakpoint b), `onForegroundChanged` (breakpoint a), `healthy` (→ `sensor-unknown`).
 - **§0 Absence economics** "State changes only while the user is present" — the persisted snapshot stores remaining durations, `fromPersisted` rebases `lastMono = nowMono`, so downtime integrates 0 (asserted in Step 22).
@@ -18835,7 +18985,7 @@ describe('createNotificationState', () => {
 
 - [ ] **Step 2: Run it, expect FAIL**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/notification-state.test.ts` → `Error: Failed to load url ./notification-state` (file missing).
+`npx vitest run --project desktop src/main/notification-state.test.ts` → `Error: Failed to load url ./notification-state` (file missing).
 
 - [ ] **Step 3: Implement `notification-state.ts`**
 
@@ -18926,7 +19076,7 @@ export function createNotificationState(q: NotificationQuery | null): Notificati
 
 - [ ] **Step 4: Run, expect PASS**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/notification-state.test.ts` → `Tests  5 passed (5)`.
+`npx vitest run --project desktop src/main/notification-state.test.ts` → `Tests  5 passed (5)`.
 
 - [ ] **Step 5: Commit**
 
@@ -18979,7 +19129,7 @@ Append to `apps/desktop/src/main/foreground.test.ts` inside `describe('startFore
 
 - [ ] **Step 7: Run, expect FAIL**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/foreground.test.ts` → `TypeError: watch.onForegroundChanged is not a function`.
+`npx vitest run --project desktop src/main/foreground.test.ts` → `TypeError: watch.onForegroundChanged is not a function`.
 
 - [ ] **Step 8: Implement — three edits in `foreground.ts`**
 
@@ -19041,7 +19191,7 @@ and the final `return` (196) becomes
 
 - [ ] **Step 9: Run, expect PASS; typecheck**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/foreground.test.ts` → `Tests  16 passed (16)` (14 Phase 1/2 cases + 2 new). `pnpm -r --if-present typecheck` → exit 0.
+`npx vitest run --project desktop src/main/foreground.test.ts` → `Tests  16 passed (16)` (14 Phase 1/2 cases + 2 new). `pnpm -r --if-present typecheck` → exit 0.
 
 - [ ] **Step 10: Commit**
 
@@ -19112,7 +19262,8 @@ vi.mock('electron', () => ({
 
 const {
   DND_EVERY_N_TICKS, EXE_CATEGORIES, KV_SENSING_TIER, POWER_EVERY_N_TICKS, SENSOR_TICK_MS,
-  WIGGLE_COOLDOWN_MS, WIGGLE_MAX_NET_DIP, WIGGLE_MIN_REVERSALS, WIGGLE_MIN_TRAVEL_DIP, WIGGLE_WINDOW_MS,
+  WIGGLE_COOLDOWN_MS, WIGGLE_FAST_TICK_MS, WIGGLE_MIN_DX_DIP, WIGGLE_MIN_REVERSALS, WIGGLE_NEAR_DIP,
+  WIGGLE_RING, WIGGLE_SUBTICKS_PER_FULL, WIGGLE_WINDOW_MS,
   WRAP_SANITY_MS, createActivitySensor, foregroundCategory, inputAgeFrom,
 } = await import('./activity-sensor');
 
@@ -19152,8 +19303,13 @@ describe('constants', () => {
   it('pins §10.3, §10.2, §10.4 and §10.6 values', () => {
     expect([SENSOR_TICK_MS, DND_EVERY_N_TICKS, POWER_EVERY_N_TICKS]).toEqual([500, 10, 20]);
     expect(WRAP_SANITY_MS).toBe(7 * 24 * 3_600_000);
-    expect([WIGGLE_WINDOW_MS, WIGGLE_MIN_REVERSALS, WIGGLE_MIN_TRAVEL_DIP, WIGGLE_MAX_NET_DIP, WIGGLE_COOLDOWN_MS])
-      .toEqual([1_500, 3, 24, 40, 45_000]);
+    // R3-36 / Amendment A3-2 — these supersede §10.4's five draft constants (2 Hz, 3 reversals,
+    // travel/net DIP, 45 s). A3-2 is the authority; §10.4's block is superseded, not re-read.
+    expect([WIGGLE_NEAR_DIP, WIGGLE_FAST_TICK_MS, WIGGLE_RING, WIGGLE_MIN_DX_DIP, WIGGLE_MIN_REVERSALS,
+      WIGGLE_WINDOW_MS, WIGGLE_COOLDOWN_MS]).toEqual([240, 100, 15, 6, 4, 1_500, 20_000]);
+    // The ring is exactly one window at the fast rate, and the fast rate divides the slow one.
+    expect(WIGGLE_RING * WIGGLE_FAST_TICK_MS).toBe(WIGGLE_WINDOW_MS);
+    expect(WIGGLE_SUBTICKS_PER_FULL).toBe(SENSOR_TICK_MS / WIGGLE_FAST_TICK_MS);
     expect(KV_SENSING_TIER).toBe('sensing_tier');
     expect(EXE_CATEGORIES).toEqual({
       editor: ['code.exe', 'devenv.exe', 'idea64.exe', 'sublime_text.exe', 'notepad++.exe'],
@@ -19306,6 +19462,145 @@ describe('createActivitySensor — default tier', () => {
   });
 });
 
+describe('§10.4 cursor wiggle — R3-36 / contract Amendment A3-2', () => {
+  const CENTRE = { x: 500, y: 500 };
+  let mono = 0;
+  const pos = { x: 500, y: 500 };
+  let sensor: ReturnType<typeof createActivitySensor> | undefined;
+
+  /** A sensor whose pet centre is `centre`, driven by an injected monotonic clock so the 1.5 s
+   *  window and the 20 s cooldown are exercised for real (vitest's fake timers do not move
+   *  `process.hrtime`, which is what the production default reads). */
+  function makeWiggler(centre: { x: number; y: number }) {
+    mono = 0;
+    pos.x = CENTRE.x; pos.y = CENTRE.y;
+    const s = createActivitySensor({
+      cursor: () => ({ ...pos }), scaleFactor: () => 1, win32: fakeWin32(),
+      petCentre: () => centre, nowMono: () => mono,
+    });
+    const f = vi.fn();
+    s.onWiggle(f);
+    s.start();
+    return { s, f };
+  }
+  /** Advance the fake timer AND the injected monotonic clock together. */
+  const step = (ms: number): void => { mono += ms; vi.advanceTimersByTime(ms); };
+  /** One 10 Hz sub-tick with the cursor jumped `dx` DIP along x. */
+  const jog = (dx: number): void => { pos.x += dx; step(WIGGLE_FAST_TICK_MS); };
+  /** Five alternating jogs of `mag` DIP produce exactly four x-delta sign changes. */
+  const fourReversals = (mag: number): void => { for (let i = 0; i < 5; i++) jog(i % 2 === 0 ? mag : -mag); };
+
+  afterEach(() => { sensor?.stop(); sensor = undefined; });
+
+  it('samples at 10 Hz inside WIGGLE_NEAR_DIP and stays at 2 Hz outside it, with ONE timer either way', () => {
+    const cursor = vi.fn(() => ({ x: 0, y: 0 }));
+    const far = createActivitySensor({
+      cursor, scaleFactor: () => 1, win32: fakeWin32(), petCentre: () => ({ x: 5_000, y: 0 }),
+    });
+    far.start();
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(1_000);
+    expect(cursor).toHaveBeenCalledTimes(2);                  // 2 Hz: 500 ms and 1 000 ms
+    expect(vi.getTimerCount()).toBe(1);                       // §10.3: still exactly one timer
+    far.stop();
+    expect(vi.getTimerCount()).toBe(0);
+
+    cursor.mockClear();
+    const near = createActivitySensor({
+      cursor, scaleFactor: () => 1, win32: fakeWin32(), petCentre: () => ({ x: 0, y: 0 }),
+    });
+    near.start();
+    vi.advanceTimersByTime(1_000);
+    // The first pump is still scheduled at SENSOR_TICK_MS; it discovers the cursor is inside the
+    // radius and drops the period to WIGGLE_FAST_TICK_MS, so 1 000 ms yields 1 + 5 samples.
+    expect(cursor).toHaveBeenCalledTimes(1 + 5);
+    expect(vi.getTimerCount()).toBe(1);
+    near.stop();
+  });
+
+  it('the 500 ms signals still fire at exactly 2 Hz while the fast ring is running', () => {
+    const age = vi.fn(() => 5_000);
+    mono = 0; pos.x = CENTRE.x; pos.y = CENTRE.y;
+    sensor = createActivitySensor({
+      cursor: () => ({ ...pos }), scaleFactor: () => 1, win32: fakeWin32({ age }),
+      petCentre: () => CENTRE, nowMono: () => mono,
+    });
+    sensor.start();
+    step(SENSOR_TICK_MS);                       // pump 1: full tick, switches to 10 Hz
+    for (let i = 0; i < 95; i++) step(WIGGLE_FAST_TICK_MS);   // 9 500 ms more, all at 10 Hz
+    // 10 000 ms of sensing = 20 FULL ticks whatever the pump rate: the fast sub-ticks read the
+    // cursor and nothing else, so GetLastInputInfo is still polled at exactly 2 Hz (§10.3).
+    expect(age).toHaveBeenCalledTimes(10_000 / SENSOR_TICK_MS);
+  });
+
+  it('>= 4 reversals of >= 6 DIP inside 1.5 s fire cursorWiggle once, and derived.wiggle is a one-tick edge', () => {
+    const { s, f } = makeWiggler(CENTRE);
+    sensor = s;
+    expect(s.derived.wiggle).toBe(false);
+    step(SENSOR_TICK_MS);                       // enter the radius, switch to 10 Hz
+    fourReversals(10);
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(s.derived.wiggle).toBe(true);
+    jog(10);
+    expect(s.derived.wiggle).toBe(false);       // an edge, not a level
+  });
+
+  it('a straight sweep and sub-threshold jitter never fire (|dx| must reach WIGGLE_MIN_DX_DIP)', () => {
+    const { s, f } = makeWiggler(CENTRE);
+    sensor = s;
+    step(SENSOR_TICK_MS);
+    for (let i = 0; i < 12; i++) jog(20);                       // one direction: zero reversals
+    expect(f).not.toHaveBeenCalled();
+    for (let i = 0; i < 12; i++) jog(i % 2 === 0 ? WIGGLE_MIN_DX_DIP - 1 : -(WIGGLE_MIN_DX_DIP - 1));
+    expect(f).not.toHaveBeenCalled();           // reversals, but each delta is below the floor
+  });
+
+  it('three reversals are not enough, and the fourth outside the 1.5 s window does not count', () => {
+    const { s, f } = makeWiggler(CENTRE);
+    sensor = s;
+    step(SENSOR_TICK_MS);
+    for (let i = 0; i < 4; i++) jog(i % 2 === 0 ? 10 : -10);    // three reversals
+    expect(f).not.toHaveBeenCalled();
+    step(WIGGLE_WINDOW_MS + WIGGLE_FAST_TICK_MS);               // the three age out of the window
+    jog(10);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it('cooldown: a second wiggle inside 20 s is swallowed, one after it fires again', () => {
+    const { s, f } = makeWiggler(CENTRE);
+    sensor = s;
+    step(SENSOR_TICK_MS);
+    fourReversals(10);
+    expect(f).toHaveBeenCalledTimes(1);
+    fourReversals(10);
+    expect(f).toHaveBeenCalledTimes(1);         // still inside WIGGLE_COOLDOWN_MS
+    step(WIGGLE_COOLDOWN_MS);
+    fourReversals(10);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('outside the radius the ring is dead: the same gesture fires nothing and the rate stays 2 Hz', () => {
+    const { s, f } = makeWiggler({ x: 5_000, y: 5_000 });
+    sensor = s;
+    step(SENSOR_TICK_MS);
+    for (let i = 0; i < 12; i++) { pos.x += i % 2 === 0 ? 10 : -10; step(SENSOR_TICK_MS); }
+    expect(f).not.toHaveBeenCalled();
+    expect(s.derived.wiggle).toBe(false);
+  });
+
+  it('no petCentre dep (browser/test wiring) means no radius, no fast rate and no wiggle', () => {
+    const cursor = vi.fn(() => ({ x: 0, y: 0 }));
+    const s = createActivitySensor({ cursor, scaleFactor: () => 1, win32: fakeWin32() });
+    const f = vi.fn();
+    s.onWiggle(f);
+    s.start();
+    vi.advanceTimersByTime(SENSOR_TICK_MS * 10);
+    expect(cursor).toHaveBeenCalledTimes(10);
+    expect(f).not.toHaveBeenCalled();
+    s.stop();
+  });
+});
+
 describe('degradation ladder (§10.5)', () => {
   it('rung 2: koffi missing -> powerMonitor.getSystemIdleTime seconds, healthy=false, typing never true, one warn', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -19377,7 +19672,7 @@ describe('§10.7 — every capability PRIVACY-SENSING.md denies is absent from t
 
 - [ ] **Step 13: Run, expect FAIL**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/activity-sensor.test.ts` → `Error: Failed to load url ./activity-sensor`.
+`npx vitest run --project desktop src/main/activity-sensor.test.ts` → `Error: Failed to load url ./activity-sensor`.
 
 - [ ] **Step 14: Implement `activity-sensor.ts`**
 
@@ -19395,15 +19690,27 @@ export const POWER_EVERY_N_TICKS = 20;      // signal 6: 0.1 Hz
 /** A GetLastInputInfo age above this is a wrap artefact or a SendInput-supplied tick; report 0. */
 export const WRAP_SANITY_MS = 7 * 24 * 3_600_000;         // 7 days
 
-// ---- §10.4 D11 wiggle predicate — CONSTANTS ONLY. CONTRACT GAP: no owner/field produces the
-// `cursorWiggle` event (§10.4 computes it "from signal 3 alone" but names no module, and neither
-// ActivityDerived nor SimState carries a wiggle field). Exported so the producer, once assigned,
-// has one home for the numbers.
-export const WIGGLE_WINDOW_MS = 1_500;      // 3 samples at 2 Hz
-export const WIGGLE_MIN_REVERSALS = 3;      // direction flips on either axis inside the window
-export const WIGGLE_MIN_TRAVEL_DIP = 24;    // total path length, so a slow drift never counts
-export const WIGGLE_MAX_NET_DIP = 40;       // net displacement, so crossing the screen never counts
-export const WIGGLE_COOLDOWN_MS = 45_000;
+// ---- §10.4 D11 cursor-wiggle predicate — OWNED HERE (R3-36 / contract Amendment A3-2) ----------
+// A3-2 supersedes §10.4's draft block (2 Hz, 3 reversals, travel/net DIP, 45 s): 2 Hz cannot see a
+// wiggle at all, and "flips on either axis" double-counts a diagonal shake. The ratified predicate
+// is one-dimensional and rate-adaptive, and it costs nothing when she is not being poked:
+//   * only while the cursor is within WIGGLE_NEAR_DIP of the pet window CENTRE is the cursor
+//     sampled at WIGGLE_FAST_TICK_MS (10 Hz) into a WIGGLE_RING-slot ring — exactly one window;
+//   * a REVERSAL is a sign change of the x-delta where |dx| >= WIGGLE_MIN_DX_DIP (so a slow drift,
+//     a hand tremor and a straight sweep all count zero);
+//   * WIGGLE_MIN_REVERSALS inside WIGGLE_WINDOW_MS emits `sim:event {kind:'cursorWiggle'}` through
+//     `onWiggle`, then nothing for WIGGLE_COOLDOWN_MS;
+//   * outside the radius the pump falls back to SENSOR_TICK_MS and the ring is cleared.
+// The radius is measured in DIP against `deps.petCentre()`, which is in the SAME coordinate space
+// as `deps.cursor()` (physical px on this machine — the same convention `cursorDeltaDip` uses).
+export const WIGGLE_NEAR_DIP = 240;
+export const WIGGLE_FAST_TICK_MS = 100;     // 10 Hz inside the radius
+export const WIGGLE_SUBTICKS_PER_FULL = SENSOR_TICK_MS / WIGGLE_FAST_TICK_MS;   // 5
+export const WIGGLE_RING = 15;              // 15 x 100 ms == WIGGLE_WINDOW_MS
+export const WIGGLE_MIN_DX_DIP = 6;         // below this an x-delta is not a stroke
+export const WIGGLE_MIN_REVERSALS = 4;
+export const WIGGLE_WINDOW_MS = 1_500;
+export const WIGGLE_COOLDOWN_MS = 20_000;
 
 // ---- §10.6 the opt-in tier: the flag and the plumbing, wired to NOTHING in Phase 3 -------------
 export const KV_SENSING_TIER = 'sensing_tier';     // '' (default) | 'exe-category'
@@ -19442,6 +19749,12 @@ export interface ActivityDerived {
   typingStreakStartedMono: number | null;
   /** Monotonic ms probableTyping last went true->false, or null. Drives breakpoint (b). */
   typingFellAtMono: number | null;
+  /**
+   * R3-36 / A3-2: true for the ONE sub-tick on which the wiggle predicate fired — an edge, not a
+   * level, so a consumer that polls `derived` cannot re-fire the reaction. `onWiggle` is the
+   * push form and is what `SimService` uses.
+   */
+  wiggle: boolean;
   /** False after any hard sensor failure; suppresses proactive (R3-9). */
   healthy: boolean;
 }
@@ -19512,6 +19825,8 @@ export interface ActivitySensor {
   onForegroundChanged(cb: () => void): () => void;
   onDndChanged(cb: (dnd: boolean) => void): () => void;
   onBattery(cb: (b: { charging: boolean; level: number | null }) => void): () => void;
+  /** R3-36 / A3-2: D11's "wiggle near her -> curiosity". Fires at most once per WIGGLE_COOLDOWN_MS. */
+  onWiggle(cb: () => void): () => void;
 }
 
 export interface ActivitySensorDeps {
@@ -19523,6 +19838,14 @@ export interface ActivitySensorDeps {
    * `startForegroundWatch` (§10.1). index.ts passes the ForegroundWatch here. Absent => no-op.
    */
   foreground?: { onForegroundChanged(cb: () => void): () => void };
+  /**
+   * R3-36 / A3-2: the pet window's centre, in the SAME coordinate space `cursor()` reports. Absent
+   * or returning null (browser lane, before the window exists) => the cursor is never "near", the
+   * pump stays at SENSOR_TICK_MS and no wiggle can fire. `index.ts` passes
+   * `() => { const b = petWin.getBounds(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }`
+   * scaled the same way `cursor()` is.
+   */
+  petCentre?(): { x: number; y: number } | null;
   nowMono?: () => number;
 }
 
@@ -19539,12 +19862,13 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     inputAgeMs: null, cursor: null, cursorDeltaDip: null, dnd: null, battery: null, tsMono: 0,
   };
   const derived: ActivityDerived = {
-    probableTyping: false, typingStreakStartedMono: null, typingFellAtMono: null, healthy: true,
+    probableTyping: false, typingStreakStartedMono: null, typingFellAtMono: null, wiggle: false, healthy: true,
   };
 
   const inputSubs = new Set<() => void>();
   const batterySubs = new Set<(b: { charging: boolean; level: number | null }) => void>();
-  let timer: ReturnType<typeof setInterval> | null = null;
+  const wiggleSubs = new Set<() => void>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let tickN = 0;
   let inputDegraded = win32 === null;       // rung 2 entered
   let warnedInput = false;
@@ -19553,6 +19877,17 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
   let typingSamples = 0;
   let typingIdleSamples = 0;
   let offDnd: (() => void) | null = null;
+  // ---- R3-36 / A3-2 wiggle state. `stop()` clears the ring, `prevWiggleCursor`, `nearPet` and the
+  // `wiggle` edge; `start()` reseeds `subTicks`/`pendingUnits`. `lastWiggleMono` deliberately
+  // SURVIVES a stop/start so a restart cannot be used to skip the 20 s cooldown. ----
+  const ring: { tsMono: number; dx: number }[] = [];
+  let prevWiggleCursor: { x: number; y: number } | null = null;
+  let lastWiggleMono = Number.NEGATIVE_INFINITY;
+  let nearPet = false;
+  /** Sub-ticks accumulated since the last FULL sample, in WIGGLE_FAST_TICK_MS units. */
+  let subTicks = 0;
+  /** How many units the period we just waited was worth (5 at 2 Hz, 1 at 10 Hz). */
+  let pendingUnits = WIGGLE_SUBTICKS_PER_FULL;
 
   const warnDegraded = (why: string): void => {
     if (warnedInput) return;
@@ -19625,9 +19960,55 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     }
   };
 
-  const tick = (): void => {
+  /** R3-36 / A3-2. True only inside the radius, with a live `petCentre` dep. */
+  const cursorNearPet = (cursor: { x: number; y: number } | null): boolean => {
+    if (cursor === null || !deps.petCentre) return false;
+    let centre: { x: number; y: number } | null = null;
+    try { centre = deps.petCentre(); } catch { centre = null; }
+    if (centre === null) return false;
+    const scale = deps.scaleFactor() || 1;
+    return Math.hypot(cursor.x - centre.x, cursor.y - centre.y) / scale <= WIGGLE_NEAR_DIP;
+  };
+
+  /**
+   * R3-36 / A3-2's predicate. Returns true on the sub-tick the wiggle fires. Outside the radius the
+   * ring is cleared, so a cursor that sweeps in from across the screen starts from nothing. Firing
+   * clears the ring too, so one gesture cannot fire twice; the WIGGLE_COOLDOWN_MS check is second,
+   * and samples older than WIGGLE_WINDOW_MS are ignored, so a wiggle held down for the whole
+   * cooldown does not queue a second event the instant it expires.
+   */
+  const updateWiggle = (now: number, cursor: { x: number; y: number } | null): boolean => {
+    if (!nearPet || cursor === null) {
+      ring.length = 0;
+      prevWiggleCursor = cursor;
+      return false;
+    }
+    const scale = deps.scaleFactor() || 1;
+    if (prevWiggleCursor !== null) {
+      ring.push({ tsMono: now, dx: (cursor.x - prevWiggleCursor.x) / scale });
+      if (ring.length > WIGGLE_RING) ring.shift();
+    }
+    prevWiggleCursor = cursor;
+    let reversals = 0;
+    let lastSign = 0;
+    for (const s of ring) {
+      if (now - s.tsMono > WIGGLE_WINDOW_MS) continue;
+      if (Math.abs(s.dx) < WIGGLE_MIN_DX_DIP) continue;
+      const sign = s.dx > 0 ? 1 : -1;
+      if (lastSign !== 0 && sign !== lastSign) reversals++;
+      lastSign = sign;
+    }
+    if (reversals < WIGGLE_MIN_REVERSALS) return false;
+    if (now - lastWiggleMono < WIGGLE_COOLDOWN_MS) return false;
+    lastWiggleMono = now;
+    ring.length = 0;
+    return true;
+  };
+
+  /** The 500 ms sample: signals 1, 3, 4, 6 and the typing predicate. `cursor` is the read the pump
+   *  already did, so `deps.cursor()` is still called exactly once per pump. */
+  const fullTick = (now: number, cursor: { x: number; y: number } | null): void => {
     tickN++;
-    const now = nowMono();
     sample.tsMono = now;
 
     // signal 1
@@ -19637,8 +20018,6 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     prevAge = age;
 
     // signal 3
-    let cursor: { x: number; y: number } | null = null;
-    try { cursor = deps.cursor(); } catch { cursor = null; }
     if (cursor && prevCursor) {
       const scale = deps.scaleFactor() || 1;
       sample.cursorDeltaDip = Math.hypot(cursor.x - prevCursor.x, cursor.y - prevCursor.y) / scale;
@@ -19661,6 +20040,32 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     if (edge) for (const cb of inputSubs) cb();
   };
 
+  /**
+   * §10.3's ONE timer, self-rescheduling so its period can follow the cursor (R3-36 / A3-2): every
+   * pump reads the cursor once and feeds the wiggle ring; the FULL sample runs once every
+   * WIGGLE_SUBTICKS_PER_FULL units, which is exactly SENSOR_TICK_MS at either rate. Unit counting
+   * rather than clock comparison keeps the cadence exact under fake timers, whose `hrtime` does not
+   * move. There is still exactly one pending timer at all times, which `activity-sensor.test.ts`
+   * asserts with `vi.getTimerCount()`.
+   */
+  const pump = (): void => {
+    const now = nowMono();
+    let cursor: { x: number; y: number } | null = null;
+    try { cursor = deps.cursor(); } catch { cursor = null; }
+    nearPet = cursorNearPet(cursor);
+
+    derived.wiggle = updateWiggle(now, cursor);
+    if (derived.wiggle) for (const cb of wiggleSubs) cb();
+
+    subTicks += pendingUnits;
+    if (subTicks >= WIGGLE_SUBTICKS_PER_FULL) {
+      subTicks = 0;
+      fullTick(now, cursor);
+    }
+    pendingUnits = nearPet ? 1 : WIGGLE_SUBTICKS_PER_FULL;
+    timer = setTimeout(pump, nearPet ? WIGGLE_FAST_TICK_MS : SENSOR_TICK_MS);
+  };
+
   const onPowerEvent = (): void => readBattery();
 
   return {
@@ -19671,15 +20076,21 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
       offDnd = notification.onChange(() => { sample.dnd = notification.dnd; });
       powerMonitor.on('on-ac', onPowerEvent);
       powerMonitor.on('on-battery', onPowerEvent);
-      timer = setInterval(tick, SENSOR_TICK_MS);   // the ONE interval (§10.3)
+      subTicks = 0;
+      pendingUnits = WIGGLE_SUBTICKS_PER_FULL;    // the first pump completes a full sample
+      timer = setTimeout(pump, SENSOR_TICK_MS);   // the ONE timer (§10.3)
     },
     stop() {
-      if (timer !== null) clearInterval(timer);
+      if (timer !== null) clearTimeout(timer);
       timer = null;
       offDnd?.();
       offDnd = null;
       powerMonitor.off('on-ac', onPowerEvent);
       powerMonitor.off('on-battery', onPowerEvent);
+      ring.length = 0;
+      prevWiggleCursor = null;
+      nearPet = false;
+      derived.wiggle = false;
     },
     onInput(cb) { inputSubs.add(cb); return () => { inputSubs.delete(cb); }; },
     onForegroundChanged(cb) {
@@ -19687,13 +20098,14 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     },
     onDndChanged(cb) { return notification.onChange(cb); },
     onBattery(cb) { batterySubs.add(cb); return () => { batterySubs.delete(cb); }; },
+    onWiggle(cb) { wiggleSubs.add(cb); return () => { wiggleSubs.delete(cb); }; },
   };
 }
 ```
 
 - [ ] **Step 15: Run, expect PASS; typecheck; run the R3-19 grep**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/activity-sensor.test.ts` → `Tests  16 passed (16)`.
+`npx vitest run --project desktop src/main/activity-sensor.test.ts` → `Tests  26 passed (26)` — **18** `it()` blocks as generated (the plan's earlier "16" was a miscount; the block in Step 12 has 18) **+ the 8 R3-36 wiggle cases**.
 `pnpm -r --if-present typecheck` → exit 0.
 `grep -rn '小春' packages/sim packages/behaviors apps/desktop/src/main apps/desktop/src/renderer/pet characters/haru/behaviors.json` → only `apps/desktop/src/main/summarizer.ts` (Phase 2, untouched) and `index.ts` Phase 2 fatal string (Task 17's file); no new file listed.
 
@@ -19701,7 +20113,7 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
 
 ```
 git add apps/desktop/src/main/activity-sensor.ts apps/desktop/src/main/activity-sensor.test.ts
-git commit -m "feat(desktop): ActivitySensor — GetLastInputInfo/GetSystemPowerStatus via koffi, one 2 Hz timer, probableTyping, degradation ladder, no-hook grep test (§10)
+git commit -m "feat(desktop): ActivitySensor — GetLastInputInfo/GetSystemPowerStatus via koffi, one rate-adaptive timer, probableTyping, D11 cursor-wiggle predicate, degradation ladder, no-hook grep test (§10, R3-36/A3-2)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
@@ -19737,12 +20149,16 @@ const WORK = { x: 0, y: 0, width: 2560, height: 1400 };
 /** 2025-03-10 14:00 local — a 'day' phase, far from any meal cue or midnight. */
 const WALL0 = new Date(2025, 2, 10, 14, 0, 0).getTime();
 
-function fakeSensor(): ActivitySensor & { sample: ActivitySample; derived: ActivityDerived } {
+function fakeSensor(): ActivitySensor & { sample: ActivitySample; derived: ActivityDerived; fireWiggle(): void } {
+  const wiggleSubs = new Set<() => void>();
   return {
     sample: { inputAgeMs: 1_000, cursor: { x: 2000, y: 1300 }, cursorDeltaDip: 0, dnd: false, battery: { charging: true, level: null }, tsMono: 0 },
-    derived: { probableTyping: false, typingStreakStartedMono: null, typingFellAtMono: null, healthy: true },
+    derived: { probableTyping: false, typingStreakStartedMono: null, typingFellAtMono: null, wiggle: false, healthy: true },
     start() {}, stop() {},
     onInput: () => () => {}, onForegroundChanged: () => () => {}, onDndChanged: () => () => {}, onBattery: () => () => {},
+    // R3-36 / A3-2: the predicate itself is activity-sensor.test.ts's; here we only need the edge.
+    onWiggle(cb) { wiggleSubs.add(cb); return () => { wiggleSubs.delete(cb); }; },
+    fireWiggle() { for (const cb of wiggleSubs) cb(); },
   };
 }
 
@@ -19936,6 +20352,50 @@ describe('dispatch / broadcast policy (§2.3, §3.11)', () => {
     return sim.dispose();
   });
 
+  // R3-36 / A3-2: the predicate lives in the sensor and changes NO reducer state, so SimService is a
+  // pure fan-out — one `sim:event {kind:'cursorWiggle'}` to the pet, immediately, un-coalesced, and
+  // nothing to the bubble. The 240 DIP radius, the 10 Hz ring and the 20 s cooldown are the
+  // sensor's, pinned in `activity-sensor.test.ts`; this pins only that the edge reaches the pet by
+  // the exact name Task 13's arbiter switches on.
+  it('relays the sensor wiggle to sim:event {kind: cursorWiggle} on the pet, and unsubscribes on dispose', async () => {
+    const sensor = fakeSensor();
+    const sim = make({ sensor });
+    sim.start();
+    sent.mockReset();
+    sensor.fireWiggle();
+    const wiggles = eventSends().filter((c) => (c[2] as { kind: string }).kind === 'cursorWiggle');
+    expect(wiggles).toHaveLength(1);
+    expect(wiggles[0][0]).toBe(PET);
+    expect(wiggles[0][2]).toMatchObject({ kind: 'cursorWiggle', tsMain: mono });
+    expect(stateSends()).toHaveLength(0);        // a wiggle is not a state change
+    await sim.dispose();
+    sent.mockReset();
+    sensor.fireWiggle();
+    expect(eventSends()).toHaveLength(0);
+  });
+
+  // R3-35 / A3-1: `uiWorkMode` / `uiSfxMuted` are NOT reducer state — the tray writes the kv keys and
+  // index.ts (Task 15) hands the pair here, so §5.9's fade and §5.12's mute become reachable in the
+  // pet renderer. They ride the existing snapshot, so no channel is added.
+  it('setUiFlags puts the two tray booleans on the next sim:state; an unchanged pair broadcasts nothing', () => {
+    const sim = make();
+    sim.start();
+    expect(sim.snapshot().uiWorkMode).toBe(false);
+    expect(sim.snapshot().uiSfxMuted).toBe(false);
+    sent.mockReset();
+    sim.setUiFlags({ workMode: true, sfxMuted: true });
+    advance(SIM_DEFAULTS.TICK_MS);
+    const pet = stateSends().filter((c) => c[0] === PET);
+    expect(pet).toHaveLength(1);
+    expect(pet[0][2]).toMatchObject({ uiWorkMode: true, uiSfxMuted: true });
+    expect(SimSnapshotSchema.safeParse(pet[0][2]).success).toBe(true);
+    sent.mockReset();
+    sim.setUiFlags({ workMode: true, sfxMuted: true });   // idempotent
+    advance(SIM_DEFAULTS.TICK_MS * 4);
+    expect(stateSends()).toHaveLength(0);
+    return sim.dispose();
+  });
+
   it('a null sensor inputAge is dispatched as 0 (present, conservative)', () => {
     const sensor = fakeSensor();
     sensor.sample.inputAgeMs = null;
@@ -20062,7 +20522,7 @@ describe('trace records (§12.2)', () => {
 
 - [ ] **Step 18: Run, expect FAIL**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/sim-service.test.ts` → `Error: Failed to load url ./sim-service`.
+`npx vitest run --project desktop src/main/sim-service.test.ts` → `Error: Failed to load url ./sim-service`.
 
 - [ ] **Step 19: Implement `sim-service.ts`**
 
@@ -20161,6 +20621,10 @@ export class SimService {
   private dirty = false;
   private tickN = 0;
   private readonly evalSubs = new Set<() => void>();
+  /** R3-35 / A3-1: the tray's two UI booleans, relayed by index.ts. NOT reducer state — see below. */
+  private uiWorkMode = false;
+  private uiSfxMuted = false;
+  private offWiggle: (() => void) | null = null;
 
   constructor(private readonly deps: SimServiceDeps) {
     this.nowMono = deps.nowMono ?? (() => Number(process.hrtime.bigint() / 1_000_000n));
@@ -20173,6 +20637,13 @@ export class SimService {
     if (this.timer !== null) return;
     this.restore();
     this.broadcast(true);
+    // R3-36 / A3-2: the wiggle predicate is the SENSOR's and changes no reducer state, so it is a
+    // fan-out, not a dispatch — routing it through `reduceWithEffects` would need a `SimState` field
+    // and an event for a notification the reducer has no opinion about. Radius, rate, ring, reversal
+    // floor and the 20 s cooldown are all enforced in `activity-sensor.ts`.
+    this.offWiggle = this.deps.sensor.onWiggle(() => {
+      sendTo(this.deps.pet, Channels.simEvent, { kind: 'cursorWiggle', tsMain: this.nowMono() });
+    });
     this.timer = setInterval(() => this.tick(), SIM_DEFAULTS.TICK_MS);
   }
 
@@ -20184,9 +20655,34 @@ export class SimService {
     this.broadcast(false);
   }
 
-  /** The current broadcast subset — what `sim:state` carries. */
+  /**
+   * The current broadcast subset — what `sim:state` carries.
+   *
+   * R3-35 / A3-1: `uiWorkMode` / `uiSfxMuted` are overlaid here rather than integrated by the
+   * reducer. They are UI toggles read from kv (`ui_work_mode` / `ui_sfx_muted`), not sim state: the
+   * reducer must never decay, settle or persist them, and `toSnapshot` (Task 9) emits their schema
+   * defaults so this spread is the ONE place their live value enters the wire.
+   */
   snapshot(): SimSnapshot {
-    return toSnapshot(this.state, this.nowMono(), this.nowWall());
+    return {
+      ...toSnapshot(this.state, this.nowMono(), this.nowWall()),
+      uiWorkMode: this.uiWorkMode,
+      uiSfxMuted: this.uiSfxMuted,
+    };
+  }
+
+  /**
+   * R3-35 / A3-1. Called by `index.ts` (Task 15) at startup with the kv values and again on every
+   * 工作模式 / 静音 tray toggle. index.ts stays the writer of the two kv keys and the source of the
+   * tray's getters; this is a broadcast mirror, not a second source of truth. An unchanged pair is
+   * a no-op, so a right-click that rebuilds the menu never costs a `sim:state`.
+   */
+  setUiFlags(flags: { workMode: boolean; sfxMuted: boolean }): void {
+    if (flags.workMode === this.uiWorkMode && flags.sfxMuted === this.uiSfxMuted) return;
+    this.uiWorkMode = flags.workMode;
+    this.uiSfxMuted = flags.sfxMuted;
+    this.dirty = true;
+    this.broadcast(false);   // sent now, or by the next tick if one landed inside TICK_MS
   }
 
   /** §3.11: the live preamble; `sinceLastChat` stays BrainService's (it owns the history store). */
@@ -20221,6 +20717,8 @@ export class SimService {
   async dispose(): Promise<void> {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
+    this.offWiggle?.();
+    this.offWiggle = null;
     this.persist();
   }
 
@@ -20374,12 +20872,12 @@ export class SimService {
 
 - [ ] **Step 20: Run, expect PASS; typecheck**
 
-`pnpm --filter @ds/desktop exec vitest run src/main/sim-service.test.ts` → `Tests  17 passed (17)`.
+`npx vitest run --project desktop src/main/sim-service.test.ts` → `Tests  19 passed (19)` (17 as generated + the R3-36 wiggle relay and the R3-35 setUiFlags cases).
 `pnpm -r --if-present typecheck` → exit 0. (If `toSnapshot` is not exported by `@ds/sim`, stop: `BLOCKED: packages/sim/src/snapshot.ts is owned by Task 9 — export toSnapshot(state, nowMono, nowWall)`.)
 
 - [ ] **Step 21: Full suite**
 
-`pnpm test` → every project green; note the desktop count rises by 40 (5 + 2 + 16 + 17).
+`pnpm test` → every project green; at this point the desktop count has risen by **52** (5 notification-state + 2 new foreground + 26 activity-sensor + 19 sim-service). Step 22 appends the 20th sim-service case, so this task's **final** delta is **+53**.
 
 - [ ] **Step 22: Downtime-integrates-zero proof (bar §0 absence economics), added to `sim-service.test.ts` under `describe('SimService.start — restore')`**
 
@@ -20402,13 +20900,13 @@ export class SimService {
   });
 ```
 
-`pnpm --filter @ds/desktop exec vitest run src/main/sim-service.test.ts` → `Tests  18 passed (18)`.
+`npx vitest run --project desktop src/main/sim-service.test.ts` → `Tests  20 passed (20)` (19 from Step 17 + this one).
 
 - [ ] **Step 23: Commit**
 
 ```
 git add apps/desktop/src/main/sim-service.ts apps/desktop/src/main/sim-service.test.ts
-git commit -m "feat(desktop): SimService — kv restore with discard-on-mismatch and scalar mirrors, 2 Hz TICK with bounds-derived inputs, coalesced sim:state, immediate sim:event, 60-s transactional persist, presence/resource trace (§3.11, §3.12)
+git commit -m "feat(desktop): SimService — kv restore with discard-on-mismatch and scalar mirrors, 2 Hz TICK with bounds-derived inputs, coalesced sim:state, immediate sim:event, cursorWiggle relay, setUiFlags overlay, 60-s transactional persist, presence/resource trace (§3.11, §3.12, R3-35/A3-1, R3-36/A3-2)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
@@ -20416,21 +20914,22 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 
 - [ ] **Step 24: Evidence note (no capture in this task)**
 
-§12 names no artefact for Task 12; the trace records this task produces are asserted in Task 18's D16 run (`docs/evidence/phase3/`). Verify the producer end only: `DS_TRACE=C:\Users\jiami\AppData\Local\Temp\claude\D--ds\6937fa24-7aae-458e-9817-d81b1ced4b57\scratchpad\t12.jsonl` cannot be exercised before Task 17 wires `SimService` into `index.ts`, so this step records: **no evidence artefact owed by Task 12**.
+§12 names no artefact for Task 12; the trace records this task produces are asserted in Task 17's D16 run (`docs/evidence/phase3/`). Verify the producer end only: `DS_TRACE=C:\Users\jiami\AppData\Local\Temp\claude\D--ds\6937fa24-7aae-458e-9817-d81b1ced4b57\scratchpad\t12.jsonl` cannot be exercised before Task 17 wires `SimService` into `index.ts`, so this step records: **no evidence artefact owed by Task 12**.
 
 ---
 
 **Acceptance:**
 
 - [ ] Files created: `apps/desktop/src/main/{notification-state,activity-sensor,sim-service}.ts` + their `.test.ts`, `docs/PRIVACY-SENSING.md`; modified: `apps/desktop/src/main/foreground.ts` (type at 109–113, `!api` return, `lastFgHwnd`/`fgSubs`, `pollOnce` compare, final return) and `foreground.test.ts` (+2 cases). Nothing else in `git diff --stat` across the five commits.
-- [ ] Tests named and green: `notification-state.test.ts` (5), `foreground.test.ts` (16), `activity-sensor.test.ts` (16, incl. the §10.7 grep over `apps/desktop/src` **and** `packages`), `sim-service.test.ts` (18). `pnpm test` and `pnpm -r --if-present typecheck` exit 0.
+- [ ] Tests named and green: `notification-state.test.ts` (5), `foreground.test.ts` (16), `activity-sensor.test.ts` (26 — 18 as generated + the 8 R3-36 wiggle cases, incl. the §10.7 grep over `apps/desktop/src` **and** `packages`), `sim-service.test.ts` (20 — 18 as generated + the R3-36 relay and the R3-35 `setUiFlags` cases). `pnpm test` and `pnpm -r --if-present typecheck` exit 0.
 - [ ] `grep -rn 'SetWindowsHookEx\|WH_KEYBOARD\|RIDEV_INPUTSINK\|GetAsyncKeyState\|clipboard\|GetWindowText\|desktopCapturer\|capturePage' apps/desktop/src packages` → only the pattern string inside `activity-sensor.test.ts`.
 - [ ] `grep -rn '小春' …` (§1.7) adds no new hit; `grep -n 'powerMonitor.getSystemIdleTime' apps/desktop/src/main/activity-sensor.ts` shows it **only** in the fallback branch.
-- [ ] Exactly one `setInterval` in `activity-sensor.ts` and one in `sim-service.ts` (`grep -c setInterval` → 1 each); `notification-state.ts` has none.
+- [ ] **§10.3 one timer, after R3-36:** `activity-sensor.ts` has **zero** `setInterval` and exactly **two** `setTimeout` call sites — the `start()` seed and the pump's own reschedule. Because `grep -c` counts *lines*, the exact expectations are `grep -c 'setInterval' apps/desktop/src/main/activity-sensor.ts` → `0` and `grep -c 'setTimeout' apps/desktop/src/main/activity-sensor.ts` → **`3`** (the two calls plus the `let timer: ReturnType<typeof setTimeout>` declaration); `grep -c 'timer = setTimeout'` → `2` is the call-site form. The behavioural pin is `activity-sensor.test.ts`'s `vi.getTimerCount() === 1` at both rates and `0` after `stop()`. `sim-service.ts` still has exactly one `setInterval` **call** (`grep -c 'setInterval'` → `2`, the call plus its `ReturnType<typeof setInterval>` declaration); `notification-state.ts` has neither.
 - [ ] `sim:event` sent with no coalescing (Step 17 "immediately" case); `sim:state` ≤ 1 per `TICK_MS`, field-by-field, `tsMain` excluded from the comparison; pet **and** bubble receive `sim:state`, pet only receives `sim:event` (§2.3).
 - [ ] Persist writes `sim_snapshot`, `sim_affection`, `sim_days_seen` inside one `BEGIN…COMMIT`; rollback on failure leaves the previous snapshot (test pinned).
 - [ ] Restore: version mismatch / parse failure → exactly one `console.warn('[sim] snapshot discarded:', reason)` and the mirrors read back; `lastMono` rebased so downtime integrates 0 (Steps 17 + 22).
-- [ ] Criteria closed: D11 (sensor half + glance forwarding), D5 (structural ≤ 1 s), §0 proactive-cap inputs, §0 absence economics (restore), X14 sensing paragraph. Wiggle: constants only (gap below).
+- [ ] Criteria closed: D11 (sensor half — glance forwarding **and**, per R3-36 / A3-2, the whole cursor-wiggle producer: 240 DIP radius, 10 Hz ring of 15, `|dx| >= 6 DIP` sign change, `>= 4` reversals in 1.5 s, 20 s cooldown, `ActivityDerived.wiggle`, `onWiggle` → `sim:event {kind:'cursorWiggle'}` on the pet), D5 (structural ≤ 1 s), §0 proactive-cap inputs, §0 absence economics (restore), X14 sensing paragraph.
+- [ ] **R3-35 / A3-1:** `SimService.snapshot()` overlays `uiWorkMode` / `uiSfxMuted` onto Task 9's builder, `setUiFlags` marks the snapshot dirty and is idempotent, and `SimSnapshotSchema.safeParse` accepts the broadcast payload (pinned in `sim-service.test.ts`). The reducer has no field for either — `grep -c 'uiWorkMode' packages/sim/src/state.ts` → `0`.
 - [ ] The four commits carry both trailers verbatim.
 
 **Concerns for the controller:**
@@ -20445,7 +20944,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 8. **CONTRACT GAP — `sensorsUnknown(state)`** (§3.10.2) has no `SimState` field to read; `SimService` "sets it from `ActivitySensor.healthy`" but there is no event or field. Not resolved here: `ProactiveController` (Task 14) can read `sensor.derived.healthy` directly when building `GateInput`; Task 9 should confirm what `sensorsUnknown` actually reads.
 9. **CONTRACT GAP — `SimServiceDeps` has no trace port / resource sampler**, though §12.2 makes `SimService` the producer of `presence` (every snapshot change) and `resource` (1 Hz, `DS_TRACE_RESOURCE=1`). Added `trace?` and `resources?` as injected functions so this file does not depend on Task 7's exact `TraceWriter` method name. `cpuPct`'s source is unspecified in §12.2; the plan expects index.ts to sum `app.getAppMetrics()[].cpu.percentCPUUsage`.
 10. **Interface additions beyond §3.11's class:** `resend()` (the stage:ready unconditional re-send needs an entry point) and `onProactiveEvaluate(cb)` (the `proactiveEvaluate` effect needs a consumer hook). Both are minimal; please confirm or name the intended mechanism.
-11. **CONTRACT GAP — wiggle producer.** §10.4's `cursorWiggle` predicate has no owning module and no field in `ActivityDerived`/`SimState`; only the five `WIGGLE_*` constants ship. D11's "wiggle near her → curiosity" is therefore **open**.
+11. **CLOSED by R3-36 / Amendment A3-2 — the wiggle producer is this task's.** The self-review found §10.4's `cursorWiggle` predicate with no owning module and no field on `ActivityDerived`/`SimState`; only five constants shipped. A3-2 supersedes those constants and gives `ActivitySensor` the predicate whole. Three things the controller should note about the shape it took: (a) **§10.3's "one timer" is preserved but is now a self-rescheduling `setTimeout`**, whose period is 100 ms inside `WIGGLE_NEAR_DIP` and 500 ms outside — the full sample (input age, DND, power, typing) still runs at exactly `SENSOR_TICK_MS` at either rate, counted in sub-tick units rather than by clock comparison so the cadence is exact under fake timers; (b) the predicate needs the pet window's centre, which `ActivitySensorDeps` had no source for — `petCentre?()` is added and `index.ts` (Task 15) supplies it, and an absent dep simply means no radius and no wiggle; (c) the event is **fanned out by `SimService` directly** rather than dispatched through `reduceWithEffects`, because it changes no reducer state and the alternative would need a `SimState` field plus a `SimEvent` member for a pure notification. If the controller wants the reducer to own the cooldown instead, that is a Task 3 + Task 9 amendment and this relay becomes a dispatch.
 12. **`onFloor` tolerance and `nearEdge` axes** are unspecified (§3.3 names only `CURSOR_NEAR_DIP`/`NEAR_EDGE_DIP`). Chosen: `ON_FLOOR_TOLERANCE_DIP = 2` (bottom edge within 2 DIP of the work-area bottom); `nearEdge` = left **or** right work-area edge within `NEAR_EDGE_DIP` (the walk anchors are left/right). Rule if the top edge should count.
 13. **Null input age on TICK.** `SimEvent.TICK.inputAgeMs` is `number`, the sample is `number | null`. Chosen: `?? 0` (present, conservative — proactive stays refused via `recent-input`/`sensor-unknown`; no false nap). Alternative would be `PRESENT_INPUT_MAX_MS` (absent). Please confirm.
 14. **`hwnd compared then discarded`** (§10.3) — detecting a change requires keeping the previous hwnd until the next poll. It lives in one closure variable, is never logged or traced, and is overwritten every 2 s. Flagging so nobody reads "discarded" as "not retained at all".
@@ -20461,16 +20960,17 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 - CREATE `apps/desktop/src/renderer/pet/stage/arbiter.ts` + `arbiter.test.ts` — §5.1 lane table + interruption matrix, §5.2 rules, §5.4 apply, §5.5 body lane, §5.7 blink draw, §5.10 return reaction, §10.4 glance/wiggle consumers, §9.4 plain refusal, §12.2 renderer records.
 - CREATE `apps/desktop/src/renderer/pet/stage/behaviour-runner.ts` + `behaviour-runner.test.ts` — §5.3.
 - CREATE `apps/desktop/src/renderer/pet/stage/touch.ts` + `touch.test.ts` — §5.11, §5.12 play sites, §2.9 ordering.
+- CREATE `apps/desktop/src/renderer/pet/stage/ui-flags.ts` + `ui-flags.test.ts` — **R3-35 / contract Amendment A3-1**: the eight-line relay that takes `SimSnapshot.uiWorkMode` / `uiSfxMuted` off every `sim:state` and applies them to the D7 machine and the `SfxPlayer`. It exists as a module rather than two inline assignments in `main.ts` for one reason: `main.ts` runs `main()` on import and has no test, so an inline relay would be the one link in the §5.9 / §5.12 chain with nothing pinning it — and it is exactly the link that was missing before A3-1. (CONTRACT GAP: the path is not in §1.5; it is under `renderer/pet/stage/**`, T3-B's, and A3-1 adds the row.)
 - MODIFY `apps/desktop/src/renderer/pet/press.ts` (whole file, lines 1–129 `PressTracker` rewritten; `tapCandidates` lines 131–146 kept verbatim) + `press.test.ts` (lines 1–93 rewritten; `tapCandidates` cases 95–113 kept) — §7.2, §6.3 press consumer.
 - MODIFY `apps/desktop/src/renderer/pet/main.ts` (lines 1–237, whole file replaced; every Phase 1/2 handler kept, additions per §5.14) — §5.14, §5.8, §6.2 hover consumer, §4.7 failure message.
 
 **Interfaces:**
 
 Consumes (exact, by producer):
-- Task 1 `@ds/protocol`: `Channels.{simState,simEvent,simWindowMotion,simLanding,modeChanged,arbGrab,arbRelease,arbTouch,arbTrace,avatarTap,avatarHover,chatOpen,stageReady,stageError,…}`, `Payload<C>`, `LANES/Lane`, `LANE_SOURCES/LaneSource`, `LANE_RESULTS/LaneResult`, `HIT_PARTS/HitPart`, `LookAnchor`, `PersonaModeIpc`, `SimSnapshot`, `SimEventPayload`, `LANE_TTL_MAX_MS = 90_000`, `LIVELINESS_PRESETS`.
+- Task 1 `@ds/protocol`: `Channels.{simState,simEvent,simWindowMotion,simLanding,modeChanged,arbGrab,arbRelease,arbTouch,arbTrace,avatarTap,avatarHover,chatOpen,stageReady,stageError,…}`, `Payload<C>`, `LANES/Lane`, `LANE_SOURCES/LaneSource`, `LANE_RESULTS/LaneResult`, `HIT_PARTS/HitPart`, `LookAnchor`, `PersonaModeIpc`, `SimSnapshot` (**including the two R3-35 / A3-1 booleans `uiWorkMode` and `uiSfxMuted`**), `SimEventPayload` (its `cursorWiggle` kind now has a real producer — Task 12's `ActivitySensor`, R3-36 / A3-2 — and the arbiter's reaction below consumes it by that exact name), `LANE_TTL_MAX_MS = 90_000`, `LIVELINESS_PRESETS`.
 - Task 3 `@ds/sim`: `livelinessMap(L): LivelinessMap` (§3.4; the renderer arbiter is a permitted importer).
 - Task 4 `@ds/behaviors`: `parseBehaviorPack(json)`, `bindResources(pack, cat): BoundPack`, `BehaviorBindError`, `BehaviorSelector{update, select, finish, setLivelinessMap}`, `Selection{behavior, durationMs, nextDecisionAt, trace}`, `ConditionFacts`, `GazePattern`, `OverlayPreset`, `MotionRef`.
-- Task 5 `@ds/stage`: `CompanionModel.startMotionForced(group, index, fadeInS, onFinished?)`, `.setExpression`, `.setExpressionWeight(name, w)`, `.setExpressionFades(inS, outS)`, `.autoIdle`, `.parameterIds()`, `.addUpdater(u)`, `Live2DStage.currentProjection()`; overlay updater (§5.7, class name is a recorded CONTRACT GAP — this plan calls it `OverlayUpdater` with `set(preset: OverlayPreset): void`); `normalizeHitArea(name)`; `lane-metrics.ts` `MOTION_FADE_TOUCH_S=0.12, MOTION_FADE_LLM_S=0.25, MOTION_FADE_IDLE_S=1.00, MOTION_MIN_PLAY_MS=800, MOTION_GROUP_COOLDOWN_MS=1_500, TOUCH_PREEMPT_MAX_MS=250, TOUCH_EXPR_MS=1_400, TAP_BURST_COUNT=7, TAP_BURST_WINDOW_MS=1_000, ANNOY_COOLDOWN_MS=4_000, TAP_SLOP_DIP=4`; `fpsFor({hovering, speaking, moving})`; `SfxPlayer{play(name, gain?)}`.
+- Task 5 `@ds/stage`: `CompanionModel.startMotionForced(group, index, fadeInS, onFinished?)`, `.setExpression`, `.setExpressionWeight(name, w)`, `.setExpressionFades(inS, outS)`, `.autoIdle`, `.parameterIds()`, `.addUpdater(u)`, `Live2DStage.currentProjection()`; overlay updater (§5.7, class name is a recorded CONTRACT GAP — this plan calls it `OverlayUpdater` with `set(preset: OverlayPreset): void`); `normalizeHitArea(name)`; `lane-metrics.ts` `MOTION_FADE_TOUCH_S=0.12, MOTION_FADE_LLM_S=0.25, MOTION_FADE_IDLE_S=1.00, MOTION_MIN_PLAY_MS=800, MOTION_GROUP_COOLDOWN_MS=1_500, TOUCH_PREEMPT_MAX_MS=250, TOUCH_EXPR_MS=1_400, TAP_BURST_COUNT=7, TAP_BURST_WINDOW_MS=1_000, ANNOY_COOLDOWN_MS=4_000, TAP_SLOP_DIP=4`; `fpsFor({hovering, speaking, moving})`; `SfxPlayer{play(name, gain?), setMuted(muted), setVolume(v)}` (§5.12 — `setMuted` is what R3-35 / A3-1 makes reachable: `sfx.test.ts` already pins "muted plays nothing and does not consume the interval", and this task supplies the caller).
 - Task 8 (verified against Task 8's own code in self-review — these are its actual exports, not assumptions):
   - `stage/lanes.ts`: `LaneCommand<P>`, `LaneRequest<P>`, `LaneLease<P>`, `LanePolicy<P>`, `clampTtl(ttlMs)`, `class LaneHolder<P>{ constructor(lane: Lane, policy?: LanePolicy<P>); request(cmd, nowMs): LaneLease<P>|null; tick(nowMs): LaneLease<P>|null; end(result, nowMs); current; generation }` — **the constructor takes the lane name; `new LaneHolder<P>()` does not compile.**
   - `stage/expression-lease.ts`: `expressionWeightAt(lease, nowMs)`, `baselineExpression(valence)`, `clampExpressionWeight(emotion, w)`, `easeOutCubic(t)`, `EXPR_INTENSITY_CLAMP`, `EXPR_SURPRISED_MAX`, `EXPR_HOLD_AFTER_UTTERANCE_MS`, `EXPR_HOLD_CEILING_MS`, `EXPR_DECAY_MS`, `EXPR_TOTAL_CEILING_MS`, `EXPR_FADE_MS`, `expressionPolicy`, `ExpressionPayload {name: string; weight: number; utteranceEndAt: number|null}`, `ExpressionSink`, `class ExpressionLane`.
@@ -20484,10 +20984,11 @@ Produces:
 - `arbiter.ts`: `ArbiterPorts`, `GazeTarget`, `BodyPayload`, `ArbExpressionPayload`, `ArbGazePayload`, `TouchReaction`, `LlmCommand`, `BLINK_MEAN_FOLLOW_MS=4_000`, `BLINK_SIGMA_FOLLOW_MS=1_500`, `BLINK_MEAN_REST_MS=6_500`, `BLINK_SIGMA_REST_MS=2_400`, `BLINK_MIN_INTERVAL_MS=1_200`, `BLINK_DOUBLET_P=0.12`, `BLINK_CLOSED_SLEEPY_S=0.25`, `BLINK_DOUBLET_MIN_MS=250`, `BLINK_DOUBLET_MAX_MS=400`, `BLINK_DRAW_INTERVAL_S=30.5`, `SOURCE_RANK`, `fadeFor(source)`, `lognormalMs(mean, sigma, u1, u2)`, `class Arbiter{setMode, setValence, setLiveliness, liveliness, setBlinkState, update, behaviour, onBehaviourResult, touch, llm, utteranceEnded, dragStart, dragEnd, simEvent, lanes, blinkRng, forceBlink}`.
 - `behaviour-runner.ts`: `BehaviourRunner{constructor({selector, arbiter, facts, now, trace}), update(), setFrozen(frozen), current(): string|null}`, `CONDITION_POLL_MS=1_000`.
 - `touch.ts`: re-exports `TAP_BURST_COUNT, TAP_BURST_WINDOW_MS, ANNOY_COOLDOWN_MS, TAP_SLOP_DIP`; `BURST_RING_SLOTS=8`; `BurstDetector{push(nowMs): {burst, triggered}}`; `TOUCH_REACTIONS`, `ANNOYED_REACTION`; `touchReaction(part, intensity)`; `TouchReactor{tap(pressId, part, alpha, nowMs)}` emitting `arb:touch {pressId, part, alpha, burst, annoyed}`.
+- `ui-flags.ts`: `UiFlags {workMode: boolean; sfxMuted: boolean}`, `createUiFlags(): UiFlags` (seeded from Task 8's `WORK_MODE_DEFAULT` and `false`), `UiFlagTargets {sfx: {setMuted(m: boolean): void} | null}`, `applyUiFlags(snapshot: Pick<SimSnapshot,'uiWorkMode'|'uiSfxMuted'>, flags: UiFlags, targets: UiFlagTargets): void` (R3-35 / A3-1).
 - `press.ts`: `PressTracker{mousedown, mousemove, mouseup, resolvePress(pressId, alpha)}` producing `arb:grab` / `arb:release` through callbacks; `PressPick`, `PressTap`.
 - `pet/main.ts`: §5.14 wiring; `StageTestHook.arbiter(): {lane: Lane; source: LaneSource|null; generation: number}[]`, `StageTestHook.behaviour(): string|null`.
 
-**Contract:** §5.1, §5.2 (rules), §5.3, §5.4 (apply), §5.5 (body lane), §5.7 (blink), §5.8, §5.10, §5.11, §5.12 (play sites), §5.14, §6.2 (hover consumer), §6.3 (press consumer), §7.2, §9.4 (plain lane refusal), §10.4 (glance/wiggle consumers), §2.9, §4.7 (failure message), §12.2 renderer records.
+**Contract:** §5.1, §5.2 (rules), §5.3, §5.4 (apply), §5.5 (body lane), §5.7 (blink), §5.8, §5.10, §5.11, §5.12 (play sites), §5.14, §6.2 (hover consumer), §6.3 (press consumer), §7.2, §9.4 (plain lane refusal), §10.4 as amended by **A3-2** (glance/wiggle consumers — the wiggle producer is Task 12's sensor), §5.9 + §5.12 as amended by **A3-1** (the `SimSnapshot.uiWorkMode` / `uiSfxMuted` relay), §2.9, §4.7 (failure message), §12.2 renderer records.
 Exquisite-bar criteria closed (thresholds quoted): **D1** "no behaviour twice in a row" (runner draws only from the Task 4 selector, at boundaries); **D2** "blink (mean 4 s, jitter ± 1.5 s)" → `BLINK_MEAN_FOLLOW_MS=4_000`, `BLINK_SIGMA_FOLLOW_MS=1_500`, floor 1 200 ms; **D5** "on return, visibly notices the user within 1 s" → §5.10 sequence: gaze snap at t+0, F06 0.4 at t+120, TapBody[0] at t+150, release at t+1500; **D6** "head / face / body / one ticklish zone with distinct reactions; ≥ 7 taps in 1 s → annoyed reaction + cooldown" → `TAP_BURST_COUNT=7`, `TAP_BURST_WINDOW_MS=1_000`, `ANNOY_COOLDOWN_MS=4_000`, the seven-row table; bar §0 "Tap motions fade-in ≤ 120 ms" → `MOTION_FADE_TOUCH_S=0.12` with zero-fade same-frame acknowledgement; "idle→idle 1 s" → `MOTION_FADE_IDLE_S=1.00`; R3-3 "touch interrupts LLM motion at the next motion boundary ≤ 250 ms" → `TOUCH_PREEMPT_MAX_MS=250`; R3-4 "touch overlay covers, then restores the remaining lease" (B-05); R3-12 "the arbiter refuses every source:'llm' command while mode === 'plain'"; R3-13 "a touch is ALWAYS answered" (reaction at L=0); D7 "wandering freezes" via `setFrozen`; §5.8 60 Hz while `moving` with one `setFps` call site; D16 trace records `behaviourStart/behaviourEnd/laneGrant/laneResult/blink/fps`.
 
 ---
@@ -20826,7 +21327,7 @@ describe('Arbiter — blink draw (§5.7, D2)', () => {
 - [ ] **Step 2: Run the arbiter test, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/arbiter.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/arbiter.test.ts
 ```
 Expected: `Error: Failed to resolve import "./arbiter" from "src/renderer/pet/stage/arbiter.test.ts". Does the file exist?`
 
@@ -21103,7 +21604,10 @@ export class Arbiter {
     if (this.body.current?.source === 'drag') this.endLane(this.body, 'completed', now);
   }
 
-  /** §5.10 / §10.4 one-shot reactions. `annoyed` is played by touch.ts (§5.11) and ignored here. */
+  /** §5.10 / §10.4 one-shot reactions. `annoyed` is played by touch.ts (§5.11) and ignored here.
+   *  `cursorWiggle` has a real producer as of R3-36 / Amendment A3-2: Task 12's `ActivitySensor`
+   *  (240 DIP radius, 10 Hz ring, >= 4 x-reversals of >= 6 DIP in 1.5 s, 20 s cooldown) fires it and
+   *  `SimService` fans it out on `sim:event`. The kind string here IS the produced name. */
   simEvent(kind: SimEventKind, now: number): void {
     if (kind === 'returned') {
       const gen = ++this.returnGeneration;
@@ -21256,7 +21760,7 @@ export class Arbiter {
 - [ ] **Step 4: Run the arbiter test, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/arbiter.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/arbiter.test.ts
 ```
 Expected: `Test Files  1 passed (1)` and `Tests  19 passed (19)`.
 
@@ -21377,7 +21881,7 @@ describe('BehaviourRunner (§5.3)', () => {
 - [ ] **Step 7: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/behaviour-runner.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/behaviour-runner.test.ts
 ```
 Expected: `Error: Failed to resolve import "./behaviour-runner" from "src/renderer/pet/stage/behaviour-runner.test.ts". Does the file exist?`
 
@@ -21457,7 +21961,7 @@ export class BehaviourRunner {
 - [ ] **Step 9: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/behaviour-runner.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/behaviour-runner.test.ts
 ```
 Expected: `Tests  5 passed (5)`.
 
@@ -21589,7 +22093,7 @@ describe('TouchReactor (§5.11, §2.9, §5.12)', () => {
 - [ ] **Step 12: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/touch.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/touch.test.ts
 ```
 Expected: `Error: Failed to resolve import "./touch" from "src/renderer/pet/stage/touch.test.ts". Does the file exist?`
 
@@ -21679,7 +22183,7 @@ export class TouchReactor {
 - [ ] **Step 14: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/stage/touch.test.ts
+npx vitest run --project desktop src/renderer/pet/stage/touch.test.ts
 ```
 Expected: `Tests  7 passed (7)`.
 
@@ -21815,7 +22319,7 @@ describe('PressTracker — §7.2 grab / release over the 1-px GPU read', () => {
 - [ ] **Step 17: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/press.test.ts
+npx vitest run --project desktop src/renderer/pet/press.test.ts
 ```
 Expected: `TypeError: this.opts.queuePress is not a function` (first §7.2 case) — 9 failed, 3 passed (`tapCandidates`).
 
@@ -21966,7 +22470,7 @@ function clamp1(v: number): number { return Number.isFinite(v) ? Math.max(-1, Ma
 - [ ] **Step 19: Run, expect PASS**
 
 ```
-pnpm --filter @ds/desktop exec vitest run src/renderer/pet/press.test.ts
+npx vitest run --project desktop src/renderer/pet/press.test.ts
 ```
 Expected: `Tests  12 passed (12)`.
 
@@ -21975,6 +22479,155 @@ Expected: `Tests  12 passed (12)`.
 ```
 git add apps/desktop/src/renderer/pet/press.ts apps/desktop/src/renderer/pet/press.test.ts
 git commit -m "feat(pet): press.ts on the 1-px GPU read — arb:grab/arb:release, no avatar:drag senders (§7.2)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
+```
+
+- [ ] **Step 20a: Write the failing `ui-flags` test (R3-35 / Amendment A3-1)**
+
+Create `apps/desktop/src/renderer/pet/stage/ui-flags.test.ts`. It drives the **real** `HoverAckMachine`
+(Task 8) and the **real** `SfxPlayer` (Task 5, with its injectable `createAudio` / `now` options) —
+not fakes — because what is being pinned is the wiring between `sim:state` and those two objects,
+which is precisely what was missing before A3-1:
+
+```ts
+import { describe, expect, it, vi } from 'vitest';
+import type { SimSnapshot } from '@ds/protocol';
+import { HoverAckMachine, WORK_MODE_DEFAULT, WORK_MODE_FADE_MS, WORK_MODE_FADE_OPACITY, type HoverAckDeps } from './hover-ack';
+import { SfxPlayer, type SfxAudio } from './sfx';
+import { applyUiFlags, createUiFlags } from './ui-flags';
+
+/** Only the two fields the relay reads; the rest of the snapshot is irrelevant here. */
+const snap = (uiWorkMode: boolean, uiSfxMuted: boolean): Pick<SimSnapshot, 'uiWorkMode' | 'uiSfxMuted'> =>
+  ({ uiWorkMode, uiSfxMuted });
+
+function harness() {
+  const log: string[] = [];
+  const flags = createUiFlags();
+  const deps: HoverAckDeps = {
+    glance: () => {},
+    setFrozen: () => {},
+    setModelOapcity: (o, ms) => log.push(`opacity:${o}:${ms}`),
+    sendPassthrough: (faded) => log.push(`passthrough:${faded}`),
+    openChat: () => {},
+    workMode: () => flags.workMode,          // exactly what pet/main.ts binds
+    trace: () => {},
+  };
+  // Task 5's `SfxAudio` is exactly {volume, currentTime, play} — no excess properties.
+  const played: string[] = [];
+  let now = 0;
+  const createAudio = (url: string): SfxAudio => ({
+    volume: 1, currentTime: 0,
+    play: () => { played.push(url); return Promise.resolve(); },
+  });
+  const sfx = new SfxPlayer('/sfx/', { createAudio, now: () => now });
+  return { m: new HoverAckMachine(deps), log, flags, sfx, played, tick: (ms: number) => { now = ms; } };
+}
+
+describe('applyUiFlags — the sim:state relay (R3-35 / A3-1)', () => {
+  it('starts at the shipped defaults: work mode off, sound on', () => {
+    const flags = createUiFlags();
+    expect(flags).toEqual({ workMode: WORK_MODE_DEFAULT, sfxMuted: false });
+  });
+
+  it('work mode ON + cursor rest > 3 s → fade to 35 % and arb:passthrough {faded:true}', () => {
+    const h = harness();
+    applyUiFlags(snap(true, false), h.flags, { sfx: h.sfx });
+    h.m.enter(0);
+    h.m.tick(400);
+    h.m.tick(3_000);                            // the threshold is strict
+    expect(h.m.state).toBe('held');
+    h.m.tick(3_001);
+    expect(h.m.state).toBe('faded');
+    expect(h.log).toEqual([`opacity:${WORK_MODE_FADE_OPACITY}:${WORK_MODE_FADE_MS}`, 'passthrough:true']);
+  });
+
+  it('work mode OFF (the default, and after a snapshot turns it off) never fades', () => {
+    const h = harness();
+    applyUiFlags(snap(false, false), h.flags, { sfx: h.sfx });
+    h.m.enter(0);
+    h.m.tick(400);
+    h.m.tick(60_000);
+    expect(h.m.state).toBe('held');
+    expect(h.log).toEqual([]);
+  });
+
+  it('uiSfxMuted true reaches SfxPlayer.setMuted, so a tap makes no sound; false restores it', () => {
+    const h = harness();
+    applyUiFlags(snap(false, true), h.flags, { sfx: h.sfx });
+    h.sfx.play('tap');
+    expect(h.played).toEqual([]);               // §5.12: muted plays nothing
+    h.tick(10_000);
+    applyUiFlags(snap(false, false), h.flags, { sfx: h.sfx });
+    h.sfx.play('tap');
+    expect(h.played).toHaveLength(1);
+  });
+
+  it('is safe with no SfxPlayer (browser lane has no bridge, so `sfx` is null)', () => {
+    const h = harness();
+    expect(() => applyUiFlags(snap(true, true), h.flags, { sfx: null })).not.toThrow();
+    expect(h.flags).toEqual({ workMode: true, sfxMuted: true });
+  });
+});
+```
+
+- [ ] **Step 20b: Run it, expect FAIL**
+
+Run: `npx vitest run --project desktop src/renderer/pet/stage/ui-flags.test.ts`
+Expect: `Error: Failed to resolve import "./ui-flags" from "src/renderer/pet/stage/ui-flags.test.ts". Does the file exist?`
+
+- [ ] **Step 20c: Implement `apps/desktop/src/renderer/pet/stage/ui-flags.ts`**
+
+```ts
+import type { SimSnapshot } from '@ds/protocol';
+import { WORK_MODE_DEFAULT } from './hover-ack';
+
+/**
+ * R3-35 / contract Amendment A3-1 — the pet renderer's copy of the two UI toggles.
+ *
+ * `HoverAckDeps.workMode()` is a getter read at tick time (§5.9), so the flag has to live in a
+ * mutable box the machine can see; `SfxPlayer` owns its own mute state, so that half is a call.
+ * Both arrive on every `sim:state` as `SimSnapshot.uiWorkMode` / `uiSfxMuted`, written by the tray
+ * (Task 6) into kv and relayed by `SimService.setUiFlags` (Task 12/15). No channel is added: A3-1
+ * put the two booleans on the snapshot precisely so §2's one edit stays Task 1's.
+ */
+export interface UiFlags {
+  workMode: boolean;
+  sfxMuted: boolean;
+}
+
+export interface UiFlagTargets {
+  /** Null in the browser lane, where there is no bridge and therefore no SfxPlayer. */
+  sfx: { setMuted(muted: boolean): void } | null;
+}
+
+/** The pre-first-`sim:state` state: §5.9's "opt-in, default off", and sound on. */
+export function createUiFlags(): UiFlags {
+  return { workMode: WORK_MODE_DEFAULT, sfxMuted: false };
+}
+
+/** Idempotent; called on every `sim:state`, which is at most 2 Hz (§2.3). */
+export function applyUiFlags(
+  snapshot: Pick<SimSnapshot, 'uiWorkMode' | 'uiSfxMuted'>,
+  flags: UiFlags,
+  targets: UiFlagTargets,
+): void {
+  flags.workMode = snapshot.uiWorkMode;
+  flags.sfxMuted = snapshot.uiSfxMuted;
+  targets.sfx?.setMuted(snapshot.uiSfxMuted);
+}
+```
+
+- [ ] **Step 20d: Run, expect PASS, and commit**
+
+Run: `npx vitest run --project desktop src/renderer/pet/stage/ui-flags.test.ts`
+Expect: `Test Files  1 passed (1)` and `Tests  5 passed (5)`.
+Run: `pnpm -r --if-present typecheck` — expect exit 0.
+
+```
+git add apps/desktop/src/renderer/pet/stage/ui-flags.ts apps/desktop/src/renderer/pet/stage/ui-flags.test.ts
+git commit -m "feat(pet): relay SimSnapshot.uiWorkMode/uiSfxMuted into the D7 machine and the SFX player (R3-35, contract A3-1)
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
@@ -22003,7 +22656,8 @@ import { Arbiter, BLINK_DRAW_INTERVAL_S, BLINK_CLOSED_SLEEPY_S, type GazeTarget 
 import { BehaviourRunner, CONDITION_POLL_MS } from './stage/behaviour-runner';
 import { TouchReactor, TAP_SLOP_DIP } from './stage/touch';
 import { GazeLane, LOOK_LEASE_TTL_MS } from './stage/gaze-lane';
-import { HoverAckMachine, WORK_MODE_DEFAULT } from './stage/hover-ack';
+import { HoverAckMachine } from './stage/hover-ack';
+import { applyUiFlags, createUiFlags } from './stage/ui-flags';   // R3-35 / A3-1
 import { DragVisual } from './stage/drag-visual';
 import { OverlayUpdater } from '@ds/stage';
 import { SfxPlayer } from './stage/sfx';
@@ -22066,10 +22720,11 @@ async function main(): Promise<void> {
   const eyeBlinkOf = (): { _nextBlinkingTime: number; _userTimeSeconds: number; setBlinkingSettings(c: number, d: number, o: number): void; setBlinkingInterval(s: number): void } | null =>
     (stageRef?.model as unknown as { _eyeBlink: ReturnType<typeof eyeBlinkOf> } | null)?._eyeBlink ?? null;
   let gazeLane: GazeLane | null = null;
-  /** §5.9 "opt-in, default off". CONTRACT GAP (Concerns 7): no channel relays `ui_work_mode` to the
-   *  pet renderer — §3.5 puts the toggle on the tray and §5.9 says the machine reads it, but §2.2/§2.5
-   *  add no channel and §2.9 retires none. Until a ruling, it stays at Task 8's exported default. */
-  let workMode = WORK_MODE_DEFAULT;
+  /** §5.9 "opt-in, default off" — and, since R3-35 / contract Amendment A3-1, actually reachable:
+   *  `SimSnapshot.uiWorkMode` and `.uiSfxMuted` ride every `sim:state`, and `applyUiFlags` below
+   *  writes this box (read by `HoverAckDeps.workMode()` at tick time) and calls `SfxPlayer.setMuted`.
+   *  No channel was added — the two booleans are §2.4 fields, so §2 stays Task 1's single edit. */
+  const uiFlags = createUiFlags();
   let overlay: OverlayUpdater | null = null;
   const arbiter = new Arbiter({
     now: () => performance.now(),
@@ -22185,7 +22840,7 @@ async function main(): Promise<void> {
     setModelOapcity: (o, fadeMs) => stage.model.setModelOapcity(o, fadeMs),
     sendPassthrough: (faded) => { bridge?.send(Channels.arbPassthrough, { faded }); },
     openChat: () => { bridge?.send(Channels.chatOpen, { source: 'pet', focusComposer: true }); },
-    workMode: () => workMode,   // set by the mode:changed / shell relay below (§5.9)
+    workMode: () => uiFlags.workMode,   // R3-35/A3-1: written by applyUiFlags on every sim:state
     trace: (rec) => traceSend({ tsRenderer: performance.now(), kind: 'hoverAck', lane: null, source: null, generation: null, id: '', result: null, value: null, value2: null, label: rec.state }),
   });
 
@@ -22260,6 +22915,8 @@ async function main(): Promise<void> {
 
   // ---- Phase 3: sim, mode, motion snapshots (§5.14) ----
   bridge?.on(Channels.simState, (s) => {
+    // R3-35 / A3-1 FIRST: the D7 fade and the mute must not lag the frame that arrives with them.
+    applyUiFlags(s, uiFlags, { sfx });
     facts = factsOf(s);
     const map = livelinessMap(s.liveliness);
     selector.setLivelinessMap(map);
@@ -22391,9 +23048,9 @@ Notes the implementer must apply before Step 22 (each is a name the contract doe
 
 ```
 pnpm -r --if-present typecheck
-pnpm --filter @ds/desktop exec vitest run
+npx vitest run --project desktop
 ```
-Expected: typecheck exits 0 for every package; vitest prints `Test Files  N passed (N)` with `press.test.ts`, `touch.test.ts`, `arbiter.test.ts`, `behaviour-runner.test.ts` among them and no failures. `grep -c 'setFps' apps/desktop/src/renderer/pet/main.ts` prints `1`. `grep -n 'avatarDrag\|avatarDragEnd' apps/desktop/src/renderer/pet/*.ts` prints nothing.
+Expected: typecheck exits 0 for every package; vitest prints `Test Files  N passed (N)` with `press.test.ts`, `touch.test.ts`, `arbiter.test.ts`, `behaviour-runner.test.ts`, `ui-flags.test.ts` among them and no failures. `grep -c 'setFps' apps/desktop/src/renderer/pet/main.ts` prints `1`. `grep -c 'applyUiFlags' apps/desktop/src/renderer/pet/main.ts` prints `2`. `grep -n 'avatarDrag\|avatarDragEnd' apps/desktop/src/renderer/pet/*.ts` prints nothing.
 
 - [ ] **Step 23: Browser-lane smoke (`?test=1&seed=1`)**
 
@@ -22415,8 +23072,8 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 **Evidence:** none produced by this task — §12's traces and clips are Task 17's, and they require Task 15's wiring. The renderer records this task emits (`behaviourStart`, `behaviourEnd`, `laneGrant`, `laneResult`, `blink`, `fps`) are what `scripts/assert-trace.mjs` will assert.
 
 **Acceptance:**
-- Tests named and green: `arbiter.test.ts` (19), `behaviour-runner.test.ts` (5), `touch.test.ts` (7), `press.test.ts` (12); `pnpm -r --if-present typecheck` exit 0.
-- Files touched are exactly the five §1.5 T3-B rows named in **Files** (plus their sibling tests); no edit to `packages/stage/**`, `stage/lanes.ts`, `gaze-lane.ts`, `hover-ack.ts`, `drag-visual.ts`, `lane-metrics.ts`, `tests/stage.spec.ts`, `package.json`, `electron.vite.config.ts`.
+- Tests named and green: `arbiter.test.ts` (19), `behaviour-runner.test.ts` (5), `touch.test.ts` (7), `press.test.ts` (12), `ui-flags.test.ts` (5, R3-35/A3-1); `pnpm -r --if-present typecheck` exit 0.
+- Files touched are exactly the rows named in **Files** — the five §1.5 T3-B rows plus their sibling tests, plus `stage/ui-flags.ts` + `ui-flags.test.ts` (A3-1's new rows); no edit to `packages/stage/**`, `stage/lanes.ts`, `gaze-lane.ts`, `hover-ack.ts`, `drag-visual.ts`, `lane-metrics.ts`, `sfx.ts`, `tests/stage.spec.ts`. (`package.json` / `electron.vite.config.ts`: see Concern 2 — `@ds/behaviors` only, `@ds/sim` landed in Task 6.)
 - Interruption matrix rows each pinned by a test: drag immediate; touch→llm at `min(MIN_PLAY boundary, +250 ms)`; touch covers llm expression and restores with remaining time (B-05 behaviour); llm under touch refused with `laneResult preempted, generation null`; newer llm wins; second ACT inside 1 500 ms expression-only; behaviour refused under llm/touch.
 - Every motion goes through `startMotionForced` with `fadeFor(source)`; no `startMotion(…, Priority.*)` call remains in `pet/main.ts`; `autoIdle = false` is set before `stage.start()`; `setExpressionFades(0.30, 0.30)` called once.
 - Expression weight reset to `1.0` on release (test "clamps LLM weight…").
@@ -22426,16 +23083,18 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
 - press.ts: no `avatar:drag` / `avatar:dragEnd` sender; `arb:grab` only on `alpha >= ENTER_ALPHA`; `arb:release {pressId, wasTap}` on mouseup and on lost button; stale `pressId` ignored; early-ended tap replays grab→release→tap.
 - `grep -c 'setFps' apps/desktop/src/renderer/pet/main.ts` = 1; `fpsState.moving` holds 500 ms past `rest`.
 - `StageTestHook` gains `arbiter()` and `behaviour()`.
+- **R3-35 / A3-1:** `grep -c 'applyUiFlags' apps/desktop/src/renderer/pet/main.ts` → `2` (the import and the one call site inside the `sim:state` handler); `grep -c 'WORK_MODE_DEFAULT' apps/desktop/src/renderer/pet/main.ts` → `0` (the default now comes from `createUiFlags`); `ui-flags.test.ts` drives the REAL `HoverAckMachine` and the REAL `SfxPlayer` and pins work-mode-on + rest > 3 s → opacity 0.35 + `passthrough:true`, and muted → no sound call.
+- **R3-36 / A3-2:** the arbiter's `cursorWiggle` branch is reached by the name Task 12's sensor produces — `grep -n "'cursorWiggle'" apps/desktop/src/renderer/pet/stage/arbiter.ts` is non-empty and matches `SIM_EVENT_KINDS`.
 - No `小春` literal in any touched file; no `SetWindowsHookEx|WH_KEYBOARD|RIDEV_INPUTSINK|GetAsyncKeyState|clipboard|GetWindowText|desktopCapturer|capturePage`.
 - Contract gaps below are all reported in the task report, none resolved silently.
 
 **Concerns for the controller:**
 1. **`tests/stage.spec.ts:159` will change value.** `main.ts` today derives `lastMotion` from the FIRST rng draw because `tick()`'s idle pick is the first consumer; with §5.14 item 3 (`autoIdle = false`) the first draw is `CubismEyeBlink`'s. The spec pins `floor(0.62707 × 2) = 1`; this task keeps `lastMotion` deterministic (first arbiter-issued motion under seed 1) but the pinned pair may differ. `apps/desktop/tests/stage.spec.ts` is not in §1.5 — needs an owner row or a ruling that Task 13 may edit it.
-2. **CONTRACT GAP: `apps/desktop/package.json` and `apps/desktop/electron.vite.config.ts`** must add `@ds/sim` and `@ds/behaviors` (`workspace:*`) and extend `externalizeDeps.exclude` (`electron.vite.config.ts:40`) so the two TypeScript packages are bundled like `@ds/protocol`; neither file is in §1.5. Without it `main.ts`'s imports fail at build. Suggested owner: T3-A (wiring) or T3-B (this task).
+2. **CONTRACT GAP (half of it now landed earlier): `apps/desktop/package.json` and `apps/desktop/electron.vite.config.ts`** must list `@ds/sim` and `@ds/behaviors` (`workspace:*`) and extend `externalizeDeps.exclude` (`electron.vite.config.ts:40`) so the two TypeScript packages are bundled like `@ds/protocol`; neither file is in §1.5. **`@ds/sim` is added by Task 6 Step 14b in batch 3** (R3-38 made `tray.ts` the first desktop importer of it), so this task adds only `@ds/behaviors` — but it must verify both before Step 21, because `main.ts` imports from each and the build fails silently late otherwise. Suggested owner for the two files: T3-A (wiring) or T3-B (this task).
 3. **CONTRACT GAP: `Picker`'s `textures: readonly ImageData[]`** (§6.2) has no supplier — `CompanionModel` exposes neither texture URLs nor `ImageData`, and `loadTexture` uploads straight to GL. This plan calls `stage.textureImageData()` and marks it; Task 11 (owner of `stage.ts`) must add the accessor or the Picker cannot be constructed.
 4. **CONTRACT GAP: how `GpuPressReader.service()` results reach `PressTracker`.** §6.3 says `frame()` calls `service(gl)`; nothing names the callback. This plan calls `stage.setPressReader(reader)` + `stage.onPressRead(cb)` (Task 11's surface to confirm). Also `Live2DStage.toDevice` is `private` today (`stage.ts:215`) and press.ts needs it — Task 11/5 should make it public or expose an equivalent.
 5. **Unnamed classes used here (recorded in plan-header):** `GazeLane`, `HoverAckMachine` (Task 8), `DragVisual` (Task 10), `OverlayUpdater` (Task 5). Their *names* remain contract gaps, but every call site in `main.ts` was re-checked against those tasks' actual code during the plan self-review and now matches method-for-method (`look/touchTarget/end/setCursor/tick/setLiveliness/setPresentation`, `enter/move/leave/click/tick`, `onSnapshot/onLanding`, `set`). **One genuine gap remains and is NOT invented away:** §5.6 gives no `GazePattern -> target` table and no per-request ease, so `ArbiterPorts.gaze.apply` binds `follow`/`cursorLock` to `touchTarget({x:0,y:0,followCursor:true}, ease ?? LOOK_LEASE_TTL_MS)` and lets every other pattern fall through to the lane's own state via `end('completed')`. A ruling is requested; the arbiter itself is insulated by `ArbiterPorts`, so the fix is one function in `main.ts`.
-6. **CONTRACT GAP: `ui_work_mode` never reaches the pet renderer.** Task 8's `HoverAckDeps.workMode(): boolean` reads "the `ui_work_mode` kv flag as main last relayed it" (§5.9), and §3.5 puts the toggle on the tray (Task 6) with `setWorkMode` wired in `index.ts` (Task 15) — but §2.2/§2.5 add **no channel** for it and §2.3's table has no row. `main.ts` therefore holds `let workMode = WORK_MODE_DEFAULT` and the D7 fade is unreachable until the controller either (a) adds a `mode:changed`-style field or a `shell:workMode` channel in §2 by Amendment (a Task 1 edit, so it must land before batch 2), or (b) rules the fade Phase 4. Same gap as Task 15 Concern 7 (which also covers `ui_sfx_muted`). Flagged, not invented: adding a channel here would break the §1.5 shared-protocol exception.
+6. **CLOSED by R3-35 / contract Amendment A3-1 — `ui_work_mode` and `ui_sfx_muted` now reach the pet renderer.** The self-review found §5.9's fade unreachable: the machine (Task 8), the tray checkbox (Task 6) and the kv write (Task 15) all shipped, but §2 defined no carrier and §2 may be edited only once, by Task 1. The controller added two booleans to `SimSnapshot` instead of a channel, so §2 stays one edit: `uiWorkMode` / `uiSfxMuted` ride every `sim:state`, `SimService.setUiFlags` (Task 12) overlays them from the tray relay, and this task's `stage/ui-flags.ts` applies them — the box `HoverAckDeps.workMode()` reads, and `SfxPlayer.setMuted`. Two residues for the controller: (a) `ui-flags.ts` + its test are a new path §1.5 does not list (A3-1 adds the rows; they are under `renderer/pet/stage/**`, T3-B's); (b) the module exists so the relay is testable at all — `main.ts` runs `main()` on import and has no test file, so an inline two-line relay would have been the one unpinned link in the §5.9 / §5.12 chain. If the controller prefers the assignments inline, the cost is exactly that pin.
 
 7. **Task 8 already ships `ExpressionLane` and `GazeLane` as complete lane objects; this task's `Arbiter` composes raw `LaneHolder`s instead**, so the R3-4 cover/restore logic exists twice (Task 8's `ExpressionLane.coveredLease` and this file's `covered` field). Both are contract-faithful and the numbers come from the one home (`expression-lease.ts`), so nothing is wrong at runtime — but a reviewer should decide whether the arbiter should hold `new ExpressionLane(sink)` / the existing `GazeLane` rather than its own holders. Recorded rather than rewritten: collapsing them is a design decision §5.1/§5.2 does not make.
 6. **`LaneHolder.request` arbitration policy is unspecified** ("returns null when the incoming command loses arbitration"). This arbiter ends the incumbent lease itself before every request, so `request()` is only ever called on an empty lane and a `null` there is treated as a bug (throw). If Task 8's holder also refuses on equal source, nothing changes; if it refuses `sim`/`behaviour` after an `llm` it just ended, the throw will surface it. `generation` is passed as `0` and read back from the granted lease (§5.2 "assigned by the OWNING lane"). `LaneLease.onResult` is not used (its wiring is not specified); results are traced by the arbiter.
@@ -22516,7 +23175,7 @@ describe('§9.4 parserOptions', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/brain exec vitest run src/turn.test.ts -t parserOptions`
+Run: `npx vitest run --project @ds/brain src/turn.test.ts -t parserOptions`
 Expected FAIL line: `AssertionError: expected "StreamParser" to be called with arguments: [ Any<String>, { dropAct: true } ]` (the current call passes one argument).
 
 - [ ] **Step 2: Implement — two lines in `turn.ts`**
@@ -22530,7 +23189,7 @@ In `TurnRunnerDeps` (after `random?: () => number;`, line 53) add:
 
 Add to the `import { StreamParser } from './stream-parser.ts';` line: `import { StreamParser, type StreamParserOptions } from './stream-parser.ts';`. Replace both `new StreamParser(id)` (line 223) and `new StreamParser(turn.id)` (line 507) with `new StreamParser(id, this.deps.parserOptions)` / `new StreamParser(turn.id, this.deps.parserOptions)`.
 
-Run: `pnpm --filter @ds/brain exec vitest run src/turn.test.ts` → expected `Tests  N passed` (N = previous count + 1, no failures). Run `pnpm -r --if-present typecheck` → exit 0.
+Run: `npx vitest run --project @ds/brain src/turn.test.ts` → expected `Tests  N passed` (N = previous count + 1, no failures). Run `pnpm -r --if-present typecheck` → exit 0.
 
 Commit:
 ```
@@ -22966,7 +23625,7 @@ describe('ProactiveController', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/proactive-controller.test.ts`
+Run: `npx vitest run --project desktop src/main/proactive-controller.test.ts`
 Expected FAIL line: `Error: Failed to resolve import "./proactive-controller" from "src/main/proactive-controller.test.ts". Does the file exist?`
 
 - [ ] **Step 5: Implement `apps/desktop/src/main/proactive-controller.ts`**
@@ -23329,7 +23988,7 @@ export class ProactiveController {
 
 > Reviewer note on `callbackCappedToday`: the two helpers above are deliberately conservative (a callback that displayed today ⇒ silent). If Task 9's `bucketFor` already enforces "1/day" for `callback` from state, the controller's check is redundant but harmless (R3-25 says the cap is the budget; double-enforcing cannot widen it).
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/proactive-controller.test.ts` → expected `Tests  16 passed (16)` (15 controller cases + the §5.13 cross-package constant identity added in the plan self-review).
+Run: `npx vitest run --project desktop src/main/proactive-controller.test.ts` → expected `Tests  16 passed (16)` (15 controller cases + the §5.13 cross-package constant identity added in the plan self-review).
 Run: `pnpm -r --if-present typecheck` → exit 0 (if `PROACTIVE_UNANSWERED` is not a `SimEvent` member the cast compiles; see Concerns 7).
 
 - [ ] **Step 6: Commit the controller**
@@ -23485,7 +24144,7 @@ Append these cases inside `describe('BrainService', …)` (after line 867's clos
 
 Add to the test file's imports: `const { BrainService, HINT_TTL_MS, MEMORY_ACK_TURN_ID, MODE_ACK_TURN_ID, NO_MEMORY_LINE, STORAGE_HINT_TEXT, USER_ROW_LABEL, fnv1a } = await import('./brain-service');` (replacing the line-214 import) and `const { parseCharacterBundle, renderStaticSystem } = await import('@ds/brain');` (line 211). Extend `FakeTurnRunner`: add `deps: unknown; sendCalls: Array<[string, string]> = [];`, `constructor(deps: unknown) { this.deps = deps; FakeTurnRunner.instances.push(this); }`, and `send(text: string, kind: string): Promise<string> { this.sendCalls.push([text, kind]); return Promise.resolve('t1'); }`.
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts`
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts`
 Expected FAIL line (first): `TypeError: Cannot read properties of undefined (reading 'get')` from `brain-service.ts` constructor (`modeStore` not yet a dep) — every pre-existing case also fails to construct until Step 8 lands.
 
 - [ ] **Step 8: Implement — profiles, mode subscription, `user:text` interception, ack helper**
@@ -23736,7 +24395,7 @@ In `dispose()` after `this.offKey = null;` add `this.offMode?.(); this.offMode =
 
 In `rebuildClient()` replace `staticSystem: this.staticSystem,` with `staticSystem: this.profiles[this.mode],` and add, after the `state: () => this.state(),` line: `parserOptions: { dropAct: this.mode === 'plain' },   // §9.4`.
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts` → expected `Tests  31 passed (31)` (27 pre-existing + 4 new).
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts` → expected `Tests  31 passed (31)` (27 pre-existing + 4 new).
 Run: `pnpm -r --if-present typecheck` → exit 0.
 
 Commit:
@@ -23838,7 +24497,7 @@ Append to `brain-service.test.ts`:
   });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts -t "sendProactive|guard|speakProactiveText|speechLeaseActive"`
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts -t "sendProactive|guard|speakProactiveText|speechLeaseActive"`
 Expected FAIL line: `TypeError: service.sendProactive is not a function`.
 
 - [ ] **Step 10: Implement the proactive surface + lease accessors**
@@ -23989,7 +24648,7 @@ In `bubbleCrashed()` after `const turnId = runner.turnId;` add `if (turnId !== n
 
 Also relay the `state` event as before (unchanged); `proactive:turn` therefore always precedes `brain:state thinking` because `runner.send()` emits `thinking` synchronously after `sendProactive` already sent it (§2.3).
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts` → expected `Tests  35 passed (35)`.
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts` → expected `Tests  35 passed (35)`.
 
 - [ ] **Step 11: `TurnRunner.send` accepts a caller-minted id (gap, Concerns 11) — test then implement**
 
@@ -24003,7 +24662,7 @@ Append to `packages/brain/src/turn.test.ts` (inside the Step 1 `describe`):
   });
 ```
 
-(copy the deps literal from Step 1's case verbatim in place of the comment). Run `pnpm --filter @ds/brain exec vitest run src/turn.test.ts -t "caller-minted"` → expected FAIL: `AssertionError: expected '<uuid>' to be 'fixed-id'`.
+(copy the deps literal from Step 1's case verbatim in place of the comment). Run `npx vitest run --project @ds/brain src/turn.test.ts -t "caller-minted"` → expected FAIL: `AssertionError: expected '<uuid>' to be 'fixed-id'`.
 
 Implement in `turn.ts:193`: `send(text: string, kind: MessageKind = 'chat', turnId?: string): Promise<string> {` and line 211: `const id = turnId ?? this.idFactory();`. Run again → PASS. `pnpm -r --if-present typecheck` → exit 0.
 
@@ -24031,7 +24690,7 @@ Append to `brain-service.test.ts`:
   });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts -t "sim.preamble"` → expected FAIL: `expected { localTime: '…', …, mood: 0.1, energy: 70, affection: 50, … } to deeply equal …`.
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts -t "sim.preamble"` → expected FAIL: `expected { localTime: '…', …, mood: 0.1, energy: 70, affection: 50, … } to deeply equal …`.
 
 - [ ] **Step 13: Implement `state()`**
 
@@ -24046,7 +24705,7 @@ Replace lines 606–619:
   }
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.test.ts` → `Tests  36 passed (36)`.
+Run: `npx vitest run --project desktop src/main/brain-service.test.ts` → `Tests  36 passed (36)`.
 
 - [ ] **Step 14: Update `brain-service.crash.test.ts` harness and assert TURN_DONE.interrupted end to end**
 
@@ -24067,8 +24726,8 @@ with `let simEvents: unknown[];` declared beside `bubbleVisible` and `simEvents 
     expect(simEvents).toContainEqual({ type: 'EMOTION', emotion: 'happy' });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/brain-service.crash.test.ts` → `Tests  2 passed (2)`.
-Run the full desktop project and typecheck: `pnpm --filter @ds/desktop exec vitest run` → all files pass; `pnpm -r --if-present typecheck` → exit 0.
+Run: `npx vitest run --project desktop src/main/brain-service.crash.test.ts` → `Tests  2 passed (2)`.
+Run the full desktop project and typecheck: `npx vitest run --project desktop` → all files pass; `pnpm -r --if-present typecheck` → exit 0.
 
 Commit:
 ```
@@ -24111,7 +24770,8 @@ No evidence artefact is named by the contract for this task (the D16/E-3 artefac
 11. **`proactive:turn` "sent synchronously BEFORE `TurnRunner.send`" (§2.7) requires the turn id before the runner mints it.** This task adds an optional third parameter `send(text, kind, turnId?)` to `TurnRunner` (Step 11, the second `turn.ts` gap edit). Alternative if refused: send `proactive:turn` immediately AFTER `send()` resolves — still before `brain:state thinking` reaches the renderers only if the runner's `thinking` emission is deferred, which `turn.ts:247` does not do.
 12. "**§8.5 `extractor.noteUserTurn` on every completed user turn**" — "completed" is read as "the chat turn's `turnDone` arrived and the turn was not interrupted"; an interrupted turn's text is not counted. If the intended reading is "admitted by `send()`", move the call two lines up in Step 10.
 13. **`GateInput.chatOpen`** has no `SimState` field (the reducer takes `CHAT_OPEN` but §3.1 stores nothing for it); the controller takes `chatOpen(): boolean` from `index.ts` (the chat window's `isVisible()`).
-14. **`callbackCappedToday`** double-enforces R3-25 in the controller because `bucketFor(state)` (§3.10.5) cannot see the ledger's per-bucket counts from `SimState` alone; `bucketFor`'s "1/day" for `callback` and the `HistoryStore.countSince` condition are therefore unsatisfiable inside Task 9 as specified — please confirm the controller-side enforcement is the intended home.
+14. **§5.13's forced duplicates, as ratified — nothing to do here beyond knowing the list.** This task's `proactive-controller.test.ts` is the earliest file that can see both `@ds/memory` and `@ds/sim`, so the plan self-review put the `PROACTIVE_RESERVATION_STALE_MS` / `PROACTIVE_NO_REPEAT_MS` identity assertions in it (a `§5.13` describe). **R3-43 ratifies the fourth pair the same way and assigns it no new work:** `FACT_MAX_CHARS` (`packages/memory/src/facts.ts`) and `EXTRACT_VALUE_MAX` / `EXTRACT_ALIAS_MAX` (`packages/brain/src/extract-prompt.ts`) **stay two homes** — `@ds/brain` may not import `@ds/memory` (§1.2) — and the identity is already pinned from `apps/desktop`, which can see both: Task 2's `fact-extractor.test.ts` asserts `expect(FACT_MAX_CHARS).toBe(EXTRACT_VALUE_MAX)`. Moving them into `@ds/protocol` is **refused** (it would make Task 2 depend on Task 1 inside batch 1 for no user-visible gain). The §5.13 exception list is therefore exactly four pairs — the three above plus `SIM_DEFAULTS`' mirror of the touch constants — and nothing else may be duplicated. `nextLocalMidnight` is **no longer** on that list: R3-38 moved Task 6 to batch 3 and it imports `@ds/sim`'s.
+15. **`callbackCappedToday`** double-enforces R3-25 in the controller because `bucketFor(state)` (§3.10.5) cannot see the ledger's per-bucket counts from `SimState` alone; `bucketFor`'s "1/day" for `callback` and the `HistoryStore.countSince` condition are therefore unsatisfiable inside Task 9 as specified — please confirm the controller-side enforcement is the intended home.
 
 ---
 
@@ -24135,7 +24795,7 @@ Consumes (exact, by task):
 - Task 6: `ModeStore(db)` with `get()`, `set(mode, 'command'|'restored'|'tray')`, `onChange(cb): () => void` (§9.3); `personaName(bundle)` (§1.7); `createTray(actions)` with the twelve §3.5 members; `ProactiveLogStore(db)` (proactive_log store — see CONTRACT GAP 3).
 - Task 7: `TraceWriter.fromEnv()` → `write(t, payload)` / `writeRenderer(rec)` / `flush()` / `close()` (§12.2); `LazyWindow<T>{constructor(create, opts?{onCreated, onDestroyed}), get(), peek(), destroy(), alive, lastCreateMs, graceGeneration, armGrace(ms, cb), cancelGrace()}`; `BUBBLE_IDLE_GRACE_MS`, `CHAT_PRECREATE_DELAY_MS = 2_000`; `class BubbleLifecycle<T>{onHidden(), onNeeded(): T, dispose()}` over `BubbleLifecycleDeps {bubble, speechLeaseActive(), retireSpeech(), now?, graceMs?, retireMs?, onDestroyed?}`; getter-form `onFromAny(() => BrowserWindow[], …)`.
 - Task 10: `WindowMotionController(deps: WindowMotionDeps)` with `grab(p)`, `release(p)`, `rebase()`, `cancel()`, `dispose()` (§7.1); `WindowMotionDeps {pet, cursor(), workAreas(), workArea(), setPosition, setClickThrough, suspendHoverSwitching, send, persist, now?}`.
-- Task 12: `createActivitySensor({cursor, scaleFactor, win32?})` → `ActivitySensor {start, stop, sample, derived, onInput, onForegroundChanged, onDndChanged, onBattery}` (§10.5); `SimService(deps: SimServiceDeps)` with `start()`, `dispatch(event)`, `snapshot()`, `liveliness`, `dispose(): Promise<void>` (§3.11); `startForegroundWatch(...).onForegroundChanged(cb)` (§10.3).
+- Task 12: `createActivitySensor({cursor, scaleFactor, win32?, foreground?, petCentre?, nowMono?})` → `ActivitySensor {start, stop, sample, derived, onInput, onForegroundChanged, onDndChanged, onBattery, onWiggle}` (§10.5; `petCentre` and `onWiggle` are R3-36 / Amendment A3-2 — this file supplies the pet window's centre so the sensor can run the D11 wiggle predicate at 10 Hz inside 240 DIP, and `SimService` fans the edge out on `sim:event`); `SimService(deps: SimServiceDeps)` with `start()`, `dispatch(event)`, `snapshot()`, `liveliness`, `setUiFlags({workMode, sfxMuted})` (R3-35 / A3-1), `dispose(): Promise<void>` (§3.11); `startForegroundWatch(...).onForegroundChanged(cb)` (§10.3).
 - Task 14: `ProactiveController(deps)` with `evaluate()`, `dispose(): Promise<void>` (§3.10.3; deps shape — CONTRACT GAP 1); `BrainService.speechLeaseActive(): boolean`, `retireSpeech(): Promise<void>`, `sendProactive(...)`.
 - Phase 2 `index.ts` (unchanged semantics): `requestChat(source, focusComposer)` (FW-4), `createBeforeQuit(deps)` (I-9, GC2-1), `onDisplaysChanged`, `createVisibilityController`, `createBubbleVisibility`, `startCursorPolling`, `createChatWindow/openChat/closeChat`, `createKeyWindow/openKeyWindow/markQuitting`, `globalShortcut 'Control+Shift+Space'`, `createLateBoundChatRequest`.
 
@@ -24238,7 +24898,7 @@ describe('§3.11: composeDrain — the four-await quit sequence', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/quit.test.ts`
+Run: `npx vitest run --project desktop src/main/quit.test.ts`
 Expected FAIL line: `SyntaxError: The requested module './quit' does not provide an export named 'composeDrain'` (vitest reports it as `Error: [vitest] No "composeDrain" export is defined on the "./quit" mock` or the ESM SyntaxError above — either is the expected failure).
 
 - [ ] **Step 3: Implement `composeDrain` in `quit.ts`**
@@ -24304,7 +24964,7 @@ export function composeDrain(
 
 Lines 30–86 (`createBeforeQuit`) are unchanged.
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/quit.test.ts`
+Run: `npx vitest run --project desktop src/main/quit.test.ts`
 Expected PASS line: `Test Files  1 passed (1)` and `Tests  12 passed (12)` (8 existing + 4 new).
 
 Commit:
@@ -24376,6 +25036,27 @@ describe('§11.2: lazy windows', () => {
   });
 });
 
+describe('R3-35 / A3-1: the two UI toggles reach the renderer', () => {
+  it('seeds SimService from kv and re-mirrors on both tray setters', () => {
+    // Source-level, like every other case in this file: index.ts creates the real windows and the
+    // real database, so it is asserted as text (the behaviour of setUiFlags itself is Task 12's).
+    expect((src.match(/simService\.setUiFlags\(\{ workMode, sfxMuted \}\)/g) ?? []).length).toBe(3);
+    const seed = src.indexOf('simService.setUiFlags');
+    expect(src.indexOf('let workMode = kvBool(KV_WORK_MODE)')).toBeLessThan(seed);
+    // and both setters still write kv — the durable home stays here, the mirror is only a broadcast
+    expect(src).toMatch(/setKv\(database, KV_WORK_MODE, on \? '1' : '0'\);\s*\n\s*simService\.setUiFlags/);
+    expect(src).toMatch(/setKv\(database, KV_SFX_MUTED, on \? '1' : '0'\);\s*\n\s*simService\.setUiFlags/);
+  });
+});
+
+describe('R3-36 / A3-2: the wiggle predicate has its input', () => {
+  it('passes petCentre into createActivitySensor', () => {
+    // 440 chars in the file as written (three A3-2 comment lines sit above it); 800 leaves room
+    // for a reworded comment without letting the match wander into the next call.
+    expect(src).toMatch(/createActivitySensor\(\{[\s\S]{0,800}petCentre:/);
+  });
+});
+
 describe('R3-19: no persona-name literal', () => {
   it('index.ts does not contain 小春', () => {
     expect(src).not.toContain('小春');
@@ -24383,8 +25064,8 @@ describe('R3-19: no persona-name literal', () => {
 });
 ```
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/index.test.ts`
-Expected FAIL lines: `§2.9 … registers no onFromPet for avatar:drag` fails with `expected '…' not to match /Channels\.avatarDrag\b/`; `§7.7` and `§3.11` and `§11.2` cases fail on their first `expect`; `R3-19` fails with `expected … not to contain '小春'` (line 229 of the current file). `Tests  8 failed (8)`.
+Run: `npx vitest run --project desktop src/main/index.test.ts`
+Expected FAIL lines: `§2.9 … registers no onFromPet for avatar:drag` fails with `expected '…' not to match /Channels\.avatarDrag\b/`; `§7.7` and `§3.11` and `§11.2` cases fail on their first `expect`; `R3-35` fails with `expected +0 to be 3`; `R3-36` fails with `expected '…' to match /createActivitySensor…petCentre:/`; `R3-19` fails with `expected … not to contain '小春'` (line 229 of the current file). `Tests  10 failed (10)`.
 
 - [ ] **Step 5: Replace `apps/desktop/src/main/index.ts`**
 
@@ -24739,6 +25420,14 @@ if (!app.requestSingleInstanceLock()) {
     const activity = createActivitySensor({
       cursor: () => screen.getCursorScreenPoint(),
       scaleFactor: () => screen.getDisplayMatching(petWin.getBounds()).scaleFactor,
+      // R3-36 / contract Amendment A3-2: inside WIGGLE_NEAR_DIP of this point the sensor samples the
+      // cursor at 10 Hz and runs the D11 wiggle predicate; outside it, 2 Hz and nothing else. Same
+      // coordinate space as `cursor` above, which is what the sensor's DIP conversion assumes.
+      petCentre: () => {
+        if (petWin.isDestroyed()) return null;
+        const b = petWin.getBounds();
+        return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+      },
     });
     sensor = activity;
     const simService = new SimService({
@@ -24942,6 +25631,10 @@ if (!app.requestSingleInstanceLock()) {
     let dndUntilWall: number | null = mutedRaw === null || mutedRaw === '' ? null : Number(mutedRaw);
     let workMode = kvBool(KV_WORK_MODE);
     let sfxMuted = kvBool(KV_SFX_MUTED);
+    // R3-35 / A3-1: seed the broadcast mirror from kv. This runs after `simService.start()` but well
+    // before the pet renderer's `stage:ready`, whose handler re-sends `simService.snapshot()` — so a
+    // restart with 工作模式 already on never shows the renderer a frame at the default.
+    simService.setUiFlags({ workMode, sfxMuted });
     const exportMemory = async (): Promise<void> => {
       const res = await dialog.showSaveDialog({
         title: '导出记忆',
@@ -24998,14 +25691,20 @@ if (!app.requestSingleInstanceLock()) {
       getDnd: () => dndUntilWall,
       setMode: (mode) => modes.set(mode, 'tray'),
       getMode: () => modes.get(),
+      // R3-35 / contract Amendment A3-1: kv stays the durable home and this file stays the writer,
+      // and `SimService.setUiFlags` mirrors the pair onto every `sim:state` so the pet renderer can
+      // act on it — §5.9's fade (Task 8's machine) and §5.12's mute (Task 5's SfxPlayer), applied by
+      // Task 13's `stage/ui-flags.ts`. No channel was added; the two booleans are §2.4 fields.
       setWorkMode: (on) => {
         workMode = on;
-        setKv(database, KV_WORK_MODE, on ? '1' : '0'); // CONTRACT GAP 11
+        setKv(database, KV_WORK_MODE, on ? '1' : '0');
+        simService.setUiFlags({ workMode, sfxMuted });
       },
       getWorkMode: () => workMode,
       setMuted: (on) => {
         sfxMuted = on;
-        setKv(database, KV_SFX_MUTED, on ? '1' : '0'); // CONTRACT GAP 11
+        setKv(database, KV_SFX_MUTED, on ? '1' : '0');
+        simService.setUiFlags({ workMode, sfxMuted });
       },
       getMuted: () => sfxMuted,
       exportMemory: () => { void exportMemory().catch((err) => console.error('[memory] export failed', err)); },
@@ -25108,8 +25807,8 @@ Notes for the engineer, all binding:
 - The `payload as never` casts in `send` exist only because `WindowMotionDeps.send` is typed with the union `WindowMotion | Landing` (§7.1) while `sendToPet` is channel-typed; if Task 10 ships `send` with two overloads instead, delete the casts.
 - `activity.sample.battery` is `{charging, level} | null` (§10.4).
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/index.test.ts`
-Expected PASS line: `Tests  8 passed (8)`.
+Run: `npx vitest run --project desktop src/main/index.test.ts`
+Expected PASS line: `Tests  10 passed (10)` (8 as generated + the R3-35 and R3-36 wiring cases).
 
 - [ ] **Step 6: Typecheck the whole workspace**
 
@@ -25118,8 +25817,8 @@ Expected: every package prints nothing and exits 0. If `apps/desktop` fails on a
 
 - [ ] **Step 7: Run the desktop suite and the protocol suite**
 
-Run: `pnpm --filter @ds/desktop exec vitest run && pnpm --filter @ds/protocol exec vitest run`
-Expected: `Test Files  N passed (N)` for both with **zero** failures; the desktop delta against the post-Task-14 baseline is **+8 (index.test.ts) +4 (quit.test.ts)**. `channels.test.ts`'s `PET_TO_MAIN still contains avatarDrag/avatarDragEnd` case (Task 1) must still pass — this task retires the handler, not the channel (§2.9).
+Run: `npx vitest run --project desktop && npx vitest run --project @ds/protocol`
+Expected: `Test Files  N passed (N)` for both with **zero** failures; the desktop delta against the post-Task-14 baseline is **+10 (index.test.ts) +4 (quit.test.ts)**. `channels.test.ts`'s `PET_TO_MAIN still contains avatarDrag/avatarDragEnd` case (Task 1) must still pass — this task retires the handler, not the channel (§2.9).
 
 - [ ] **Step 8: Commit the wiring**
 
@@ -25161,7 +25860,7 @@ Decision rule, fixed here so it is not taste: if `p95 ≤ 1500` (2× headroom un
 
 Both `<p95>` and `<new value>` are the numbers printed by this step — there is no other source for them (Concern 1).
 
-Run: `pnpm --filter @ds/desktop exec vitest run src/main/quit.test.ts` → `Tests  12 passed (12)` (the tests override `timeoutMs`, so either value passes).
+Run: `npx vitest run --project desktop src/main/quit.test.ts` → `Tests  12 passed (12)` (the tests override `timeoutMs`, so either value passes).
 
 Commit (only if the constant or the note changed):
 
@@ -25185,7 +25884,7 @@ Expected: the first prints **only** `apps/desktop/src/main/key-window.ts:52:    
 
 **Acceptance:**
 - [ ] `apps/desktop/src/main/quit.test.ts` — 12 tests pass; `composeDrain` order, isolation, timing log and composition pinned.
-- [ ] `apps/desktop/src/main/index.test.ts` — 8 tests pass: no `avatarDrag`/`avatarDragEnd`/`moveBy` (§2.9); `arbGrab`/`arbRelease` → `motion.grab/release`, `rebase()` before `reposition()`, hide arm → `motion?.cancel()` (§7.7); drain order `brain → proactive → sim → extractor` (§3.11); no `holdWindowOpen`, three `LazyWindow`s (§11.2); no `小春` (R3-19).
+- [ ] `apps/desktop/src/main/index.test.ts` — 10 tests pass: no `avatarDrag`/`avatarDragEnd`/`moveBy` (§2.9); `arbGrab`/`arbRelease` → `motion.grab/release`, `rebase()` before `reposition()`, hide arm → `motion?.cancel()` (§7.7); drain order `brain → proactive → sim → extractor` (§3.11); no `holdWindowOpen`, three `LazyWindow`s (§11.2); **three `simService.setUiFlags({workMode, sfxMuted})` call sites with the kv writes still in place (R3-35 / A3-1)**; **`petCentre` passed to `createActivitySensor` (R3-36 / A3-2)**; no `小春` (R3-19).
 - [ ] Files edited are exactly `quit.ts`, `quit.test.ts`, `index.ts`, `index.test.ts` (all T3-A per §1.5); `git diff --stat main~N -- apps/desktop/src/main` names no other file from this task's commits.
 - [ ] `pnpm -r --if-present typecheck` clean; desktop + protocol vitest suites green; `test:e2e:electron` 0 failed.
 - [ ] Step 9 smoke evidence recorded in the commit body of Step 8 or a follow-up note in `progress.md`: the four `[quit] drain … settled` lines, the tray menu order, one renderer process gone after chat close, `Count : 0` from the trace grep.
@@ -25202,7 +25901,7 @@ Expected: the first prints **only** `apps/desktop/src/main/key-window.ts:52:    
 4. **`SimService.dispose()` is listed twice.** §3.11's API says *"Awaited by `BrainService.dispose()`"*; §3.11's quit block awaits it as a separate step after `proactive.dispose()`. This plan follows the quit block (the "exact order") and requires `SimService.dispose()` to be idempotent if Task 14 also awaits it.
 5. **`NotificationState.onChange` vs `ActivitySensor.onDndChanged`.** §3.11's row names `NotificationState.onChange`; §10.5 gives `ActivitySensor.onDndChanged(cb)` a signature and Task 12 skeletons `NotificationState` as a poll wrapper inside the sensor. This plan uses `onDndChanged` (the only one with a signature).
 6. **Foreground breakpoint plumbing.** §10.3 adds `onForegroundChanged` to `startForegroundWatch`'s return; §10.5 also puts `onForegroundChanged` on `ActivitySensor`; Task 14 consumes the sensor's. Nothing bridges `foreground.ts` → sensor (the sensor's deps are `cursor/scaleFactor/win32`). This plan passes `sensor` to the controller and bridges nothing; Task 12 must either feed the sensor from `foreground.ts` or the controller must take `foreground` — controller's call.
-7. **Work mode and 静音 have no carrier to the renderer.** §5.9's hover machine and §5.12's `SfxPlayer.setMuted` live in the pet renderer; `ui_work_mode` / `ui_sfx_muted` are kv only, `SimSnapshotSchema` (§2.4) carries neither, and §2.2 lists no channel for them. This plan writes the kv keys from the tray and **the renderer never learns them** — a real functional gap (bar §0 work-mode fade is unreachable end-to-end). Resolution options: add `workMode`/`sfxMuted` to `SimSnapshot` (Task 1 edit — closed) or a new `MAIN_TO_PET` channel (also Task 1). Needs a ruling.
+7. **CLOSED by R3-35 / contract Amendment A3-1 — work mode and 静音 now have a carrier.** The self-review found the tray writing `ui_work_mode` / `ui_sfx_muted` to kv with nothing carrying them to the pet renderer, so bar §0's work-mode fade and §5.12's mute were unreachable end to end. The controller took the cheaper of the two options: **two booleans on `SimSnapshot`** (`uiWorkMode`, `uiSfxMuted`, default `false`), landed in Task 1's single §2 edit — no new channel, so the shared-protocol exception is untouched. This file stays the kv writer and the tray's source of truth and now also calls `simService.setUiFlags({workMode, sfxMuted})` three times: once seeded from kv, and once in each setter. Task 12 overlays the pair onto every snapshot; Task 13's `stage/ui-flags.ts` applies it. One residue: `SimServiceDeps` gained no member for this — `setUiFlags` is a method, so the getter-vs-dep question in Concern 8 does not arise here.
 8. **Getter-form windows in `BrainServiceDeps` and `SimServiceDeps`.** §11.2 makes chat and key destroyable and §11.3 makes the bubble destroyable, but `BrainServiceDeps.bubble/chat/key: BrowserWindow` (Phase 2) and `SimServiceDeps.bubble: BrowserWindow` (§3.11) are plain windows, and neither Task 12's nor Task 14's skeleton lists the getter change. `index.ts` is written against getters (`() => BrowserWindow | null`); without them the lazy lifecycle cannot compile. Assign the deps change explicitly (Task 14 for `brain-service.ts`, Task 12 for `sim-service.ts`).
 9. **`key-window.ts:52` contains the literal `小春 · API Key`.** The R3-19 acceptance grep over `apps/desktop/src/main` will fail on it; `key-window.ts` is in no §1.5 row, so no Phase 3 task may edit it. Either add a §1.5 row (one-line change to `title: \`${name} · API Key\`` via a `createKeyWindow(hooks, title)` parameter) or exempt the file in the grep.
 10. **§3.11's first row** says the TICK `setInterval(500)` is wired "in `main/index.ts`", while §3.11's `SimService.start()` doc and Task 12 put the 2 Hz timer inside `SimService`. This plan does not create a second timer (§3.11's own "only timer" sentence forbids it).
@@ -25219,7 +25918,7 @@ Expected: the first prints **only** `apps/desktop/src/main/key-window.ts:52:    
 8. `SimServiceDeps` (§3.11) has no `trace` member although Task 12 writes `presence`/`resource` records, and `bubble` is a plain window (Concern 8) — this plan passes `trace` and a getter.
 9. `WindowMotionDeps` (§7.1) has no trace dep although §12.2 sources `motion`/`landing` from the controller — this plan traces from the injected `send`; the `clamped` and `edge` fields are not on the wire payloads and are omitted.
 10. `BrainServiceDeps` Phase 3 members (`sim`, `modeStore`, `motion`, `factStore`, `extractor`, getter windows) are unnamed in Task 14 — the names above are what `index.ts` passes.
-11. No channel carries `ui_work_mode` / `ui_sfx_muted` to the pet renderer (Concern 7).
+11. ~~No channel carries `ui_work_mode` / `ui_sfx_muted` to the pet renderer~~ — **closed by A3-1**: they ride `SimSnapshot` (Concern 7). The `CONTRACT GAP 11` comments that stood on the two tray setters are replaced by the A3-1 note.
 
 ---
 
@@ -25299,7 +25998,7 @@ describe('CompanionModel extraMotions (§4.10 / §4.11)', () => {
 - [ ] **Step 2: Run it, expect FAIL**
 
 ```
-pnpm --filter @ds/stage exec vitest run src/companion-model.test.ts
+npx vitest run --project @ds/stage src/companion-model.test.ts
 ```
 Expected: `FAIL  src/companion-model.test.ts > CompanionModel extraMotions (§4.10 / §4.11) > motionGroups() is the model3 groups plus one single-index group per extra, keyed by name` — `AssertionError: expected { Idle: 2 } to deeply equal { Idle: 2, settle_soft: 1, lean_side: 1 }`. The second case passes already (the map lookup is name-agnostic) — that is fine; it pins the behaviour the loader relies on.
 
@@ -25394,7 +26093,7 @@ export const EXTRA_MOTION_FADE_S = 0.5;
 - [ ] **Step 4: Run, expect PASS**
 
 ```
-pnpm --filter @ds/stage exec vitest run src/companion-model.test.ts
+npx vitest run --project @ds/stage src/companion-model.test.ts
 ```
 Expected: `Test Files  1 passed (1)` and the two new cases listed under `CompanionModel extraMotions (§4.10 / §4.11)` as ✓.
 
@@ -25436,7 +26135,7 @@ In `Live2DStage.create`, change the `CompanionModel.load({ … })` call to:
 Typecheck and the stage suite:
 
 ```
-pnpm --filter @ds/stage exec vitest run
+npx vitest run --project @ds/stage
 pnpm -r --if-present typecheck
 ```
 Expected: `Test Files  N passed (N)` (N = the stage suite's file count after Task 11) and every `tsc` exits 0. If `tsc` reports `Property 'extraMotions' does not exist on type 'CharacterConfig'`, Task 5's schema landed under a different key — stop and report `BLOCKED: characters schema key differs from §4.10 (extraMotions)`; do not rename.
@@ -25835,7 +26534,7 @@ describe('§4.11.2 re-bind', () => {
 Run, expect FAIL (before the re-bind):
 
 ```
-pnpm --filter @ds/behaviors exec vitest run src/motion-labels.test.ts
+npx vitest run --project @ds/behaviors src/motion-labels.test.ts
 ```
 Expected — with the labels written and at least one suitable extra registered: `FAIL … §4.11.2 re-bind > idle_settle → settle/low/loop-safe; …` with `AssertionError: idle_settle kept ["Idle", 1] although a suitable extra is registered: expected true to be false`. If **no** extra satisfies any rule (a total shortfall), this suite passes as-is and Step 13 changes nothing except `motion-labels.md`'s re-bind table saying so — that is the honest outcome §4.11.2's last paragraph allows. If the FAIL is instead in `covers exactly the 21 candidates`, a label is still `UNVIEWED` or a name is malformed — finish Step 10 first.
 
@@ -25875,8 +26574,8 @@ where `NAME_SETTLE`, `NAME_HUM`, `NAME_WANDER` are the `name` values chosen by r
 - [ ] **Step 14: Run the acceptance test and the whole behaviours/stage suites, expect PASS**
 
 ```
-pnpm --filter @ds/behaviors exec vitest run
-pnpm --filter @ds/stage exec vitest run
+npx vitest run --project @ds/behaviors
+npx vitest run --project @ds/stage
 ```
 Expected: `Test Files  N passed (N)` for both; `motion-labels.test.ts` shows 7 ✓. Task 4's §4.9 coverage test must still pass: if it fails with a message like `every motion resolves against Haru.model3.json` because it hard-codes `{ Idle: 2, TapBody: 4 }`, widen **that assertion only** to the same union this test builds (`MODEL3_GROUPS` ∪ `character.json extraMotions.Extra[].name → 1`) — Concern C-4; owner is T3-B either way.
 
@@ -25990,7 +26689,7 @@ Owner **T3-E**, batch 7. Runs against `main` **after Task 16 has merged** (the D
 - Consumes — Task 7: `TraceLine {m, w, r?, t}` and the §12.2 per-`t` payload table (`behaviourStart.id`, `blink`, `gazeBreak`, `hoverAck.state`, `touch.part`, `motion.{phase,generation,vx}`, `landing.generation`, `laneGrant.{lane,source}`, `fps`, `resource`); `DS_TRACE=<path>` (writer flushes every 200 ms / 256 lines); `BUBBLE_IDLE_GRACE_MS = 60_000`, `RECREATE_BUDGET_MS = 400`, `FIRST_MESSAGE_BUDGET_MS = 3_000` (window-lifecycle.ts); `TreeMemory {privateWorkingSetMb, privateCommitMb, processes, degraded?}` semantics (memory-metric.ts). Task 15: the wired app; `DS_MEASURE=1` writes `%TEMP%\ds-pids.json` (**CONTRACT GAP: its shape is unnamed** — this task reads `{ "pids": number[] }` and Task 15 must write at least that key; recorded in plan-header.md). Task 2: `metrics.envelope TEXT` (`JSON.stringify(messages)` as sent) and Phase 2's `metrics(turn_id, ts, cache_hit, cache_miss, …)` columns (`packages/memory/src/db.ts:64-79`). Task 1: `HIT_PARTS`, `WindowMotionSchema.phase ∈ {'drag','fling','walk','settling','rest'}`, `LANES`/`LANE_SOURCES`. Task 8: `HoverState 'acknowledging'` (§5.9, `renderer/pet/stage/hover-ack.ts` — it is Task 8's export, not Task 1's; the trace only ever sees it as the string in `hoverAck.state`). Task 11: `docs/evidence/phase3/picker-oracle.{json,md}`. Task 6: `docs/evidence/phase3/persona-tokens.txt`. Task 16: `motion-labels.md`. Phase 2: `scripts/phase2-stats.mjs` `verdict(value, threshold, dir)`; `scripts/capture-region.ps1`'s P/Invoke pattern; `tests-e2e/app.ts:45`'s `--user-data-dir=` launch; ffmpeg 8.1.2 at `C:\Users\jiami\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe`.
 - Produces — `scripts/assert-trace.mjs`: `YDIF_MOTION_MIN = 0.35`, `YDIF_WINDOW_RATIO_MIN = 0.9`, `BLINK_MAX_GAP_MS = 6000`, `IDLE_WINDOW_MS = 60000`, `MIN_DISTINCT_BEHAVIOURS = 4`, `MIN_GAZE_BREAKS = 1`, `MIN_TOUCH_PARTS = 3`, `FLING_MIN_ABS_VX = 200`, `parseTrace(text)`, `parseYdif(text)`, `ydifWindows(samples, min?)`, `traceWindow(records, windowMs)`, `assertIdle(records, ydifSamples)`, `assertInteraction(records)`, `parseFreezes(text)`, `renderMarkdown(report)`, `run(argv)`. `scripts/phase3-cache.mjs`: `CACHE_HIT_MIN = 0.7`, `systemPrefix(envelope)`, `cacheAudit(rows)`, `loadRows(dbPath)`, `renderCacheMarkdown(audit, source)`, `run(argv)`. The three `.ps1` CLIs exactly as §11.4 / §12.3 / §12.4 spell them. Evidence: every §12.1 artefact this task owns, with exit-0 verdicts in `d16-report.json`.
 
-**Contract:** §12.1, §12.3, §12.4, §12.5, §12.6, §11.4, §11.5, §8.8, §8.11 (not-measured row), §9.6 (A8 row), §9.7, §14.4 items 2–3, R3-15, R3-26, R3-32. Closes **D16** ("60-s unattended recording (**≥ 4 idle behaviours**, continuous breath/blink, **≥ 1 gaze break**) and 20-s interaction recording (hover ack, **3 touch reactions**, drag-fling arc + landing)"), bar §0 idle density ("a **60-s** unattended recording must show **≥ 4 distinct behaviours**"), and produces the measurement for bar §0 resources ("**≤ 4 % CPU / ≤ 250 MB at 30 Hz idle**; ticker stopped … **≤ 0.5 % CPU**") without renegotiating it (R3-14: the controller does, from `memory.md`). Records as NOT MEASURED: A8 (≥ 85 % attribution), A11 (≥ 90 % recall), R4 first-sentence p50 ≤ 1200 ms, X1 prompt-cache ≥ 70 %, the addendum's paint latency, and A10 (**CONTRACT GAP: A10 is named by the skeleton but appears in no contract section and has no owner** — listed by id only).
+**Contract:** §12.1, §12.3, §12.4, §12.5, §12.6, §11.4, §11.5, §8.8, §8.11 (not-measured row), §9.6 (A8 row), §9.7, §14.4 items 2–3, R3-15, R3-26, R3-32, R3-42. Closes **D16** ("60-s unattended recording (**≥ 4 idle behaviours**, continuous breath/blink, **≥ 1 gaze break**) and 20-s interaction recording (hover ack, **3 touch reactions**, drag-fling arc + landing)"), bar §0 idle density ("a **60-s** unattended recording must show **≥ 4 distinct behaviours**"), and produces the measurement for bar §0 resources ("**≤ 4 % CPU / ≤ 250 MB at 30 Hz idle**; ticker stopped … **≤ 0.5 % CPU**") without renegotiating it (R3-14: the controller does, from `memory.md`). Records as NOT MEASURED: A8 (≥ 85 % attribution), A11 (≥ 90 % recall), R4 first-sentence p50 ≤ 1200 ms, X1 prompt-cache ≥ 70 %, the addendum's paint latency, and **A10 (self-fact consistency), which **R3-42** rules has no Phase 3 owner** — no contract section implements it, no authority states a threshold, so it is listed by id with the ruling and no estimate.
 
 ---
 
@@ -26848,7 +27547,7 @@ Every row is **NOT MEASURED**. Nothing is estimated and nothing is substituted w
 | **R4** first-sentence close p50 | **≤ 1200 ms** | `eval/session.mjs` (Phase 2) | `$env:DEEPSEEK_API_KEY = (Get-Content $HOME\.ds\deepseek.key -Raw).Trim(); pnpm --filter @ds/eval run session` | **NOT MEASURED** |
 | **X1** prompt-cache hit, 20-turn session | **≥ 70 %** token-weighted `hit/(hit+miss)` | `scripts/phase3-cache.mjs` over `metrics.envelope` (§8.8); the live probe is the authority (R3-11) | after the session above: `node scripts/phase3-cache.mjs --db $env:APPDATA\ds\ds.sqlite --out docs/evidence/phase3/cache-audit.md` | **NOT MEASURED** — if < 70 %, replaying envelopes is a controller ruling change, not an implementer choice |
 | addendum §0 paint latency | first grapheme painted **≤ 100 ms** after the first token, in the shipping app | Phase 2 `tests-e2e` "20 real turns" | `$env:DEEPSEEK_API_KEY = (Get-Content $HOME\.ds\deepseek.key -Raw).Trim(); pnpm --filter @ds/desktop run "test:e2e:electron" -- --grep "20 real turns"` | **NOT MEASURED** |
-| **A10** | CONTRACT GAP: A10 is named by the Phase 3 task skeleton but appears in no contract section and has no owner; its threshold is not quoted here because no authority states it | — | — | **UNOWNED — controller** |
+| **A10** self-fact consistency | **R3-42: no Phase 3 owner, by ruling.** Phase 2's Amendment A-14 moved A10 "to Phase 3 with A8", but no Phase 3 contract section implements it and no threshold is stated by any Phase 3 authority — so none is quoted here, and nothing is estimated | — (nothing ships for it) | — (it is a live-API **judged** axis: revisit with A8 when a DeepSeek account with balance exists) | **NOT MEASURED — deferred by R3-42** |
 
 `d16-report.md`, `memory.md` and `picker-oracle.md` are real measurements of the real build and are not in this file.
 ```
@@ -26927,7 +27626,7 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe
 - `scripts/assert-trace.test.mjs` has the five §12.6 synthetic cases (pass, missing behaviour, 7-s blink gap, no gaze break, YDIF below threshold) plus interaction pass/fail; `node --test` passes; the script exits 0/1 only and writes `id/expected/actual/pass/counts` rows.
 - `scripts/phase3-cache.test.mjs` proves per-request and token-weighted `hit/(hit+miss)` and that the first turn after a system-profile switch is excluded **and** counted.
 - The three `.ps1` scripts carry every §12.3/§12.4/§11.4 requirement: DDA-missing ⇒ throw; filter-form ddagrab with `offset_x/offset_y/video_size/framerate=30`, `draw_mouse` 0/1, libx264 crf 18, no NVENC, no gdigrab; `[NullString]::Value`; PER_MONITOR_AWARE_V2 first; INPUT size 40; non-elevated; stepped moves; PIDs from `ds-pids.json`; three memory columns with commit never added; CIM cross-check; fixed scenario order.
-- `docs/evidence/phase3/` holds every artefact in the Files list; `d16-report.json.pass === true` for both modes; `d16-report.md` states liveliness 0.30, build hash, hardware line and the ffmpeg lines; `memory.md` has the metric header, the Phase 2 caveat, 6 scenario rows + the Phase 2-metric row + the merged-bubble row and go/no-go; `not-measured.md` names A8, A11 (verbatim row), R4, X1, paint latency, A10 with no estimates.
+- `docs/evidence/phase3/` holds every artefact in the Files list; `d16-report.json.pass === true` for both modes; `d16-report.md` states liveliness 0.30, build hash, hardware line and the ffmpeg lines; `memory.md` has the metric header, the Phase 2 caveat, 6 scenario rows + the Phase 2-metric row + the merged-bubble row and go/no-go; `not-measured.md` names A8, A11 (verbatim row), R4, X1, paint latency, A10 (with its R3-42 citation) — no estimates, no substituted numbers.
 - Only T3-E-owned paths changed on `main` (plus the recorded `scripts/vitest.config.mjs` gap); `scripts/sample-resources.ps1` and `phase2-stats.mjs` byte-identical; the spike branch is gone.
 - Every commit carries the two trailers.
 
@@ -26946,20 +27645,738 @@ Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe
 
 ---
 
+### Task 18: Renderer consumers — plain-mode plate, proactive band, gate status line, History badge
+
+**Owner:** T3-B · **Batch:** 6 (beside Task 15; the two share no file — main vs. renderer) · **Depends on:** Task 1 (`@ds/protocol` §2: the three channels and their schemas), Task 6 (`ModeStore` — the `mode:changed` producer), Task 14 (`ProactiveController` — the `proactive:turn` / `proactive:gate` producer). Task 15 wires all three senders; this task can be written and unit-tested before Task 15 lands, and its browser-lane check needs nothing from main.
+
+**Why this task exists (R3-37).** The plan self-review found four contract rows whose **producer ships and whose consumer does not**: §9.5's chat 普通模式 plate, §9.4/§2.3's bubble `data-mode="plain"` and proactive band, the chat `proactive:gate` status line, and X5's History badge for a proactive turn. All four name files under `apps/desktop/src/renderer/chat/**` and `apps/desktop/src/renderer/bubble/**`, which §1.5 omits entirely, so **no task edited them** and every one of those four rows would have shipped invisible. R3-37 creates this task and gives it those two trees for Phase 3 (contract Amendment **A3-3** adds the §1.5 rows). One exception stays where it is: `apps/desktop/src/renderer/bubble/fps.ts` is Task 5's (§5.8, §1.5 already lists it) and is **not** touched here.
+
+**Files:**
+
+| Action | Path | What changes |
+|---|---|---|
+| MODIFY | `apps/desktop/src/renderer/bubble/bubble.ts` | two methods on the `Bubble` band object: `setMode(mode)` writes `data-mode` on the band root, `setProactive(on)` writes `data-proactive`. Nothing else in the file moves. |
+| TEST (MODIFY) | `apps/desktop/src/renderer/bubble/bubble.test.ts` | one appended `describe('§9.4 / §2.3 — mode and proactive attributes')` (4 cases) |
+| MODIFY | `apps/desktop/src/renderer/bubble/bubble.css` | two rules appended after the `[data-side]` block: `.bubble[data-mode='plain']` (drops the emotion tint) and `.bubble[data-proactive='1'] .bubble__rail` |
+| TEST (MODIFY) | `apps/desktop/src/renderer/bubble/bubble-css.test.ts` | one appended `describe('§9.4 / §2.3 plain and proactive bands')` (2 cases) |
+| MODIFY | `apps/desktop/src/renderer/bubble/main.ts` | three `bridge?.on` subscriptions (`mode:changed`, `proactive:turn`, and the proactive tagging inside the existing `brain:state` / `brain:sentence` handlers) |
+| MODIFY | `apps/desktop/src/renderer/chat/Composer.tsx` | two optional props (`mode`, `gate`), the 普通模式 plate and the gate line inside the existing `.composer__meta` row; `GATE_REASON_TEXT` + `gateLine()` exported for their test |
+| TEST (MODIFY) | `apps/desktop/src/renderer/chat/Composer.test.tsx` | `props()` gains the two defaults; one appended `describe('§9.5 mode plate and the §2.7 gate line')` (5 cases) |
+| MODIFY | `apps/desktop/src/renderer/chat/App.tsx` | subscribes to `mode:changed`, `proactive:gate`, `proactive:turn`; passes `mode`/`gate` to `Composer` and `proactiveTurnIds` to `History` |
+| TEST (MODIFY) | `apps/desktop/src/renderer/chat/App.test.tsx` | one appended `describe('Phase 3 consumers')` (3 cases) |
+| MODIFY | `apps/desktop/src/renderer/chat/History.tsx` | `proactiveTurnIds` prop; the 主动 chip also fires for a live proactive turn whose row is not yet `kind:'proactive'` |
+| TEST (MODIFY) | `apps/desktop/src/renderer/chat/History.test.tsx` | one appended `describe('X5 proactive badge')` (2 cases) |
+| MODIFY | `apps/desktop/src/renderer/chat/chat.css` | `.mode-plate` and `.composer__gate` appended after `.composer__count` |
+| TEST (MODIFY) | `apps/desktop/src/renderer/chat/chat-css.test.ts` | one appended `describe('§9.5 mode plate tokens')` (2 cases) |
+
+Nothing else is touched. **Read-only here:** `apps/desktop/src/renderer/bubble/{speech.ts,hint.ts,reveal.ts,fps.ts}` (fps.ts is Task 5's), `apps/desktop/src/renderer/shared/tokens.css`, `apps/desktop/src/renderer/chat/{bridge.ts,main.tsx}`, `apps/desktop/src/renderer/chat.html` (its `<title>` carries the Phase 1 `小春` literal — R3-19's grep does not cover `renderer/chat`, this task adds no new one and does not remove the old one), everything under `apps/desktop/src/main/**` and `packages/**`.
+
+**Interfaces:**
+
+Consumes (exact, by producer):
+- Task 1 (`@ds/protocol`): `Channels.modeChanged = 'mode:changed'`, `Channels.proactiveTurn = 'proactive:turn'`, `Channels.proactiveGate = 'proactive:gate'`; `type Payload<C>`; `type PersonaModeIpc` (`'character' | 'plain'`); `ModeChangedSchema {mode, reason: 'command'|'restored'|'tray'}`; `ProactiveTurnSchema {turnId, reservationId, templateId, bucket}`; `ProactiveGateSchema {verdict, reason, displayedToday, unansweredToday, nextEligibleAt, mutedUntil}`; `type ProactiveVerdict`; `type HistoryRow` (its `kind` already includes `'proactive'` — Phase 2). The three channels must be in `MAIN_TO_CHAT` / `MAIN_TO_BUBBLE` (§2.5); Task 1's `channels.test.ts` pins that, and this task's only failure mode if they are not is a silent no-op, so Step 1 checks it.
+- Task 6: `ModeStore` is the `mode:changed` producer (§9.3). Nothing is imported from it — main sends, this renders.
+- Task 14: `ProactiveController` is the `proactive:turn` / `proactive:gate` producer, and §2.7 pins the ordering this task relies on — **`proactive:turn` is sent synchronously BEFORE `TurnRunner.send`**, therefore before the `brain:state thinking` for the same `turnId`. If that ordering is ever reversed the band renders the ordinary style for one turn; the fallback is deliberate (§2.7 says so) and Step 11 pins it.
+- Phase 1/2 (on `main`, unchanged): `bridge` (`chat/bridge.ts` `DsInvokeBridge`, `bubble/bridge.ts` `DsBridge | undefined`), `Bubble` (`bubble/bubble.ts`), `SpeechController` (`bubble/speech.ts`, **not** modified), `Composer`/`History`/`App` (`chat/*.tsx`), the `--c-*` / `--fs-*` / `--r-*` tokens in `shared/tokens.css`.
+
+Produces:
+- `bubble/bubble.ts`: `Bubble.setMode(mode: PersonaModeIpc): void`, `Bubble.setProactive(on: boolean): void`.
+- `chat/Composer.tsx`: `ComposerProps.mode?: PersonaModeIpc`, `ComposerProps.gate?: ProactiveGate | null`, `MODE_PLATE_TEXT`, `MODE_PLATE_TITLE`, `GATE_REASON_TEXT: Record<string, string>`, `gateLine(gate): string | null`, `type ProactiveGate = Payload<'proactive:gate'>`.
+- `chat/History.tsx`: `HistoryProps.proactiveTurnIds?: ReadonlySet<string>`.
+- `chat/App.tsx`: no new exports; three subscriptions and two prop wirings.
+- CSS: `.bubble[data-mode='plain']`, `.bubble[data-proactive='1'] .bubble__rail`, `.mode-plate`, `.composer__gate`.
+
+**Contract:** §9.5 (the mode plate's exact copy and tokens), §9.4 (the plain-mode row `bubble styling → plain band (data-mode="plain" on the band root)`), §2.3 (the channel table's Consumers column: bubble = proactive band styling, chat = history badge X5 + status line), §2.7 (`proactive:*` producer rules — one `proactive:turn` per displayed line, sent before `brain:state thinking`; `proactive:gate` on every evaluation and every 别打扰 change; the ledger never leaves main), §2.8 (`mode:changed` on start / command / tray, to pet, bubble and chat in that order), §3.10.1 (the 18 reason codes the status line renders), §1.7 / R3-19 (no persona name in any new string), contract Amendment **A3-3** (the §1.5 rows for these files).
+Exquisite-bar criteria closed: **P5 / R3-12** *"the chat shows a quiet mode plate 「普通模式」"* — §9.5's exact copy, tokens and tooltip, rendered from `mode:changed` **and from nothing else**; **X5** *"history … a proactive line is marked"* — the 主动 chip now also fires for the live turn, before its row is stored; **A14 / §0 proactive caps** — the user can *see* why she is not speaking, which is what makes the caps auditable instead of mysterious; **R3-12 plain mode** — the band stops wearing the character's colour the moment the mode flips.
+
+Every command runs from the repo root `D:\ds`. The chat lane is jsdom + `@testing-library/react` (`apps/desktop/vitest.config.ts`); the two `*-css.test.ts` files are `// @vitest-environment node` and read the stylesheet off disk, exactly as Phase 2 left them.
+
+---
+
+- [ ] **Step 1: Verify the three channels reach these two windows (read-only, no edit)**
+
+Task 1 owns `packages/protocol/src/index.ts`; this task only checks that its §2.5 edit landed, because every subscription below is a silent no-op otherwise.
+
+```
+grep -n "modeChanged\|proactiveTurn\|proactiveGate" packages/protocol/src/index.ts
+```
+
+Expected: `Channels.modeChanged`, `Channels.proactiveTurn` and `Channels.proactiveGate` are defined, `MAIN_TO_BUBBLE` contains `modeChanged` and `proactiveTurn`, and `MAIN_TO_CHAT` contains `modeChanged`, `proactiveTurn` and `proactiveGate` (§2.3's allow-list column). If any is missing, stop and report `BLOCKED: packages/protocol/src/index.ts is owned by Task 1 — §2.5 must list mode:changed / proactive:turn / proactive:gate for MAIN_TO_BUBBLE and MAIN_TO_CHAT`.
+
+- [ ] **Step 2: Failing test — the band's two new attributes**
+
+Append to `apps/desktop/src/renderer/bubble/bubble.test.ts` (the file's `mount()` helper already builds the band root with `data-emotion="neutral"`):
+
+```ts
+describe('§9.4 / §2.3 — mode and proactive attributes on the band root', () => {
+  let dom2: ReturnType<typeof mount>;
+  beforeEach(() => {
+    dom2 = mount();
+  });
+
+  it('setMode writes data-mode="plain" and REMOVES it in character mode (§9.4)', () => {
+    const b = new Bubble(dom2.root);
+    expect(dom2.root.hasAttribute('data-mode')).toBe(false);
+    b.setMode('plain');
+    expect(dom2.root.dataset.mode).toBe('plain');
+    b.setMode('character');
+    // Removed, not set to '' — `.bubble[data-mode='plain']` must not match an empty attribute, and
+    // "the absence of a plate is the character state" (§9.5) is the same idea one layer up.
+    expect(dom2.root.hasAttribute('data-mode')).toBe(false);
+  });
+
+  it('setProactive writes data-proactive="1" / removes it (§2.3)', () => {
+    const b = new Bubble(dom2.root);
+    b.setProactive(true);
+    expect(dom2.root.dataset.proactive).toBe('1');
+    b.setProactive(false);
+    expect(dom2.root.hasAttribute('data-proactive')).toBe(false);
+  });
+
+  it('neither attribute disturbs data-emotion or data-side', () => {
+    const b = new Bubble(dom2.root);
+    b.place({ maxWidth: 460, maxHeight: 320, side: 'right', arrowOffset: 72 });
+    b.setEmotion('happy');
+    b.setMode('plain');
+    b.setProactive(true);
+    expect(dom2.root.dataset.emotion).toBe('happy');
+    expect(dom2.root.dataset.side).toBe('right');
+  });
+
+  it('both survive a hide/show cycle: they are mode, not turn, state', () => {
+    const b = new Bubble(dom2.root);
+    b.setMode('plain');
+    b.setProactive(true);
+    b.show();
+    b.hide();
+    expect(dom2.root.dataset.mode).toBe('plain');
+    expect(dom2.root.dataset.proactive).toBe('1');
+  });
+});
+```
+
+- [ ] **Step 3: Run it, expect FAIL**
+
+Run: `npx vitest run --project desktop src/renderer/bubble/bubble.test.ts`
+Expect: `TypeError: b.setMode is not a function` on the first new case; `Tests  4 failed | 9 passed (13)` — the nine Phase 2 cases stay green.
+
+- [ ] **Step 4: Implement the two methods in `apps/desktop/src/renderer/bubble/bubble.ts`**
+
+Add the import at the top (widen the existing type-only import):
+
+```ts
+import type { Emotion, PersonaModeIpc, Side } from '@ds/protocol';
+```
+
+and insert both methods immediately after `setEmotion` (they belong beside it — same element, same "state as material" idea):
+
+```ts
+  /**
+   * §9.4: in plain mode the band stops wearing the character's colour. `data-mode="plain"` on the
+   * band root is the whole mechanism — bubble.css's `.bubble[data-mode='plain']` is more specific
+   * than tokens.css's `[data-emotion='…']` and sits on the SAME element, so it overrides
+   * `--c-plate` / `--fw-line` without touching the emotion attribute the ADV band still writes.
+   * Character mode REMOVES the attribute rather than setting it to `'character'`, so the selector
+   * can stay a plain attribute-value match.
+   */
+  setMode(mode: PersonaModeIpc): void {
+    if (mode === 'plain') this.root.dataset.mode = 'plain';
+    else delete this.root.dataset.mode;
+  }
+
+  /**
+   * §2.3 / §2.7: true while the band is showing a line SHE started. Set from `proactive:turn`
+   * before the turn's `brain:state thinking`, cleared for every ordinary turn. It is turn-scoped
+   * state that `bubble/main.ts` re-asserts on each turn boundary; the band object never guesses.
+   */
+  setProactive(on: boolean): void {
+    if (on) this.root.dataset.proactive = '1';
+    else delete this.root.dataset.proactive;
+  }
+```
+
+- [ ] **Step 5: Run, expect PASS**
+
+Run: `npx vitest run --project desktop src/renderer/bubble/bubble.test.ts`
+Expect: `Test Files  1 passed (1)` and `Tests  13 passed (13)` (9 Phase 2 + 4 new).
+
+- [ ] **Step 6: Failing test — the two CSS rules**
+
+Append to `apps/desktop/src/renderer/bubble/bubble-css.test.ts`:
+
+```ts
+describe('§9.4 / §2.3 plain and proactive bands', () => {
+  it('plain mode overrides the emotion tint on the band root, using tokens only', () => {
+    const b = block(".bubble[data-mode='plain']");
+    expect(b).toMatch(/--c-plate:\s*var\(--c-border-strong\)/);
+    expect(b).toMatch(/--fw-line:\s*var\(--fw-regular\)/);
+    // No literal colour may enter this file (§5.8's rule, Phase 2).
+    expect(b).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+  });
+
+  it('a proactive band is marked on the rail, with the advance-mark token and nothing else', () => {
+    const b = block(".bubble[data-proactive='1'] .bubble__rail");
+    expect(b).toMatch(/background:\s*var\(--c-advance, var\(--c-warn\)\)/);
+    expect(b).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+    // No copy, no badge, no icon: R3-19 forbids a name and A14 forbids anything that reads as a
+    // demand, so the marker is material, like every other state in this band.
+    expect(css).not.toMatch(/content:\s*'主动'/);
+  });
+});
+```
+
+- [ ] **Step 7: Run, expect FAIL**
+
+Run: `npx vitest run --project desktop src/renderer/bubble/bubble-css.test.ts`
+Expect: `Error: no rule for .bubble[data-mode='plain']`; `Tests  2 failed | 5 passed (7)`.
+
+- [ ] **Step 8: Implement — append two rules to `apps/desktop/src/renderer/bubble/bubble.css`**
+
+Insert immediately after the `.bubble[data-side='bottom']` rule (the end of the `[data-side]` block, around line 95), so the mode/state rules sit together above the surface rules:
+
+```css
+/* --- §9.4: plain mode ------------------------------------------------------------------------ */
+
+/* R3-12: plain mode is not the character, so the band stops wearing her colour. tokens.css writes
+   --c-plate and --fw-line from [data-emotion] on this same element; this selector is (0,2,0) to
+   its (0,1,0), so it wins without the emotion attribute having to change — the ADV band keeps
+   reporting the emotion it was given, and only the material differs. Nothing else moves: same
+   geometry, same reveal, same plate shape. A mode, not a second design. */
+.bubble[data-mode='plain'] {
+  --c-plate: var(--c-border-strong);
+  --fw-line: var(--fw-regular);
+}
+
+/* --- §2.3 / §2.7: a line she started --------------------------------------------------------- */
+
+/* The only difference is the left-edge rail, which takes the advance mark's colour — the same
+   "she is waiting on you" material the blinking ▼ uses. No badge, no icon, no copy: R3-19 forbids
+   her name in a Phase 3 string and A14 forbids anything that reads as a demand. */
+.bubble[data-proactive='1'] .bubble__rail {
+  background: var(--c-advance, var(--c-warn));
+}
+```
+
+- [ ] **Step 9: Run, expect PASS, and commit the bubble band**
+
+Run: `npx vitest run --project desktop src/renderer/bubble` → `Test Files  7 passed (7)` (`bubble-css`, `bubble`, `emotion-tokens`, `fps`, `hint`, `reveal`, `speech`), with `bubble.test.ts` at 13 and `bubble-css.test.ts` at 7, zero failures.
+Run: `pnpm -r --if-present typecheck` → exit 0.
+
+```
+git add apps/desktop/src/renderer/bubble/bubble.ts apps/desktop/src/renderer/bubble/bubble.test.ts apps/desktop/src/renderer/bubble/bubble.css apps/desktop/src/renderer/bubble/bubble-css.test.ts
+git commit -m "feat(bubble): plain-mode band (data-mode) and proactive rail (data-proactive) (§9.4, §2.3, R3-37)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
+```
+
+- [ ] **Step 10: Wire `apps/desktop/src/renderer/bubble/main.ts`**
+
+Three edits, no reordering of anything else in the file.
+
+1. After `const speech = new SpeechController({ bubble, hint, bridge });`, add the proactive-turn ledger:
+
+```ts
+/**
+ * §2.7: `proactive:turn` arrives synchronously BEFORE the turn's `brain:state thinking`, so by the
+ * time the band begins a turn its id is already known here. A small ring rather than a growing Set:
+ * a session can run for days, only the newest handful of ids can still be starting, and §2.7's own
+ * fallback for an id we never saw is "render the ordinary band".
+ */
+const PROACTIVE_ID_RING = 8;
+const proactiveTurnIds: string[] = [];
+const isProactive = (turnId: string): boolean => proactiveTurnIds.includes(turnId);
+```
+
+2. Replace the two existing brain subscriptions with the same calls, preceded by the tagging (the band is tagged before `speech` begins the turn, so the very first painted grapheme is already styled):
+
+```ts
+bridge?.on(Channels.brainState, (p) => {
+  if (p.state === 'thinking') bubble.setProactive(isProactive(p.turnId));
+  speech.onState(p);
+});
+bridge?.on(Channels.brainSentence, (ev) => {
+  // A sentence can begin a turn on its own (SpeechController.onSentence calls beginTurn when the
+  // id changed), so the tag is asserted here too, not only on `thinking`.
+  bubble.setProactive(isProactive(ev.turnId));
+  speech.onSentence(ev);
+});
+```
+
+3. Append the two Phase 3 subscriptions beside the existing `bridge?.on(...)` block, after the `shell:visibility` handler:
+
+```ts
+// ---- Phase 3 consumers (R3-37) ----
+// §2.8: `mode:changed` is sent on start ('restored'), on a recognised command, and on the tray
+// toggle. The band re-renders from this and from nothing else (§9.5's rule, one layer up).
+bridge?.on(Channels.modeChanged, ({ mode }) => {
+  bubble.setMode(mode);
+  scheduleReport();
+});
+// §2.7: exactly one per displayed proactive line, before the turn starts.
+bridge?.on(Channels.proactiveTurn, ({ turnId }) => {
+  if (proactiveTurnIds.includes(turnId)) return;
+  proactiveTurnIds.push(turnId);
+  if (proactiveTurnIds.length > PROACTIVE_ID_RING) proactiveTurnIds.shift();
+});
+```
+
+Verify by reading, not by guessing:
+
+```
+grep -n "setProactive\|setMode\|proactiveTurnIds" apps/desktop/src/renderer/bubble/main.ts
+```
+
+Expected, counting **lines** (which is what `grep -n` prints): `setProactive` on **2** — the `brain:state` handler and the `brain:sentence` handler, and nowhere else; `setMode` on **1** — the `mode:changed` handler; `proactiveTurnIds` on **5** — the declaration, the `includes` inside `isProactive`, the `includes` guard, the `push`, and the `shift` line. Any other count means an edit landed twice or in the wrong handler.
+
+- [ ] **Step 11: Browser-lane check for the band, and commit**
+
+The bubble's Playwright lane installs a fake `window.dsBubble` before this module, so both subscriptions exist there.
+
+Run: `npx vitest run --project desktop src/renderer/bubble` → still green (no unit test covers `main.ts`; this proves nothing regressed).
+Run: `pnpm --filter @ds/desktop test:e2e` → the existing bubble specs pass unchanged. Record the run's summary line in the task report. **If a spec fails**, it is a regression from the two brain handlers being wrapped — the fix is to keep the call order exactly as written above (tag, then `speech.*`), never to change `speech.ts` (`BLOCKED: apps/desktop/src/renderer/bubble/speech.ts is not this task's to restructure`).
+
+```
+git add apps/desktop/src/renderer/bubble/main.ts
+git commit -m "feat(bubble): consume mode:changed and proactive:turn — plain band and proactive rail (§2.7, §2.8, R3-37)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
+```
+
+- [ ] **Step 12: Failing test — the chat mode plate and the gate line**
+
+In `apps/desktop/src/renderer/chat/Composer.test.tsx`, widen the import and the `props()` factory:
+
+```ts
+import { Composer, GATE_REASON_TEXT, MODE_PLATE_TEXT, MODE_PLATE_TITLE, gateLine, type ComposerProps, type ProactiveGate, type SendResult } from './Composer';
+```
+
+and add the two defaults inside `props()` (before the `...over` spread):
+
+```ts
+    mode: 'character',
+    gate: null,
+```
+
+then append:
+
+```ts
+const gate = (over: Partial<ProactiveGate> = {}): ProactiveGate => ({
+  verdict: 'eligible', reason: '', displayedToday: 0, unansweredToday: 0,
+  nextEligibleAt: null, mutedUntil: null, ...over,
+});
+
+describe('§9.5 mode plate and the §2.7 gate line', () => {
+  it('character mode shows no plate — the absence of a plate IS the character state', () => {
+    render(<Composer {...props({ mode: 'character' })} />);
+    expect(screen.queryByText(MODE_PLATE_TEXT)).toBeNull();
+  });
+
+  it('plain mode shows the exact §9.5 copy and tooltip, and no persona name (R3-19)', () => {
+    render(<Composer {...props({ mode: 'plain' })} />);
+    const plate = screen.getByText(MODE_PLATE_TEXT);
+    expect(MODE_PLATE_TEXT).toBe('普通模式');
+    expect(MODE_PLATE_TITLE).toBe('不扮演角色，只回答问题。发送 【PERSONA_LOAD】… 切回角色。');
+    expect(plate.getAttribute('title')).toBe(MODE_PLATE_TITLE);
+    expect(plate.className).toContain('mode-plate');
+    expect(MODE_PLATE_TEXT + MODE_PLATE_TITLE).not.toContain('小春');
+  });
+
+  it('an eligible or displayed gate says nothing at all', () => {
+    expect(gateLine(gate({ verdict: 'eligible' }))).toBeNull();
+    expect(gateLine(gate({ verdict: 'displayed' }))).toBeNull();
+    expect(gateLine(null)).toBeNull();
+    render(<Composer {...props({ gate: gate({ verdict: 'eligible' }) })} />);
+    expect(screen.queryByTestId('gate-line')).toBeNull();
+  });
+
+  it('renders one Chinese line per §3.10.1 reason code, and a readable fallback for an unknown one', () => {
+    // The 18 codes of §3.10.1 plus Task 14's defer-timeout. A missing entry would ship an English
+    // reason code into the UI, which is why the map is asserted whole rather than sampled.
+    for (const code of ['rate-20min', 'backoff', 'unanswered-3', 'persona-cap', 'muted', 'typing',
+      'fullscreen', 'locked', 'suspended', 'dnd', 'user-hidden', 'recent-input', 'turn-active',
+      'chat-open', 'asleep', 'plain-mode', 'sensor-unknown', 'liveliness-roll', 'defer-timeout']) {
+      expect(GATE_REASON_TEXT[code]).toBeTruthy();
+      expect(GATE_REASON_TEXT[code]).not.toMatch(/[a-z]/);       // Chinese copy, never a raw code
+    }
+    expect(gateLine(gate({ verdict: 'suppressed', reason: 'typing' }))).toBe('主动说话：你在打字');
+    expect(gateLine(gate({ verdict: 'muted', reason: 'muted' }))).toBe('主动说话：已关闭');
+    expect(gateLine(gate({ verdict: 'suppressed', reason: 'not-a-real-code' }))).toBe('主动说话：暂停');
+  });
+
+  it('shows the line in the status row with the counts as its tooltip', () => {
+    render(<Composer {...props({ gate: gate({ verdict: 'rateLimited', reason: 'rate-20min', displayedToday: 2, unansweredToday: 1 }) })} />);
+    const line = screen.getByTestId('gate-line');
+    expect(line.textContent).toBe('主动说话：刚说过话');
+    expect(line.getAttribute('title')).toBe('今天 2 次 · 未回应 1 次');
+  });
+});
+```
+
+- [ ] **Step 13: Run it, expect FAIL**
+
+Run: `npx vitest run --project desktop src/renderer/chat/Composer.test.tsx`
+Expect: a **collection** error, not a case failure — `./Composer` exists but has no `GATE_REASON_TEXT` / `MODE_PLATE_TEXT` / `MODE_PLATE_TITLE` / `gateLine` export, so Vite reports `SyntaxError: [vite] The requested module '/src/renderer/chat/Composer.tsx' does not provide an export named 'GATE_REASON_TEXT'` and vitest prints `Test Files  1 failed (1)` with `Tests  no tests` — **the 15 Phase 2 cases do not run either**, because a module-level import error takes the whole file down. That is the expected red state; Step 14 turns it green at 20.
+
+- [ ] **Step 14: Implement the Composer half**
+
+In `apps/desktop/src/renderer/chat/Composer.tsx`, widen the type import and add the three exports above `ComposerProps`:
+
+```ts
+import type { ErrorCode, Payload, PersonaModeIpc, TurnState } from '@ds/protocol';
+```
+
+```ts
+/** §2.4's `proactive:gate` payload, named here so the props and the tests share one type. */
+export type ProactiveGate = Payload<'proactive:gate'>;
+
+/** §9.5, exact copy. R3-19: no persona name appears, so these are literals. */
+export const MODE_PLATE_TEXT = '普通模式';
+export const MODE_PLATE_TITLE = '不扮演角色，只回答问题。发送 【PERSONA_LOAD】… 切回角色。';
+
+/**
+ * §3.10.1's 18 reason codes plus Task 14's `defer-timeout`, in the user's language.
+ *
+ * The gate is the only window a user has into why she is quiet, and a bare `rate-20min` in the UI
+ * would be a developer's word in a user's sentence. Every value is Chinese, short enough for the
+ * caption row, and states a FACT about the world — never an apology and never a nudge (A14).
+ */
+export const GATE_REASON_TEXT: Record<string, string> = {
+  'rate-20min': '刚说过话',
+  backoff: '在等回应',
+  'unanswered-3': '今天没人回',
+  'persona-cap': '今天说够了',
+  muted: '已关闭',
+  typing: '你在打字',
+  fullscreen: '全屏中',
+  locked: '锁屏中',
+  suspended: '睡眠中',
+  dnd: '勿扰模式',
+  'user-hidden': '她被收起来了',
+  'recent-input': '你刚动过',
+  'turn-active': '正在说话',
+  'chat-open': '对话开着',
+  asleep: '她睡了',
+  'plain-mode': '普通模式',
+  'sensor-unknown': '读不到状态',
+  'liveliness-roll': '安静一点',
+  'defer-timeout': '没等到合适的时机',
+};
+
+/**
+ * §2.3: "C (status line + the D16 trace's cross-check)". Silent while she is allowed to speak —
+ * `eligible` and `displayed` are the normal states and deserve no chrome. An unknown code (a Phase 4
+ * layer, a typo in main) degrades to the bare prefix rather than leaking the code into the UI.
+ */
+export function gateLine(gate: ProactiveGate | null | undefined): string | null {
+  if (!gate) return null;
+  if (gate.verdict === 'eligible' || gate.verdict === 'displayed') return null;
+  const why = GATE_REASON_TEXT[gate.reason];
+  return why === undefined ? '主动说话：暂停' : `主动说话：${why}`;
+}
+```
+
+Add the two optional props to `ComposerProps` (after `historyOpen`):
+
+```ts
+  /** §9.5: from `mode:changed`, and from nothing else. */
+  mode?: PersonaModeIpc;
+  /** §2.7's latest `proactive:gate`, or null before the first evaluation. */
+  gate?: ProactiveGate | null;
+```
+
+Destructure them with defaults in the existing `const { … } = props;` list:
+
+```ts
+    onToggleHistory, historyOpen, mode = 'character', gate = null, brainState, turnDone, turnError, disabled = false,
+```
+
+And render both inside `.composer__meta`, between the 历史 chip and the character counter:
+
+```tsx
+        {mode === 'plain' && (
+          <span className="mode-plate" title={MODE_PLATE_TITLE}>{MODE_PLATE_TEXT}</span>
+        )}
+        {gateText !== null && (
+          <span
+            className="composer__gate"
+            data-testid="gate-line"
+            title={`今天 ${gate?.displayedToday ?? 0} 次 · 未回应 ${gate?.unansweredToday ?? 0} 次`}
+          >
+            {gateText}
+          </span>
+        )}
+```
+
+with one line beside the existing `remaining` / `countLine` derivation:
+
+```ts
+  const gateText = gateLine(gate);
+```
+
+**No `role="status"` on the gate line.** `.composer__state` in the same row already carries one, and
+two live regions in one status row make a screen reader announce both on every turn-state change. The
+gate is a slow, ambient caption (§3.10.2 evaluates at most once per 10 s) and is deliberately not
+announced; the composer's own state line stays the single live region.
+
+- [ ] **Step 15: Append the two rules to `apps/desktop/src/renderer/chat/chat.css`**
+
+Insert after the `.composer__count[data-at='cap']` rule:
+
+```css
+/* §9.5: the plain-mode plate. A quiet chip in the status row — surface-2 ground, text-2 ink,
+   control radius, caption size, all Phase 2 tokens and no new ones. It is deliberately NOT the
+   skewed `.plate` the ADV plate uses: that shape belongs to the character, and this chip says the
+   character is not who you are talking to. In character mode nothing renders here at all. */
+.mode-plate {
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-control);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* §2.3's chat status line for `proactive:gate`. The system voice, not hers: same grey-blue as the
+   state line and the counter, and it sits left of them so `margin-left: auto` still owns the right
+   edge of the row. */
+.composer__gate {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--c-text-3);
+}
+```
+
+Append to `apps/desktop/src/renderer/chat/chat-css.test.ts`:
+
+```ts
+describe('§9.5 mode plate tokens', () => {
+  it('uses the four tokens §9.5 names and no literal value', () => {
+    const b = block('.mode-plate');
+    expect(b).toMatch(/background:\s*var\(--c-surface-2\)/);
+    expect(b).toMatch(/color:\s*var\(--c-text-2\)/);
+    expect(b).toMatch(/border-radius:\s*var\(--r-control\)/);
+    expect(b).toMatch(/font-size:\s*var\(--fs-caption\)/);
+    expect(b).not.toMatch(/#[0-9a-fA-F]{3,8}|\d+px/);
+  });
+  it('the gate line is the system voice and never takes the right edge from the state line', () => {
+    const b = block('.composer__gate');
+    expect(b).toMatch(/color:\s*var\(--c-text-3\)/);
+    expect(b).not.toMatch(/margin-left:\s*auto/);
+  });
+});
+```
+
+- [ ] **Step 16: Run both chat suites, expect PASS**
+
+Run: `npx vitest run --project desktop src/renderer/chat/Composer.test.tsx src/renderer/chat/chat-css.test.ts`
+Expect: `Test Files  2 passed (2)`; `Composer.test.tsx` `Tests  20 passed (20)` (15 Phase 2 + 5 new), `chat-css.test.ts` `Tests  4 passed (4)`.
+
+- [ ] **Step 17: Failing test — `App` subscriptions and the X5 History badge**
+
+Append to `apps/desktop/src/renderer/chat/App.test.tsx`:
+
+```ts
+describe('Phase 3 consumers (R3-37)', () => {
+  it('renders the §9.5 plate on mode:changed and removes it on the way back', () => {
+    const bridge = fakeBridge();
+    render(<App bridge={bridge} />);
+    expect(screen.queryByText('普通模式')).toBeNull();
+    act(() => bridge.fire(Channels.modeChanged, { mode: 'plain', reason: 'command' }));
+    expect(screen.getByText('普通模式')).toBeTruthy();
+    act(() => bridge.fire(Channels.modeChanged, { mode: 'character', reason: 'tray' }));
+    expect(screen.queryByText('普通模式')).toBeNull();
+  });
+
+  it('renders the §2.3 status line from proactive:gate and clears it when she is eligible again', () => {
+    const bridge = fakeBridge();
+    render(<App bridge={bridge} />);
+    act(() => bridge.fire(Channels.proactiveGate, {
+      verdict: 'suppressed', reason: 'typing', displayedToday: 1, unansweredToday: 0,
+      nextEligibleAt: null, mutedUntil: null,
+    }));
+    expect(screen.getByTestId('gate-line').textContent).toBe('主动说话：你在打字');
+    act(() => bridge.fire(Channels.proactiveGate, {
+      verdict: 'eligible', reason: '', displayedToday: 1, unansweredToday: 0,
+      nextEligibleAt: null, mutedUntil: null,
+    }));
+    expect(screen.queryByTestId('gate-line')).toBeNull();
+  });
+
+  it('drops every subscription on unmount (no listener leak across a chat window recreation)', () => {
+    const bridge = fakeBridge();
+    const view = render(<App bridge={bridge} />);
+    view.unmount();
+    // Firing into a dead tree must not throw and must not touch React.
+    expect(() => bridge.fire(Channels.modeChanged, { mode: 'plain', reason: 'tray' })).not.toThrow();
+  });
+});
+```
+
+and append to `apps/desktop/src/renderer/chat/History.test.tsx`:
+
+```ts
+describe('X5 proactive badge', () => {
+  it('marks a stored proactive row', async () => {
+    mount([row({ id: 9, ts: CLOCK, kind: 'proactive', content: '在忙吗' })]);
+    await waitFor(() => expect(screen.getByText('主动')).toBeInTheDocument());
+  });
+
+  it('marks the LIVE proactive turn whose row has not been stored as proactive yet (§2.7)', async () => {
+    const rows = [row({ id: 10, ts: CLOCK, turnId: 'p-1', content: '在忙吗' })];
+    const list = vi.fn(async () => ({ rows, nextBefore: null }));
+    render(
+      <History open list={list} remove={vi.fn(async () => {})} now={() => CLOCK}
+        proactiveTurnIds={new Set(['p-1'])} />,
+    );
+    await waitFor(() => expect(screen.getByText('主动')).toBeInTheDocument());
+  });
+});
+```
+
+- [ ] **Step 18: Run them, expect FAIL**
+
+Run: `npx vitest run --project desktop src/renderer/chat/App.test.tsx src/renderer/chat/History.test.tsx`
+Expect: the three `App` cases fail with `Unable to find an element with the text: 普通模式` / `Unable to find an element by: [data-testid="gate-line"]`; the second `History` case fails the same way on `主动`; the first `History` case **passes already** (Phase 2 renders the chip from `kind`), which is why it is written down — it is the regression guard for the row this task does not change.
+
+- [ ] **Step 19: Implement the `App` and `History` halves**
+
+`apps/desktop/src/renderer/chat/App.tsx` — widen the imports:
+
+```ts
+import type { PersonaModeIpc, TurnState } from '@ds/protocol';
+import type { ProactiveGate } from './Composer';
+```
+
+add three pieces of state beside the existing ones:
+
+```ts
+  const [mode, setMode] = useState<PersonaModeIpc>('character');
+  const [gate, setGate] = useState<ProactiveGate | null>(null);
+  const [proactiveTurnIds, setProactiveTurnIds] = useState<ReadonlySet<string>>(() => new Set());
+```
+
+three subscriptions inside the existing `useEffect`'s `offs` array (the effect already returns a cleanup that calls every `off`, so the unmount case in Step 17 is satisfied by construction):
+
+```ts
+      // §2.8: mode:changed is the ONLY source of the plate (§9.5).
+      bridge.on(Channels.modeChanged, (p) => setMode(p.mode)),
+      // §2.7: every gate evaluation and every 别打扰 change.
+      bridge.on(Channels.proactiveGate, (p) => setGate(p)),
+      // X5: mark the turn as hers the moment it starts, not when its row lands in the store.
+      bridge.on(Channels.proactiveTurn, (p) =>
+        setProactiveTurnIds((prev) => (prev.has(p.turnId) ? prev : new Set(prev).add(p.turnId)))),
+```
+
+and pass them down:
+
+```tsx
+      <History open={historyOpen} list={list} remove={remove} refresh={turnDone?.n ?? 0} proactiveTurnIds={proactiveTurnIds} />
+```
+
+```tsx
+        historyOpen={historyOpen}
+        mode={mode}
+        gate={gate}
+        brainState={brainState}
+```
+
+`apps/desktop/src/renderer/chat/History.tsx` — one prop and one condition:
+
+```ts
+  /**
+   * X5 / §2.7: turn ids `proactive:turn` announced this session. A proactive row is normally stored
+   * with `kind: 'proactive'` and needs nothing here; this set covers the window between the line
+   * being displayed and its row being read back, so the badge never appears one refresh late.
+   */
+  proactiveTurnIds?: ReadonlySet<string>;
+```
+
+```ts
+  const { list, remove, open, refresh = 0, now = () => Date.now(), proactiveTurnIds } = props;
+```
+
+```tsx
+            {(r.kind === 'proactive' || (turnId !== null && proactiveTurnIds?.has(turnId) === true)) && (
+              <span className="chip chip--proactive">主动</span>
+            )}
+```
+
+(the existing line is `{r.kind === 'proactive' && <span className="chip chip--proactive">主动</span>}`; `turnId` is already destructured two lines above it.)
+
+- [ ] **Step 20: Run, expect PASS**
+
+Run: `npx vitest run --project desktop src/renderer/chat`
+Expect: `Test Files  4 passed (4)` — `App.test.tsx` `Tests  4 passed (4)` (1 + 3), `Composer.test.tsx` `Tests  20 passed (20)` (15 + 5), `History.test.tsx` `Tests  13 passed (13)` (11 + 2), `chat-css.test.ts` `Tests  4 passed (4)` (2 + 2); zero failures.
+Run: `pnpm -r --if-present typecheck` → exit 0 (the chat tree is `tsconfig.ui.json`'s strict program; a missing prop type fails here, not at runtime).
+
+- [ ] **Step 21: Whole-suite gate and the R3-19 sweep**
+
+```
+npx vitest run --project desktop
+pnpm test
+pnpm -r --if-present typecheck
+grep -rn '小春' apps/desktop/src/renderer/chat apps/desktop/src/renderer/bubble
+git diff -U0 -- apps/desktop/src/renderer | grep '^+' | grep -c '小春'
+```
+
+Expected: both vitest runs green; typecheck exit 0.
+
+The grep prints **exactly three pre-existing lines and no others** — `bubble/bubble.test.ts:88`, `:90`, `:91`, Phase 2's `setName('小春')` case. Those three are the shipped assertion that the plate renders the character's name from `character.json`; this task modifies that file by **appending** a describe and must not touch them. R3-19 is about Phase 3 *strings*, not about deleting a Phase 2 test, so the real gate is the last command: **`0`** added lines containing the literal. (Two more live outside this grep's scope and outside this task's Files table: `apps/desktop/src/renderer/chat.html`'s `<title>` — a sibling of `chat/`, so the grep never sees it — and Phase 2's `main/key-window.ts`. Record both in the task report; edit neither.)
+
+- [ ] **Step 22: Commit the chat half**
+
+```
+git add apps/desktop/src/renderer/chat/App.tsx apps/desktop/src/renderer/chat/App.test.tsx apps/desktop/src/renderer/chat/Composer.tsx apps/desktop/src/renderer/chat/Composer.test.tsx apps/desktop/src/renderer/chat/History.tsx apps/desktop/src/renderer/chat/History.test.tsx apps/desktop/src/renderer/chat/chat.css apps/desktop/src/renderer/chat/chat-css.test.ts
+git commit -m "feat(chat): 普通模式 plate, proactive:gate status line and the X5 live proactive badge (§9.5, §2.3, §2.7, R3-37)
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01TT8FHN3iFaUbG9cC7U8WGe"
+```
+
+**Evidence:** none owed by this task. §12 names no artefact for the chat or bubble consumers, and the D16 clips are Task 17's. Two of the four rows are visible in Task 17's 20-s interaction clip if a proactive line happens to land, which is not something a recording may be arranged to force (A14) — so this task's proof is its unit tests and the browser lane, and the task report says so rather than claiming a screenshot.
+
+**Acceptance:**
+- [ ] Files touched are exactly the thirteen rows in **Files**; `git diff --stat` over this task's three commits names no other path. In particular `bubble/speech.ts`, `bubble/fps.ts` (Task 5's), `shared/tokens.css`, `chat/bridge.ts` and everything under `apps/desktop/src/main/**` are unchanged.
+- [ ] Tests named and green: `bubble.test.ts` (13 = 9 + 4), `bubble-css.test.ts` (7 = 5 + 2), `Composer.test.tsx` (20 = 15 + 5), `chat-css.test.ts` (4 = 2 + 2), `App.test.tsx` (4 = 1 + 3), `History.test.tsx` (13 = 11 + 2); `npx vitest run --project desktop`, `pnpm test` and `pnpm -r --if-present typecheck` all clean.
+- [ ] **§9.5 exact copy:** `MODE_PLATE_TEXT === '普通模式'` and `MODE_PLATE_TITLE === '不扮演角色，只回答问题。发送 【PERSONA_LOAD】… 切回角色。'`, asserted character-for-character; the plate renders **only** in plain mode and **only** from `mode:changed`; `grep -c 'Channels.modeChanged' apps/desktop/src/renderer/chat/App.tsx` → `1` (the one subscription; a bare `modeChanged` grep also matches the §2.8 comment above it and returns 2).
+- [ ] **§9.4:** `data-mode="plain"` is written on the band root and removed in character mode; `.bubble[data-mode='plain']` overrides `--c-plate` / `--fw-line` with tokens only and does not touch `data-emotion`.
+- [ ] **§2.3 / §2.7:** exactly one `proactive:turn` marks a band; a turn id never seen renders the ordinary band; the proactive marker is the rail's colour, with no copy, no icon and no badge; `proactive:gate` renders nothing for `eligible` / `displayed`, one Chinese line for each of §3.10.1's 18 codes plus `defer-timeout`, and `主动说话：暂停` for anything unknown.
+- [ ] **X5:** the 主动 chip fires both for a stored `kind: 'proactive'` row and for a live `proactive:turn` id, and the ledger itself never reaches the renderer (`grep -n 'reservationId\|templateId' apps/desktop/src/renderer/chat/*.tsx` → nothing; §2.7 says the ledger stays in main).
+- [ ] **Tokens only:** no literal colour, radius or px size in either stylesheet's new rules (asserted by both `*-css.test.ts` files).
+- [ ] **R3-19:** no new `小春` literal anywhere in `renderer/chat` or `renderer/bubble`; the pre-existing `chat.html` title is recorded, not edited.
+- [ ] Three commits, each carrying both trailers verbatim.
+
+**Concerns for the controller:**
+
+1. **The gate status line's copy is a plan-authored default, already recorded in the contract.** §2.3 names the consumer ("C (status line + the D16 trace's cross-check)") and §2.4 pins the payload, but no section writes the words. `GATE_REASON_TEXT` (19 entries) and the `主动说话：…` prefix were written here against §3.10.1's reason codes and audited against A14 (state a fact, never apologise, never nudge), and **Amendment A3-3 records them as the contract's own default** rather than leaving them a gap. Flagged, not silently resolved: if the controller wants different words it is one map in `Composer.tsx` and one test, and A3-3 should change with them.
+2. **The proactive band's marker is a plan-authored default, already recorded in the contract.** §9.4's table gives plain mode an exact mechanism (`data-mode="plain"`); §2.3's Consumers column says only "proactive band styling". The rail-colour marker was chosen here because it is one token-valued declaration, needs no copy (R3-19) and reuses the advance mark's meaning, and **Amendment A3-3 records it**. Alternatives the controller may prefer: a second plate, a dotted rail, or nothing at all — any of them is one CSS rule and one assertion.
+3. **Where the gate line lives.** §9.5 says the mode plate is "a quiet chip in the chat window's status row", which is `.composer__meta`; the gate line has no stated home and is put in the same row, left of the character counter and the state line so `margin-left: auto` still owns the right edge. If the controller wants the gate outside the composer (its own strip under the history pane), it is a component move, not a logic change.
+4. **`proactive:gate` cadence versus a status line.** §3.10.2 evaluates at most once per `PROACTIVE_EVAL_INTERVAL_MS` (10 s), so this line can change every 10 s while the chat is open. It is a caption in the system voice and it does not animate, but a reviewer watching it for a minute will see it move. If that reads as noise, the fix is to render only `muted` and the two cap reasons and stay silent for the transient suppressions — a one-line change in `gateLine`.
+5. **`ProactiveGate` is typed as `Payload<'proactive:gate'>` in a renderer file.** That keeps the chat tree on `@ds/protocol` alone (§1.2) and needs no `@ds/sim` import for `GateReason`, at the cost of `GATE_REASON_TEXT` being keyed by `string` rather than by the union — so a code renamed in `@ds/sim` degrades to `主动说话：暂停` instead of failing the build. The test enumerates all 19 codes as literals, which is the compensating pin; a stronger option is to move `GATE_REASONS` into `@ds/protocol`, which is a Task 1 §2 edit and therefore not available in batch 6.
+6. **The bubble's proactive ring is 8 ids.** §2.7 guarantees one `proactive:turn` per displayed line and R3-7 caps the day at 2–5 displayed lines, so 8 is generous; but nothing in the contract bounds it, and a Phase 4 change to the caps should revisit `PROACTIVE_ID_RING`. An unbounded `Set` was rejected because the bubble window can live for days.
+7. **`bubble/main.ts` has no unit test**, here or anywhere in Phase 3 — it is a module with top-level side effects, like `pet/main.ts`. Step 10's assertions are greps and Step 11 is the browser lane. The two methods the wiring depends on are unit-tested in `bubble.test.ts`; the wiring itself is proven only by the e2e lane. If the controller wants it pinned, the pattern is Task 13's `stage/ui-flags.ts` — extract the tagging into a tiny tested module — and it costs one more file.
+8. **`chat.html`'s `<title>` still says `小春 · 对话`.** R3-19's acceptance grep does not cover `renderer/chat`, and the file is not in this task's Files table, so it is left alone and recorded here. It is a real Phase 3 violation of "no Phase 3 string contains the literal" only if the controller reads the rule as covering Phase 1 files; if so, it belongs to whoever owns `chat.html` — which §1.5 also does not name.
+
+---
+
 ## Coverage gaps
 
-Written by the plan self-review (superpowers:writing-plans step 4). Every contract section was matched
-against the seventeen tasks' `Contract:` lines and Files tables. **Nothing below is a task this plan
-forgot to write — each row is a section the contract does not turn into work, or work the contract
-does not give an owner. No task was invented to fill one.**
+Written by the plan self-review (superpowers:writing-plans step 4), then updated when the controller
+ruled on every gap it raised (`rulings.md` v2.3, R3-35..R3-43, and contract Amendments A3-1..A3-5).
+Every contract section was matched against the eighteen tasks' `Contract:` lines and Files tables.
+**Nothing below is a task this plan forgot to write — each row is a section the contract does not turn
+into work, or work the contract does not give an owner. Exactly one task was invented, by ruling:
+Task 18 (R3-37), for the four renderer consumers whose producers all shipped with no view.**
 
 ### A. Sections with no implementing task, because they are not implementable
 
 | § | Title | Why no task |
 |---|---|---|
 | §0.1 | Precedence (binding order) | A rule about which document wins, carried verbatim in this plan's header and in every task's `Contract:` line. |
-| §0.5 | Ruling → section index | A cross-reference table. Its content is the header's "Rulings log — R3-1..R3-34". |
-| §1.1 | New and modified packages | Descriptive. Realised by Task 3 (`@ds/sim`), Task 4 (`@ds/behaviors`) and the MODIFY rows of Tasks 2, 5, 6, 7, 10, 11, 12, 13, 14, 15. |
+| §0.5 | Ruling → section index | A cross-reference table. Its content is the header's "Rulings log — R3-1..R3-43". |
+| §1.1 | New and modified packages | Descriptive. Realised by Task 3 (`@ds/sim`), Task 4 (`@ds/behaviors`) and the MODIFY rows of Tasks 2, 5, 6, 7, 10, 11, 12, 13, 14, 15, 18. |
 | §1.6 | Out of scope (R3-18) | A prohibition. Enforced by the header's "Deferred" list and by each task's Files table naming what it does **not** touch. |
 | §13.3 | What Phase 3 explicitly does not touch | A prohibition. Enforced by the §1.5 ownership rule (`BLOCKED: <path> is owned by <task>`) and each task's read-only list. |
 | §14.1, §14.2, §14.3 | The resolved question ledger | Every answer already lives in the section it resolves — e.g. R3-34/P7's `LIVELINESS_DEFAULT = 0.30` is pinned in Task 3's `SIM_DEFAULTS`, and P8's warm-lazy chat window is Task 15's `CHAT_PRECREATE_DELAY_MS` pre-create. |
@@ -26971,31 +28388,24 @@ does not give an owner. No task was invented to fill one.**
    (`docs/evidence/phase3/picker-oracle.json`) shows the CPU predicate missing the R3-6 gate
    (FP ≤ 0.5 % AND FN ≤ 0.5 % AND p95 ≤ 0.2 ms). Task 11 Step 12 is the conditional step and ships
    the same `Picker` surface either way. If the gate passes, §6.6 ships as constants only.
-2. **§5.9's work-mode fade is unreachable end to end.** Task 8 ships `HoverAckMachine` with
-   `WORK_MODE_FADE_AFTER_MS` / `WORK_MODE_FADE_OPACITY`, Task 6 ships the 工作模式 tray checkbox and
-   Task 15 writes the `ui_work_mode` kv key — but **§2.2/§2.3/§2.5 define no channel and
-   `SimSnapshotSchema` (§2.4) carries no field** that would relay the flag to the pet renderer, and
-   §2 may be edited only once, by Task 1, before batch 2. The renderer therefore holds
-   `WORK_MODE_DEFAULT` (false) and the bar §0 hover row *"rest > 3 s while a 'work-mode' toggle is on
-   → fade to 35 % + pass-through"* cannot be demonstrated. Same gap for `ui_sfx_muted` (§5.12's
-   `SfxPlayer.setMuted`). Recorded as Task 13 Concern 6 and Task 15 Concern 7. **Needs a ruling:**
-   either a §2 Amendment landed in Task 1 (adding `workMode`/`sfxMuted` to `SimSnapshot`, the
-   cheapest option — the schema is already broadcast at 1 Hz), or the fade moves to Phase 4.
-3. **§10.4's cursor-wiggle predicate has no producer.** `WIGGLE_WINDOW_MS`, `WIGGLE_MIN_REVERSALS`,
-   `WIGGLE_MIN_TRAVEL_DIP`, `WIGGLE_MAX_NET_DIP`, `WIGGLE_COOLDOWN_MS` ship in Task 12's
-   `activity-sensor.ts` and Task 13's arbiter has the `cursorWiggle` reaction, but no contract
-   section gives the predicate an owning file, and neither `ActivityDerived` nor the `TICK` event
-   carries the *direction* history reversals need (`TICK` has a scalar `cursorDeltaDip` only).
-   Constants only; the D11 sub-clause *"wiggle near her → curiosity"* is **not closed**.
-4. **The four renderer consumers §1.5 does not list are BLOCKED, by design.** §9.5's chat 普通模式
-   plate, §2.3's bubble `data-mode="plain"` / proactive band styling, the chat status line for
-   `proactive:gate`, and X5's History badge all name files under `renderer/chat/**` and
-   `renderer/bubble/**` that the §1.5 ownership table omits. Every **producer** ships (Task 6's
-   `ModeStore`, Task 14's `proactive:gate`, Task 15's `mode:changed` broadcast and bubble replay);
-   no task edits the consumers. §1.5 must be amended before those views change.
-5. **A10 (self-fact consistency) has no owner anywhere.** Phase 2's Amendment A-14 moved it "to
-   Phase 3 with A8", but no Phase 3 contract section mentions it. Task 17 lists it by id in
-   `docs/evidence/phase3/not-measured.md` with no estimate.
+2. **A10 (self-fact consistency) has no owner anywhere — and by **R3-42** it will not get one in
+   Phase 3.** Phase 2's Amendment A-14 moved it "to Phase 3 with A8", but no Phase 3 contract
+   section mentions it and no authority states a threshold. It is a live-API **judged** axis, so it
+   is revisited with A8 when a DeepSeek account with balance exists. Task 17 lists it by id in
+   `docs/evidence/phase3/not-measured.md`, with the ruling and **no estimate**. This row is a
+   decision, not an open gap.
+
+### B-closed. Gaps the controller's rulings closed (kept so nobody re-derives them)
+
+| Was | Ruling | Where it landed |
+|---|---|---|
+| §5.9's work-mode fade unreachable end to end: the machine (Task 8), the tray checkbox (Task 6) and the `ui_work_mode` kv write (Task 15) all shipped, but §2.2/§2.3/§2.5 defined no channel and `SimSnapshotSchema` carried no field — and §2 may be edited only once, by Task 1. Same for `ui_sfx_muted` / §5.12's `SfxPlayer.setMuted` | **R3-35**, contract Amendment **A3-1** | Two booleans on `SimSnapshot` (`uiWorkMode`, `uiSfxMuted`, default `false`) in Task 1's single §2 edit — **no new channel**. Task 9's `toSnapshot` emits the defaults; Task 12's `SimService.setUiFlags` overlays the live pair; Task 15 calls it from kv at startup and in both tray setters; Task 13's new `stage/ui-flags.ts` applies them to Task 8's machine and Task 5's `SfxPlayer`. Pinned by `hover-ack.test.ts` (tick-time read, both edges), `ui-flags.test.ts` (real machine + real player: fade to 35 % + pass-through, muted → no sound), `sim-service.test.ts` and `index.test.ts` |
+| §10.4's cursor-wiggle predicate had no producer: five constants shipped in Task 12, the reaction in Task 13, but no owning file and no direction history on `ActivityDerived` or `TICK` | **R3-36**, contract Amendment **A3-2** | Task 12's `ActivitySensor` owns it: 240 DIP radius around the pet centre, 10 Hz sampling into a 15-slot ring, a reversal = an x-delta sign change with `\|dx\| >= 6 DIP`, `>= 4` in 1.5 s, 20 s cooldown, 2 Hz outside the radius. `ActivityDerived.wiggle` + `onWiggle`; `SimService` fans it out as `sim:event {kind:'cursorWiggle'}`, which Task 13's arbiter already consumes by that name. A3-2 supersedes §10.4's five draft constants |
+| Four renderer consumers BLOCKED because §1.5 omitted `renderer/chat/**` and `renderer/bubble/**`: §9.5's 普通模式 plate, §9.4/§2.3's bubble `data-mode="plain"` + proactive band, the chat `proactive:gate` status line, X5's History badge | **R3-37**, contract Amendment **A3-3** | **Task 18** (T3-B, batch 6, depends on 1, 6, 14) implements all four and takes the §1.5 rows. `bubble/fps.ts` stays Task 5's |
+| `packages/brain/src/index.ts`, `packages/memory/src/index.ts` and `packages/brain/src/turn.ts` edited by two or three owner groups with no §1.5 row | **R3-39**, contract Amendment **A3-4** | The two barrels are **append-only shared files** (append your own line at the end; the integrator keeps both sides; never a `BLOCKED`); `turn.ts` is **T3-C's (Task 14)**, with the documented batch-1 exception for Task 2's `setQuery` + `metrics.envelope` |
+| `nextLocalMidnight` duplicated between `packages/sim/src/phases.ts` (Task 3) and `main/tray.ts` (Task 6), with no equality test, because they were batch siblings | **R3-38** | **Task 6 moved to batch 3** with `dependsOn: [1, 2, 3]`; `tray.ts` imports the §3.9 helper and `tray.test.ts` imports the same function. The move also cleared the only batch-disjointness violation in the plan (Tasks 5 and 6 on the brain barrel) |
+| `FACT_MAX_CHARS` vs `EXTRACT_VALUE_MAX` / `EXTRACT_ALIAS_MAX` — two homes across a forbidden import (Task 2 Concern C-5) | **R3-43**, contract Amendment **A3-5** | **Ratified as two homes**; the identity assertion already ships from `apps/desktop` (Task 2's `fact-extractor.test.ts`). Moving them into `@ds/protocol` is refused |
+| `pnpm --filter <pkg> exec vitest run` fails for the four packages with no local `vitest.config.ts` (Task 2 Concern C-1) | **R3-40** | Every task now uses the root form `npx vitest run --project <name>` (append a path fragment to narrow to one file). The filter is the **vitest project name**: scoped for every package except `desktop`, whose `vitest.config.ts` sets `name: 'desktop'` — `--project @ds/desktop` dies with `No projects matched the filter` |
 
 ### C. Criteria and thresholds that ship as mechanism only (measured later, never estimated)
 
@@ -27008,29 +28418,33 @@ decisions from Task 17's artefacts** (R3-14, §11.4/§11.5, §14.4), not plan de
 
 ### D. Batch and ownership notes the executing agent must know
 
-**Ownership (§1.5): no violation.** Every CREATE/MODIFY row in all seventeen tasks belongs to that
-task's owner group, or to a path §1.5 omits entirely (recorded in the header's "Contract gaps found
-while decomposing"). Three omitted paths are edited by **more than one owner group** and are listed
-here so the collision is not discovered at merge time:
+**Ownership (§1.5 as amended): no violation.** Every CREATE/MODIFY row in all eighteen tasks belongs
+to that task's owner group, or to a path §1.5 omits entirely (recorded in the header's "Contract gaps
+found while decomposing"). The three paths that were edited by **more than one owner group** are now
+ruled on rather than merely recorded:
 
-| Path | Edited by | Note |
+| Path | Edited by | Ruling |
 |---|---|---|
-| `packages/brain/src/index.ts` | Task 2 (T3-D, `export * from './extract-prompt.ts'`), Task 5 (T3-B, `./act.ts'`), Task 6 (T3-C, `./mode.ts'` + `./proactive-prompt.ts'`) | **Tasks 5 and 6 are both in batch 2 — the only batch-disjointness violation in the plan.** Recommendation (no task is renumbered): move Task 5's single barrel line into Task 6's edit and have Task 5 depend on it, **or** move Task 6 to batch 3 (its dependencies, Tasks 1 and 2, are both in batch 1, so batch 3 costs nothing). The controller decides; executing both in parallel guarantees a conflict on one line. |
-| `packages/memory/src/index.ts` | Task 2 (T3-D), Task 6 (T3-C) | Batches 1 and 2 — sequential, no conflict. Assign one owner in §1.5 all the same. |
-| `packages/brain/src/turn.ts` | Task 2 (T3-D, `setQuery` + the `metrics.envelope` writer), Task 14 (T3-C, `TurnRunnerDeps.parserOptions` + `send(text, kind, turnId?)`) | Batches 1 and 5 — sequential, no conflict. Both tasks record the gap. |
+| `packages/brain/src/index.ts` | Task 2 (T3-D, `export * from './extract-prompt.ts'`), Task 5 (T3-B, `./act.ts'`), Task 6 (T3-C, `./mode.ts'` + `./proactive-prompt.ts'`) | **R3-39 / A3-4: append-only shared file.** Each task appends its own line at the end and edits no other; the integrator keeps both sides on a conflict; a barrel line is never a `BLOCKED`. **R3-38** additionally moved Task 6 to batch 3, so the batch-2 collision with Task 5 is gone as well |
+| `packages/memory/src/index.ts` | Task 2 (T3-D), Task 6 (T3-C) | **R3-39 / A3-4: append-only**; batches 1 and 3, sequential anyway |
+| `packages/brain/src/turn.ts` | Task 2 (T3-D, `setQuery` + the `metrics.envelope` writer), Task 14 (T3-C, `TurnRunnerDeps.parserOptions` + `send(text, kind, turnId?)`) | **R3-39 / A3-4: owned by T3-C (Task 14)**, with the one documented batch-1 exception for Task 2's two edits. Any third task stops with `BLOCKED: turn.ts is owned by Task 14` |
 
-**Batch disjointness, all other batches: clean.** Batch 1 (1, 2), batch 3 (8, 9, 10, 11), batch 4
-(12, 13), batch 7 (16, 17) share no file; batches 5 and 6 hold one task each. Files touched by
+**Batch disjointness after the R3-38 move and the R3-37 addition: clean everywhere.**
+b1 (1, 2) · b2 (3, 4, 5, 7) · b3 (6, 8, 9, 10, 11) · b4 (12, 13) · b5 (14) · b6 (15, 18) · b7 (16, 17).
+Batch 3's Task 6 (T3-C: `packages/brain|memory`, `main/tray.ts`, `eval/**`, and the two `apps/desktop`
+build files) shares no file with 8/9/10/11; batch 6's Task 18 (renderer chat/bubble) shares none with
+Task 15 (`main/index.ts`, `main/quit.ts`, `main/index.test.ts`). Files touched by
 several tasks in *different* batches (`packages/stage/src/stage.ts` — 5, 11, 16;
 `packages/stage/src/companion-model.ts` — 5, 16; `characters/haru/character.json` — 5, 16;
 `apps/desktop/src/renderer/pet/main.ts` — 5, 13; `packages/stage/src/index.ts` — 5, 11;
-`packages/sim/src/index.ts` and `state.test.ts` — 3, 9) are all **single-owner** and ordered by the
+`packages/sim/src/index.ts` and `state.test.ts` — 3, 9; `apps/desktop/package.json` and
+`electron.vite.config.ts` — 6 then 13) are all **single-owner** and ordered by the
 dependency graph, so each later task re-anchors on quoted text rather than line numbers.
 
-**§5.13 “one home per constant” — three forced duplicates, all now with an equality test.** §5.13
+**§5.13 “one home per constant” — three forced duplicates, all with an equality test.** §5.13
 allows exactly one duplication (`SIM_DEFAULTS` mirroring the three touch constants). The dependency
 direction in §1.2 forces three more, because the two homes sit in packages that may not import each
-other. Each is now pinned by an identity assertion in the earliest file that can see both sides:
+other. Each is pinned by an identity assertion in the earliest file that can see both sides:
 
 | Constant | Homes | Equality asserted in |
 |---|---|---|
@@ -27038,11 +28452,16 @@ other. Each is now pinned by an identity assertion in the earliest file that can
 | `PROACTIVE_RESERVATION_STALE_MS` = 300 000 | `packages/memory/src/proactive-log.ts` (Task 6) and `SIM_DEFAULTS` (Task 3) | `proactive-controller.test.ts` (Task 14) — **added in self-review** |
 | `PROACTIVE_NO_REPEAT_MS` / `SIM_DEFAULTS.PROACTIVE_TEMPLATE_NO_REPEAT_MS` = 2 592 000 000 | same pair | same test |
 
-A fourth duplicate has **no** equality test and needs a decision: `nextLocalMidnight(nowWall)` exists
-in `packages/sim/src/phases.ts` (Task 3, §3.9) **and** in `apps/desktop/src/main/tray.ts` (Task 6,
-for 別打扰 今天). Task 6 does not depend on Task 3 and they are batch siblings, so it cannot import it.
-If the two disagree on the local-midnight rule, the tray’s “today” and the reducer’s midnight counter
-reset drift by an hour across a DST boundary. See Task 6 Concern 10 for the two resolutions.
+A fourth pair — `FACT_MAX_CHARS` (§8.2, `@ds/memory`) against `EXTRACT_VALUE_MAX` / `EXTRACT_ALIAS_MAX`
+(§8.5, `@ds/brain`) — is **ratified as two homes by R3-43 / A3-5**; its identity assertion already
+ships from `apps/desktop`, which can see both (Task 2's `fact-extractor.test.ts`). Moving them into
+`@ds/protocol` is refused.
+
+The fifth duplicate the self-review found is **gone, not pinned**: `nextLocalMidnight(nowWall)` used to
+exist in `packages/sim/src/phases.ts` (Task 3, §3.9) **and** in `apps/desktop/src/main/tray.ts` (Task 6,
+for 別打扰 今天), with no equality test, because the two tasks were batch siblings. **R3-38** moved Task 6
+to batch 3 with `dependsOn: [1, 2, 3]`, so `tray.ts` imports the §3.9 helper and `tray.test.ts` imports
+the same function; there is one implementation and no drift is possible across a DST boundary.
 
 Two structural duplicates are **correct and stay**: `LivelinessMap` (declared structurally in
 `@ds/behaviors` because §1.2 forbids the `@ds/sim` import; identity test in Task 3’s
