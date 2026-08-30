@@ -1,5 +1,5 @@
 ---
-version: 1
+version: 2
 model: deepseek-v4-pro
 thinking: on
 ---
@@ -26,3 +26,8 @@ thinking: on
 输出要求：
 只输出一个 JSON 对象，键就是【这一条要评的项目】里列出的那些，值按上面写的类型。
 不要输出解释，不要输出 markdown 代码块，不要输出多余的键。
+
+门槛备注（评审不需要输出这些，只是让规则和阈值在同一处）：
+- `trait_hit`（E-3）：Phase 3 起 fixture 里有 12 条 trait 探针，每条都带【判定条件】；轴的门槛是命中率 ≥ 0.80。没有【判定条件】的条目一律 false。
+- `emoji_discipline`（A18）：这里只判「有没有」。每条回复 ≤ 1 个 emoji 由本地 `emojiMultiCount = 0` 门槛计数（eval/lib/shape.mjs 的 emojiCount 逐条计），≤ 25 % 的比例门槛在汇总里；难受话题里一个都不能有。
+- A8 人格辨认（persona-bleed）：另一个盲评任务，不在这个 rubric 里输出。评审只看三份不带名字的设定（甲/乙/丙）和一条回复，输出 {"persona":"甲"}；3 个角色 × 20 条 prompt，归因正确率 ≥ 85 % 才过。跑法：`node eval/run.mjs --suite persona-bleed`。

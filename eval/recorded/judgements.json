@@ -45,6 +45,18 @@
     "valid-03": { "false_disagreement": false },
     "valid-04": { "false_disagreement": false },
     "valid-05": { "false_disagreement": false },
-    "valid-06": { "false_disagreement": false }
+    "valid-06": { "false_disagreement": false },
+    "trait-01": { "trait_hit": true },
+    "trait-02": { "trait_hit": true },
+    "trait-03": { "trait_hit": true },
+    "trait-04": { "trait_hit": true },
+    "trait-05": { "trait_hit": true },
+    "trait-06": { "trait_hit": true },
+    "trait-07": { "trait_hit": true },
+    "trait-08": { "trait_hit": true },
+    "trait-09": { "trait_hit": true },
+    "trait-10": { "trait_hit": true },
+    "trait-11": { "trait_hit": true },
+    "trait-12": { "trait_hit": true }
   }
 }

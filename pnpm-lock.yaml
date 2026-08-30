@@ -32,6 +32,9 @@ importers:
       '@ds/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@ds/sim':
+        specifier: workspace:*
+        version: link:../../packages/sim
       '@ds/stage':
         specifier: workspace:*
         version: link:../../packages/stage

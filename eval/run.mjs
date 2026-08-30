@@ -8,14 +8,19 @@ import {
   DEEPSEEK_BASE_URL, DeepSeekClient,
   parseCharacterBundle, renderStaticSystem, cardTokens, staticSystemTokens,
 } from '@ds/brain';
-import { parseArgs } from './lib/args.mjs';
+import { parseArgs, resolveOutTarget } from './lib/args.mjs';
 import { loadFixture, validateFixture } from './lib/fixture.mjs';
 import { RecordedClient } from './lib/recorded.mjs';
 import { runTurn, pool } from './lib/turn.mjs';
 import { aggregate, axesFor } from './lib/aggregate.mjs';
-import { loadJudge, buildJudgeSystem, buildJudgeUser, judgeInput, judgeTurn } from './lib/judge.mjs';
+import { loadJudge, buildJudgeSystem, buildJudgeUser, judgeInput, judgeTurn, judgeOnce } from './lib/judge.mjs';
 import { writeReports, stampFrom } from './lib/report.mjs';
 import { runAblation, renderAblationMarkdown } from './lib/ablation.mjs';
+import { CharacterCardSchema } from '@ds/brain';
+import { runMemoryRecall } from './lib/memory-recall.mjs';
+import {
+  PERSONA_IDS, buildAttributionSystem, buildAttributionUser, parseAttribution, personaPath, scoreAttribution, shuffledOrder,
+} from './lib/persona-bleed.mjs';
 
 const HERE = new URL('./', import.meta.url);
 const DEFAULT_FIXTURE = fileURLToPath(new URL('fixtures/prompts.zh.json', HERE));
@@ -50,6 +55,14 @@ async function main() {
   } catch (err) {
     fail(`读不了角色文件 ${characterPath}\n${err.message}`, 2);
   }
+  // §9.6 --persona: the card comes from eval/personas/<id>.json; motionKeys and cannedLines stay the bundle's.
+  if (opts.persona !== 'haru') {
+    try {
+      bundle = { ...bundle, card: CharacterCardSchema.parse(JSON.parse(readFileSync(personaPath(opts.persona), 'utf8'))) };
+    } catch (err) {
+      fail(`读不了角色卡 ${personaPath(opts.persona)}\n${err.message}`, 2);
+    }
+  }
   const motionKeys = Object.keys(bundle.motionMap);
   const staticSystem = renderStaticSystem(bundle.card, motionKeys);
   const startedAt = new Date().toISOString();
@@ -68,6 +81,72 @@ async function main() {
     writeFileSync(join(outDir, `${stamp}.md`), renderAblationMarkdown(report), 'utf8');
     console.log(`消融实验写到 ${join(outDir, `${stamp}.md`)}`);
     process.exit(0);
+  }
+
+  // ---- §8.11 A11: memory recall (gated exactly as Phase 2: no key -> exit 2) ----
+  if (opts.suite === 'memory-recall') {
+    if (opts.dry) fail('--suite memory-recall 是一个联网实验，不能和 --dry 一起用。', 2);
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) fail(NO_KEY_MESSAGE, 2);
+    const fixture = JSON.parse(readFileSync(opts.fixture ?? fileURLToPath(new URL('fixtures/memory-recall.zh.json', HERE)), 'utf8'));
+    // FIX ROUND 1, finding 3. `--out` is a DIRECTORY everywhere else, but this suite also accepts a
+    // file (the brief's own Step-20 invocation is `--out out/memory-recall.json`). `outDir` used to
+    // be that literal path, so `mkdirSync(outDir)` created a DIRECTORY named `memory-recall.json`
+    // and the write below then threw EISDIR — after the whole paid run had finished and with the
+    // results only in memory. `resolveOutTarget` separates the two uses.
+    const { dir: runDir, path: outPath } = resolveOutTarget(opts.out, DEFAULT_OUT, `${stampFrom(startedAt)}-memory-recall.json`);
+    mkdirSync(runDir, { recursive: true });
+    const client = new DeepSeekClient({ apiKey, model: opts.model, baseUrl: DEEPSEEK_BASE_URL });
+    const r = await runMemoryRecall({ client, fixture, sessions: opts.sessions, characterPath, dbPath: join(runDir, 'memory-recall.sqlite') });
+    const report = { version: 1, startedAt, suite: 'memory-recall', model: opts.model, sessions: opts.sessions, ...r };
+    writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    console.log(`A11 recall ${r.recalled}/20（门槛 18），「根据你之前提到的」出现 ${r.callbackPhraseCount} 次（门槛 0）：${r.pass ? 'PASS' : 'FAIL'}`);
+    console.log(outPath);
+    process.exit(r.pass ? 0 : 1);
+  }
+
+  // ---- §9.6 A8: persona bleed, blind attribution over 3 personas x 20 prompts ----
+  if (opts.suite === 'persona-bleed') {
+    if (opts.dry) fail('--suite persona-bleed 是一个联网实验，不能和 --dry 一起用。', 2);
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) fail(NO_KEY_MESSAGE, 2);
+    const fx = JSON.parse(readFileSync(opts.fixture ?? fileURLToPath(new URL('fixtures/persona-bleed.zh.json', HERE)), 'utf8'));
+    const cards = PERSONA_IDS.map((id) => CharacterCardSchema.parse(JSON.parse(readFileSync(personaPath(id), 'utf8'))));
+    const client = new DeepSeekClient({ apiKey, model: opts.model, baseUrl: DEEPSEEK_BASE_URL });
+    const rows = [];
+    for (const [truth, card] of cards.entries()) {
+      const ctx = { dry: false, client, staticSystem: renderStaticSystem(card, motionKeys), postHistoryInstructions: card.post_history_instructions, recent: [] };
+      for (const [i, prompt] of fx.prompts.entries()) {
+        const t = await runTurn({ prompt: { ...prompt, axes: [] }, runIndex: truth, indexInRun: i, ctx });
+        rows.push({ promptId: prompt.id, truth, reply: t.reply, raw: t.raw, judged: null });
+        process.stderr.write(`\r${PERSONA_IDS[truth]} ${i + 1}/${fx.prompts.length}   `);
+      }
+    }
+    process.stderr.write('\n');
+    await pool(rows, opts.concurrency, async (row) => {
+      const order = shuffledOrder(opts.seed, row.promptId);         // order[label] = persona index
+      const system = buildAttributionSystem(order.map((p) => cards[p]));
+      const user = buildAttributionUser(fx.prompts.find((p) => p.id === row.promptId).text, row.raw);
+      // `judgeTurn`'s validateJudgement(obj, []) strips every unknown key, so the label could never
+      // be read back from its `value`. `judgeOnce` keeps the judge's raw text, which is what
+      // parseAttribution needs.
+      let idx = null;
+      try {
+        const text = await judgeOnce({ baseUrl: DEEPSEEK_BASE_URL, apiKey, model: opts.judge, system, user, timeoutMs: JUDGE_TIMEOUT_MS });
+        idx = parseAttribution(text);
+      } catch (err) {
+        console.error(`\n归因失败 ${row.promptId}/${PERSONA_IDS[row.truth]}：${err.message}`);
+      }
+      row.judged = idx === null ? null : order[idx];
+    });
+    const score = scoreAttribution(rows);
+    const report = { version: 1, startedAt, suite: 'persona-bleed', model: opts.model, judge: opts.judge, personas: PERSONA_IDS, ...score, rows };
+    mkdirSync(outDir, { recursive: true });
+    const outPath = join(outDir, `${stampFrom(startedAt)}-persona-bleed.json`);
+    writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    console.log(`A8 归因 ${score.correct}/${score.n} = ${(score.pct * 100).toFixed(1)} %（门槛 85 %）：${score.pass ? 'PASS' : 'FAIL'}`);
+    console.log(outPath);
+    process.exit(score.pass ? 0 : 1);
   }
 
   // ---- fixture ----
@@ -171,6 +250,7 @@ async function main() {
       runs: opts.runs,
       fixture: fixturePath,
       character: characterPath,
+      persona: opts.persona,
       judgeVersion: judgeDoc.version,
       cardTokens: cardTokens(bundle.card),
       staticSystemTokens: staticSystemTokens(bundle.card, motionKeys),
