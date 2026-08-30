@@ -131,6 +131,24 @@ body {
   color: var(--c-text-3);
 }
 
+/* I-4: the cap counter — the system voice, only in the last 200 characters; warn tone at the cap. */
+.composer__count {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--c-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.composer__count[data-at='cap'] {
+  color: var(--c-warn-text);
+}
+
+/* The state line keeps its right edge; the counter sits just inside it when both are present. */
+.composer__count + .composer__state {
+  margin-left: 0;
+}
+
 .composer__row {
   display: flex;
   align-items: flex-start;
@@ -150,7 +168,25 @@ body {
   line-height: var(--lh-body);
   font-weight: var(--fw-line);
   resize: none;
-  overflow: hidden;
+  /* M-15: past CHAT_MAX_ROWS the textarea scrolls instead of hiding its first lines. `auto`
+     shows the scrollbar only once the content overflows the six-row cap, so the one-to-six-line
+     band is unchanged. Thin, token-coloured, no track. */
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong) transparent;
+}
+
+.composer__input::-webkit-scrollbar {
+  width: var(--sp-1);
+}
+
+.composer__input::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border-radius: var(--r-tooltip);
+}
+
+.composer__input::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .composer__input::placeholder {
@@ -312,8 +348,19 @@ body {
   cursor: pointer;
 }
 
+/* M-14: the reduced-motion appear is opacity only — no translate — like bubble.css's band. */
+@keyframes adv-appear-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app {
+    animation-name: adv-appear-fade;
     animation-duration: 80ms;
   }
 
