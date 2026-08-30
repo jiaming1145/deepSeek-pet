@@ -9,7 +9,21 @@ test('defaults match the contract CLI', () => {
     dry: false, ablation: false, fixture: null, character: null, runs: 3, limit: null,
     model: 'deepseek-v4-flash', judge: 'deepseek-v4-pro', noJudge: false,
     concurrency: 4, out: null, seed: 1,
+    persona: 'haru', suite: null, sessions: 5,
   });
+});
+
+test('--persona, --suite and --sessions (Phase 3 §9.6 / §8.11)', () => {
+  const r = parseArgs(['--persona', 'quiet', '--suite', 'memory-recall', '--sessions', '3']);
+  assert.equal(r.opts.persona, 'quiet');
+  assert.equal(r.opts.suite, 'memory-recall');
+  assert.equal(r.opts.sessions, 3);
+});
+
+test('an unknown --suite is a usage error', () => {
+  const r = parseArgs(['--suite', 'nope']);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /--suite 只能是 memory-recall 或 persona-bleed/);
 });
 
 test('--dry, --ablation and --no-judge are flags', () => {
