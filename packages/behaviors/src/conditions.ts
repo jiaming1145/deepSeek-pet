@@ -8,6 +8,12 @@ export const CONDITION_FACTS = [
 ] as const;
 export type ConditionFact = (typeof CONDITION_FACTS)[number];
 
+// The cast is load-bearing, not laziness: apps/desktop/tsconfig.renderer.json must keep
+// `strictNullChecks: false` for the vendored Cubism Framework, and it compiles this file (the
+// arbiter imports @ds/behaviors). With strictNullChecks off `undefined extends T` is true for
+// every T, so zod 4 infers EVERY object key as optional (`eq?` instead of `eq`) and the inferred
+// union stops matching `Condition`. The declared type below is the contract (§4.2) and is still
+// checked for real by packages/behaviors/tsconfig.json, which is strict.
 export const ConditionSchema: z.ZodType<Condition> = z.lazy(() => z.union([
   z.object({ allOf: z.array(ConditionSchema).min(1).max(8) }),
   z.object({ anyOf: z.array(ConditionSchema).min(1).max(8) }),
@@ -16,7 +22,7 @@ export const ConditionSchema: z.ZodType<Condition> = z.lazy(() => z.union([
   z.object({ fact: z.enum(CONDITION_FACTS), lt: z.number() }),
   z.object({ fact: z.enum(CONDITION_FACTS), gt: z.number() }),
   z.object({ fact: z.enum(CONDITION_FACTS), in: z.array(z.union([z.string(), z.number()])).min(1).max(8) }),
-]));
+])) as z.ZodType<Condition>;
 export type Condition =
   | { allOf: Condition[] } | { anyOf: Condition[] } | { not: Condition }
   | { fact: ConditionFact; eq: string | number | boolean }
