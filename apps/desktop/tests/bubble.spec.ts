@@ -6,6 +6,11 @@ const EVIDENCE = '../../docs/evidence/phase2';
 const LINE = { turnId: 'p1', seq: 0, text: '你回来啦，我等你好久了。', emotion: 'happy' };
 /** RevealPlan.totalMs() for this exact string is 1990 (contracts.md §5.1). */
 const LONG = { turnId: 'p2', seq: 0, text: '一二三四五六七八九十一二三四五六七八九十，。', emotion: 'neutral' };
+/** One line, and MAX_HANZI_PER_LINE * MAX_LINES — the shortest and tallest bands the rail spans. */
+const RAIL_LINES = [
+  { turnId: 'p9-1', seq: 0, text: '一二三四五六七八', emotion: 'neutral', lines: 1 },
+  { turnId: 'p9-6', seq: 0, text: '天'.repeat(24 * 6), emotion: 'neutral', lines: 6 },
+] as const;
 
 async function open(page: Page): Promise<void> {
   await installFakeBridge(page, 'dsBubble');
@@ -126,6 +131,64 @@ test.describe('bubble window renderer', () => {
     await expect(page.locator('#bubble')).toBeHidden();
     await expect(page.locator('#hint')).toHaveText('API Key 无效，重新填一下');
     await page.screenshot({ path: `${EVIDENCE}/hint-error.png` });
+  });
+
+  test('the 8° rail is drawn inside the band root at one line and at MAX_LINES (§5.5)', async ({ page }) => {
+    await open(page);
+    // `body.browser`'s 24 px inset is a harness affordance (contract addition 10) and it is what hid
+    // this: the shipped window draws `.content` flush at the window origin, where
+    // `body { overflow: hidden }` cuts everything left of x = 0. `Bubble.measure()` reads the band
+    // root's OWN rect, and a transform-overflowing child never widens that, so main would not size
+    // the window to fit an escaping rail either. Measure it the way the real window draws it.
+    await page.evaluate(() => document.body.classList.remove('browser'));
+    for (const line of RAIL_LINES) {
+      await page.evaluate((l) => {
+        void window.__bubble.speak([{ turnId: l.turnId, seq: l.seq, text: l.text, emotion: l.emotion }]);
+        window.__bubble.complete();
+      }, line);
+      const m = await page.evaluate(() => {
+        const q = (s: string): DOMRect => document.querySelector(s)!.getBoundingClientRect();
+        const lh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lh-bubble'));
+        const rail = q('.bubble__rail');
+        const root = q('#bubble');
+        return {
+          railLeft: rail.left,
+          railRight: rail.right,
+          rootLeft: root.left,
+          rootRight: root.right,
+          lines: Math.round(q('.bubble__text').height / lh),
+        };
+      });
+      // The band root is flush against the window origin once the harness inset is off.
+      expect(m.rootLeft).toBe(0);
+      expect(m.lines).toBe(line.lines);
+      // The skewed rail — the direction contract's one signature device — must land inside the box
+      // main is told about, at BOTH band heights: the skew's horizontal reach grows with the rail.
+      expect(m.railLeft).toBeGreaterThanOrEqual(m.rootLeft);
+      expect(m.railRight).toBeLessThanOrEqual(m.rootRight);
+    }
+  });
+
+  test('bubble:size is coalesced to one message per frame (§5.2)', async ({ page }) => {
+    await open(page);
+    await showPinned(page, { ...LINE, turnId: 'p10' });
+    await expect.poll(() => page.evaluate(() => window.__bubble.text())).toBe(LINE.text);
+    const r = await page.evaluate(async () => {
+      window.__fake.clear();
+      // Twelve size-changing places in ONE task, each cap narrower than the band and than the last.
+      // Every `report()` used to run synchronously on its caller, so main got twelve `bubble:size`
+      // messages — twelve placeBubble + setBounds round trips on an always-on-top transparent
+      // window — for a band that ends up at exactly one size.
+      const base = Math.ceil(document.getElementById('bubble')!.getBoundingClientRect().width);
+      for (let i = 0; i < 12; i++) {
+        window.__fake.emit('bubble:place', { maxWidth: base - 12 - i, maxHeight: 320, side: 'left', arrowOffset: 18 });
+      }
+      await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => res(null))));
+      const sent = window.__fake.sent().filter((s) => s.channel === 'bubble:size');
+      return { base, sizes: sent.map((s) => s.payload as { width: number; height: number }) };
+    });
+    expect(r.sizes).toHaveLength(1);
+    expect(r.sizes[0].width).toBe(r.base - 23); // the LAST place's cap, not the first
   });
 });
 
