@@ -11,3 +11,4 @@ export * from './turn.ts';
 export * from './ports.ts';
 export * from './extract-prompt.ts';
 export * from './act.ts';
+export * from './mode.ts';
