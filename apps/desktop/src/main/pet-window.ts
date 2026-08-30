@@ -125,14 +125,23 @@ function guardPetWebContents(win: BrowserWindow, options: PetWindowOptions): voi
   // will-navigate does not fire for server-side redirects; an allowed URL that 302s elsewhere
   // arrives here instead (dev server only in practice — app://local is our own handler).
   wc.on('will-redirect', denyForeign);
+  // The pet document's OWN initial load is a main-frame navigation too, and this guard is
+  // registered before `win.loadURL(...)`. Firing `onRendererReset` for it would call back into a
+  // motion controller that Task 15 creates AFTER `createPetWindow` returns — a TDZ ReferenceError
+  // thrown inside an Electron listener during startup. The first main-frame navigation is
+  // therefore the document arriving, not a reset; every later one (reload, crash recovery,
+  // in-page top-level navigation) is (fix round 1, finding 5).
+  let documentLoaded = false;
   wc.on('did-start-navigation', (details) => {
     if (!details.isMainFrame) return;
-    setClickThrough(win, true);
+    setClickThrough(win, true); // unconditional: Phase 1's click-through recovery, unchanged
+    if (!documentLoaded) { documentLoaded = true; return; }
     options.onRendererReset?.();
   });
   wc.on('render-process-gone', (_event, details) => {
     console.warn('[pet] render process gone', details.reason);
     setClickThrough(win, true);
+    // A dead renderer is always a reset, latch or no latch: the crash cannot precede the load.
     options.onRendererReset?.();
   });
 }

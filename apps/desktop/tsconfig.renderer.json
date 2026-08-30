@@ -16,10 +16,20 @@
   // from src/renderer/pet/main.ts, which drags in @ds/stage and the vendored Framework - only this
   // config has the @framework path mapping, the DOM lib and the three relaxations they need.
   "include": ["src/renderer/pet", "tests", "../../vendor/core/live2dcubismcore.d.ts", "../../packages/stage/src"],
-  // …with two exceptions, both main-side: §12.7's motion/arbiter fixtures construct
+  // …with three exceptions, all main-side: §12.7's motion/arbiter fixtures construct
   // `WindowMotionController`, which drags src/main (and app-protocol.ts) into whichever program
   // compiles them. Under this config's `strictNullChecks: false` app-protocol.ts's discriminated
   // union stops narrowing and TS2339 fires on code no Phase 3 task owns. They are compiled by
   // tsconfig.json (the main program) instead, where they type-check clean.
-  "exclude": ["tests/fixtures/motion", "tests/fixtures/arbiter"]
+  //
+  // Named BY FILE, not by directory (fix round 1, finding 6): tests/fixtures/motion and
+  // tests/fixtures/arbiter are also where a RENDERER-side fixture would naturally live, and a
+  // directory rule would silently hand it to the main program. The rule for later tasks:
+  // everything under tests/** belongs to the renderer program unless it is named in both of these
+  // lists — a main-side fixture adds one line here and one line in tsconfig.json.
+  "exclude": [
+    "tests/fixtures/motion/stale-generation.fixture.ts",
+    "tests/fixtures/motion/display-unplug.fixture.ts",
+    "tests/fixtures/arbiter/renderer-reload.fixture.ts"
+  ]
 }

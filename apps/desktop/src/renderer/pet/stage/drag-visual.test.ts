@@ -1,10 +1,47 @@
 import { describe, expect, it } from 'vitest';
 import type { Landing, WindowMotion } from '@ds/protocol';
+import { FLING_VELOCITY_CAP } from '../../shared/lane-metrics';
 import {
   DragVisual, applySquash, LEAN_ANGLE_X_DEG, LEAN_ANGLE_Z_DEG, LEAN_BODY_Z_DEG, LEAN_LAG_REF_DIP,
   SQUASH_COMPRESS_MS, SQUASH_IMPULSE_REF, SQUASH_MAX, SQUASH_OVERSHOOT_K, SQUASH_RECOVER_MS, STAND_UP_MS,
   SWAY_DECAY_RATE, SWAY_FOLLOW_RATE, TUMBLE_MAX_DEG, TUMBLE_RATE,
 } from './drag-visual';
+
+/**
+ * The slice of CubismMatrix44 `applySquash` uses, reimplemented here with the vendored class's own
+ * arithmetic (vendor/CubismWebFramework/src/math/cubismmatrix44.ts): row-major storage, row-vector
+ * convention (`transformY(y) = _tr[5]*y + _tr[13]`), and `scaleRelative`/`translateRelative` both
+ * PREPENDING via `multiply(tr1, this._tr, this._tr)`. The desktop vitest project has no
+ * `@framework/*` alias, so the real class cannot be imported here; `mirrors CubismMatrix44` below
+ * pins that this stand-in agrees with it on the identity and on a pure scale+translate base.
+ */
+class FakeMatrix44 {
+  private tr = new Float32Array(16);
+  constructor() { this.loadIdentity(); }
+  loadIdentity(): void { this.tr = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
+  getArray(): Float32Array { return this.tr; }
+  setMatrix(a: Float32Array): void { this.tr = new Float32Array(a); }
+  transformY(y: number): number { return this.tr[5] * y + this.tr[13]; }
+  private static multiply(a: Float32Array, b: Float32Array, dst: Float32Array): void {
+    const c = new Float32Array(16);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) for (let k = 0; k < 4; k++) c[j + i * 4] += a[k + i * 4] * b[j + k * 4];
+    dst.set(c);
+  }
+  scaleRelative(x: number, y: number): void {
+    FakeMatrix44.multiply(new Float32Array([x,0,0,0, 0,y,0,0, 0,0,1,0, 0,0,0,1]), this.tr, this.tr);
+  }
+  translateRelative(x: number, y: number): void {
+    FakeMatrix44.multiply(new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,0,1]), this.tr, this.tr);
+  }
+}
+
+/** A stage-fit base: scale `b`, translate `c` — never the all-zero array the call log used to use. */
+function fitted(b: number, c: number): Float32Array {
+  const m = new FakeMatrix44();
+  m.scaleRelative(b, b);
+  m.translateRelative(0, c / b); // translateRelative prepends, so the resulting _tr[13] is c
+  return new Float32Array(m.getArray());
+}
 
 const snap = (p: Partial<WindowMotion> = {}): WindowMotion => ({
   generation: 1, tsMain: 0, phase: 'drag', vx: 0, vy: 0, lagX: 0, lagY: 0, contact: null, ...p,
@@ -101,17 +138,19 @@ describe('squash envelope (§5.5)', () => {
 describe('tumble and stand-up (§7.5)', () => {
   it('tumbles toward clamp(vx/2400,-1,1)*18 while flinging, eased at TUMBLE_RATE', () => {
     const v = new DragVisual();
-    v.onSnapshot(snap({ phase: 'fling', vx: 2400 }));
+    v.onSnapshot(snap({ phase: 'fling', vx: FLING_VELOCITY_CAP }));
     const oneStep = v.step(250).tumbleDeg; // 1 - e^(-4*0.25) = 0.632
     expect(oneStep).toBeCloseTo(TUMBLE_MAX_DEG * (1 - Math.exp(-TUMBLE_RATE * 0.25)), 3);
     expect(run(v, 2_000).tumbleDeg).toBeCloseTo(TUMBLE_MAX_DEG, 1);
     v.onSnapshot(snap({ phase: 'fling', vx: -600 }));
-    expect(run(v, 2_000).tumbleDeg).toBeCloseTo(-4.5, 1);
+    // Derived from the cap, not the 4.5 that 600/2400 happens to give: the tumble reference IS
+    // FLING_VELOCITY_CAP, so a retune must move this number (fix round 1, finding 7).
+    expect(run(v, 2_000).tumbleDeg).toBeCloseTo(-(600 / FLING_VELOCITY_CAP) * TUMBLE_MAX_DEG, 1);
   });
 
   it('returns tumbleDeg to 0 within SQUASH_RECOVER_MS + STAND_UP_MS of a landing', () => {
     const v = new DragVisual();
-    v.onSnapshot(snap({ phase: 'fling', vx: 2400 }));
+    v.onSnapshot(snap({ phase: 'fling', vx: FLING_VELOCITY_CAP }));
     run(v, 2_000);
     v.onLanding(land());
     v.onSnapshot(snap({ phase: 'settling' }));
@@ -123,7 +162,7 @@ describe('tumble and stand-up (§7.5)', () => {
 
   it('stands up after a fling that ended without a landing (cancelled)', () => {
     const v = new DragVisual();
-    v.onSnapshot(snap({ phase: 'fling', vx: 2400 }));
+    v.onSnapshot(snap({ phase: 'fling', vx: FLING_VELOCITY_CAP }));
     run(v, 2_000);
     v.onSnapshot(snap({ phase: 'rest' }));
     expect(run(v, STAND_UP_MS + 16).tumbleDeg).toBe(0);
@@ -131,19 +170,41 @@ describe('tumble and stand-up (§7.5)', () => {
 });
 
 describe('applySquash (§5.5)', () => {
-  it('resets to the base matrix, then scaleRelative(1+s/2, 1-s) and a feet-planting translate', () => {
-    const calls: string[] = [];
-    const base = new Float32Array(16);
-    const matrix = {
-      getArray: () => base,
-      setMatrix: (a: Float32Array) => { calls.push(`set:${a === base}`); },
-      scaleRelative: (x: number, y: number) => { calls.push(`scale:${x.toFixed(3)},${y.toFixed(3)}`); },
-      translateRelative: (x: number, y: number) => { calls.push(`translate:${x},${y.toFixed(4)}`); },
-    };
-    applySquash(matrix, base, 0.18, -1);
-    expect(calls).toEqual(['set:true', 'scale:1.090,0.820', 'translate:0,-0.1800']);
-    calls.length = 0;
-    applySquash(matrix, base, 0, -1);
-    expect(calls).toEqual(['set:true']);
+  it('mirrors CubismMatrix44: a fitted base transforms y as b*y + c', () => {
+    const m = new FakeMatrix44();
+    m.setMatrix(fitted(2.5, -0.4));
+    expect(m.transformY(0)).toBeCloseTo(-0.4, 6);
+    expect(m.transformY(1)).toBeCloseTo(2.1, 6);
+    expect(m.transformY(-1)).toBeCloseTo(-2.9, 6);
+  });
+
+  // The property, not the call log: whatever formula applySquash uses, the feet must not move.
+  // `t = feetY * s` (the pre-fix compensation) leaves a residual -b*feetY*s^2 and fails this at
+  // every s > 0 (fix round 1, finding 3).
+  it.each([
+    [0.18, -1, 2.5, -0.4],
+    [SQUASH_MAX, -1.2, 1.75, 0.3],
+    [0.05, -0.8, 3, 0],
+    [0.18, 0.5, 2, 1.1],
+  ])('plants the feet for s=%s feetY=%s (base b=%s c=%s)', (s, feetY, b, c) => {
+    const base = fitted(b, c);
+    const m = new FakeMatrix44();
+    m.setMatrix(base);
+    const before = m.transformY(feetY);
+    applySquash(m, base, s, feetY);
+    expect(m.transformY(feetY)).toBeCloseTo(before, 6);
+  });
+
+  it('scales by (1+s/2, 1-s) about the feet and resets to the base for s = 0', () => {
+    const base = fitted(2.5, -0.4);
+    const m = new FakeMatrix44();
+    // §5.5's vertical compression: a point one unit above the feet ends up (1-s) as far above them.
+    applySquash(m, base, 0.18, -1);
+    const feet = m.transformY(-1);
+    expect(m.transformY(0) - feet).toBeCloseTo((1 - 0.18) * 2.5 * 1, 6);
+    expect(m.getArray()[0]).toBeCloseTo((1 + 0.18 / 2) * 2.5, 6); // scaleRelative(1+s/2, ...) on x
+    // s = 0 is the identity: the base matrix, untouched.
+    applySquash(m, base, 0, -1);
+    expect(Array.from(m.getArray())).toEqual(Array.from(base));
   });
 });

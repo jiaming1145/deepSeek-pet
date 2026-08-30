@@ -8,6 +8,7 @@
  * generation alone.
  */
 import type { Landing, WindowMotion } from '@ds/protocol';
+import { FLING_VELOCITY_CAP } from '../../shared/lane-metrics';
 
 export const LEAN_LAG_REF_DIP = 120;      // lag magnitude that maps to full lean
 export const LEAN_ANGLE_Z_DEG = 22;       // research §4: ParamAngleZ = clamp(lag/120,-1,1)*22
@@ -25,8 +26,12 @@ export const TUMBLE_MAX_DEG = 18;         // §7.5: tumbleDeg = clamp(vx / FLING
 export const TUMBLE_RATE = 4.0;           // s⁻¹ easing toward the tumble target
 export const STAND_UP_MS = 320;           // easeOutCubic return of tumbleDeg to 0 after a landing
 
-/** The literal is LandingSchema.impulse's max (§2.4); lane-metrics.test.ts pins FLING_VELOCITY_CAP === 2400. */
-const VELOCITY_REF = 2400;
+/**
+ * §7.5's tumble reference IS the fling velocity cap (§2.4 gives LandingSchema.impulse the same max).
+ * Imported, not re-declared: §5.13's one home. A retune of the cap must move the tumble with it,
+ * and a local `2400` would silently keep the old ratio (fix round 1, finding 7).
+ */
+const VELOCITY_REF = FLING_VELOCITY_CAP;
 /** `moving` stays true this long after the final `rest` snapshot (§5.8's 500 ms hysteresis). */
 const MOVING_HOLD_MS = 500;
 
@@ -56,15 +61,24 @@ export interface SquashMatrix {
 /**
  * §5.5: `scaleRelative(1 + s/2, 1 − s)` plus a compensating translate so the feet stay planted.
  * `base` is the model matrix as fitted by the stage (captured once, before any squash);
- * `feetY` is the y of the feet under `base`, so the bottom edge stays where it was.
+ * `feetY` is the feet's y in MODEL space — the coordinate you would pass to `base.transformY`,
+ * not a screen value — so the bottom edge lands back exactly where `base` put it.
  * `translateRelative`, not `translateY`: CubismMatrix44's translate* ASSIGN _tr[12]/_tr[13]
  * (packages/stage/src/stage.ts:182), which would discard the fit's own translation.
+ *
+ * The compensation is `feetY * s / (1 - s)`, NOT `feetY * s`. Both `scaleRelative` and
+ * `translateRelative` PREPEND (`multiply(tr1, this._tr, this._tr)` with the row-vector convention
+ * `transformY(y) = _tr[5]*y + _tr[13]`), so the composite maps `y -> ((y + t)(1 - s))*b + c` for a
+ * base scale `b` and translate `c`. Planting the feet means `(feetY + t)(1 - s) = feetY`, i.e.
+ * `t = feetY * s / (1 - s)`. `t = feetY * s` leaves a residual `-b * feetY * s^2` — 3.2 % of the
+ * feet offset at SQUASH_MAX = 0.18, a visible slide on the frame with the deepest compression
+ * (fix round 1, finding 3).
  */
 export function applySquash(matrix: SquashMatrix, base: Float32Array, s: number, feetY: number): void {
   matrix.setMatrix(base);
   if (s === 0) return;
   matrix.scaleRelative(1 + s / 2, 1 - s);
-  matrix.translateRelative(0, feetY * s);
+  matrix.translateRelative(0, (feetY * s) / (1 - s));
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);

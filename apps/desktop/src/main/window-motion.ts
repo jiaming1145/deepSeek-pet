@@ -16,6 +16,7 @@ import {
   REST_SPEED_DIP_S, WALK_COOLDOWN_MS, WALK_MAX_MS, WALK_MIN_DISTANCE_DIP, WALK_SPEED_DIP_S,
 } from '../renderer/shared/lane-metrics';
 import { PET_SIZE } from './pet-window';
+import type { TracePayloads } from './trace';
 import { clampDrag, MIN_GRABBABLE, type Rect } from './window-state';
 
 // §5.13: one home, re-exported here; nothing below re-declares a number that lives there.
@@ -46,6 +47,17 @@ export interface WindowMotionDeps {
   suspendHoverSwitching(suspend: boolean): void;
   send(channel: 'sim:windowMotion' | 'sim:landing', payload: WindowMotion | Landing): void;
   persist(x: number, y: number): void;              // -> savePetPosition (window.json)
+  /**
+   * §12.2's `motion` and `landing` trace records, whose Source column names this class
+   * ("`motion` | phase, generation, vx, vy, lagX, lagY, clamped (bool) | WindowMotionController").
+   * Optional so the unit lane and the §12.7 fixtures construct the controller without a writer;
+   * Task 15 passes `(t, p) => trace.write(t, p)` — the signature is `TraceWriter.write` narrowed to
+   * the two kinds this class owns. Without it `clamped` is unobservable and B-07's "emitted" column
+   * (motion records continue with the same generation and `clamped: true`) cannot be asserted
+   * anywhere: `WindowMotionSchema` has no `clamped` field and never will (it is a diagnostic, not a
+   * renderer input).
+   */
+  trace?<K extends 'motion' | 'landing'>(t: K, payload: TracePayloads[K]): void;
   now?: () => number;                                // monotonic ms; default hrtime
 }
 
@@ -247,7 +259,6 @@ export class WindowMotionController {
     const real = Math.min(Math.max(0, (t - this.lastFrameAt) / 1000), MOTOR_FRAME_CLAMP_S);
     this.lastFrameAt = t;
     this.acc += real;
-    this.clamped = false;
     if (this._phase === 'drag') this.sample(t);
     // `this.phase`, not `this._phase`: the early return above narrowed `_phase` to exclude
     // 'settling' for the rest of this method, and TypeScript cannot see that `substep` (a floor
@@ -360,12 +371,16 @@ export class WindowMotionController {
     if (edge === 'floor' && !this.landed) {
       this.landed = true;
       if (speed >= LANDING_MIN_IMPULSE) {
+        const impulse = Math.min(speed, FLING_VELOCITY_CAP);
         this.deps.send('sim:landing', {
           generation: this._generation,
           tsMain: this.now(),
-          impulse: Math.min(speed, FLING_VELOCITY_CAP),
+          impulse,
           edge,
         });
+        // §12.2 `landing`, same Source column as `motion`. Mirrors the IPC exactly: a contact under
+        // LANDING_MIN_IMPULSE is not a landing on either wire.
+        this.deps.trace?.('landing', { generation: this._generation, impulse, edge });
       }
     }
     if (bounce && speed >= REST_SPEED_DIP_S) {
@@ -419,16 +434,26 @@ export class WindowMotionController {
   /** §7.8: `WindowMotionSchema`, `tsMain` in main's monotonic domain. */
   private snapshot(): void {
     const dragging = this._phase === 'drag';
+    const vx = clamp(this.vel.x, -FLING_VELOCITY_CAP, FLING_VELOCITY_CAP);
+    const vy = clamp(this.vel.y, -FLING_VELOCITY_CAP, FLING_VELOCITY_CAP);
+    const lagX = dragging ? this.lag.x : 0;
+    const lagY = dragging ? this.lag.y : 0;
     this.deps.send('sim:windowMotion', {
       generation: this._generation,
       tsMain: this.now(),
       phase: this._phase,
-      vx: clamp(this.vel.x, -FLING_VELOCITY_CAP, FLING_VELOCITY_CAP),
-      vy: clamp(this.vel.y, -FLING_VELOCITY_CAP, FLING_VELOCITY_CAP),
-      lagX: dragging ? this.lag.x : 0,
-      lagY: dragging ? this.lag.y : 0,
+      vx,
+      vy,
+      lagX,
+      lagY,
       contact: this.contact,
     });
+    // §12.2 `motion`. `clamped` means "a clampDrag pull happened since the last snapshot", so it is
+    // cleared HERE and not at the top of frame(): a rebase() runs between frames (display-removed
+    // arrives on the Electron event loop, never inside the motor tick) and its pull must survive
+    // into the record that reports it — B-07's whole point.
+    this.deps.trace?.('motion', { phase: this._phase, generation: this._generation, vx, vy, lagX, lagY, clamped: this.clamped });
+    this.clamped = false;
   }
 
   /** §7.5 settling → rest, and the `cancelled` path shared by grab-supersede, cancel and dispose. */
