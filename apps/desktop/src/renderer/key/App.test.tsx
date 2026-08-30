@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // See chat/History.test.tsx: tsconfig.ui.json does not include src/renderer/test-setup.ts, so
 // jest-dom's vitest augmentation has to be imported here for `toBeInTheDocument` to type-check.
 import '@testing-library/jest-dom/vitest';

@@ -1,10 +1,11 @@
+// @vitest-environment jsdom
 // tsconfig.ui.json (T0's) includes src/renderer/chat but not src/renderer/test-setup.ts, so
 // jest-dom's `declare module 'vitest'` augmentation never reaches the strict UI type program.
 // Importing it here is what makes `toBeInTheDocument` exist for tsc; at runtime the setup file
 // has already applied it and a second import is a no-op.
 import '@testing-library/jest-dom/vitest';
 import type { HistoryRow } from '@ds/protocol';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { History } from './History';
 
@@ -86,5 +87,70 @@ describe('History', () => {
   it('shows the empty-state copy when there is nothing to read', async () => {
     mount([]);
     await waitFor(() => expect(screen.getByText('还没聊过。说点什么吧。')).toBeInTheDocument());
+  });
+
+  // Fix round 1, finding 2 (a). 6.3 orders rows newest-at-the-bottom, so the pane must open on the
+  // newest row. It used to open at scrollTop 0 — the oldest row — with the newest one clipped off
+  // the bottom edge (visible in docs/evidence/phase2/chat-history-light.png).
+  it('opens parked on the newest row rather than scrolled to the oldest, every time it opens', async () => {
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollHeight');
+    Object.defineProperty(Element.prototype, 'scrollHeight', { configurable: true, get: () => 1000 });
+    try {
+      const list = vi.fn(async () => ({ rows: ROWS, nextBefore: null }));
+      const remove = vi.fn(async () => {});
+      const view = render(<History open list={list} remove={remove} now={() => CLOCK} />);
+      await waitFor(() => expect(screen.getByTestId('msg-3')).toBeInTheDocument());
+      expect(screen.getByRole('log').scrollTop).toBe(1000);
+      // 历史 is a toggle: closing unmounts the pane, so the second open gets a fresh div at
+      // scrollTop 0 and has to be parked again.
+      view.rerender(<History open={false} list={list} remove={remove} now={() => CLOCK} />);
+      expect(screen.queryByRole('log')).toBeNull();
+      view.rerender(<History open list={list} remove={remove} now={() => CLOCK} />);
+      expect(screen.getByRole('log').scrollTop).toBe(1000);
+    } finally {
+      if (desc === undefined) delete (Element.prototype as { scrollHeight?: unknown }).scrollHeight;
+      else Object.defineProperty(Element.prototype, 'scrollHeight', desc);
+    }
+  });
+
+  // Fix round 1, finding 2 (b). The sentinel is the first child of the scroll container, so at
+  // scrollTop 0 it is permanently intersecting: the observer fired, loaded, re-attached, fired
+  // again, and pulled the whole store in one burst. jsdom keeps scrollTop at 0 (no layout), which
+  // is exactly the state the gate has to refuse to observe in.
+  it('does not pull page after page the moment the pane opens', async () => {
+    const observed: Element[] = [];
+    class FakeIO {
+      constructor(private readonly cb: IntersectionObserverCallback) {}
+      observe(el: Element): void {
+        observed.push(el);
+        this.cb(
+          [{ isIntersecting: true, target: el } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    const holder = globalThis as { IntersectionObserver?: unknown };
+    const prev = holder.IntersectionObserver;
+    holder.IntersectionObserver = FakeIO;
+    try {
+      const list = vi.fn(async (opts: { before?: number; limit?: number }) => ({
+        rows: opts.before === undefined ? ROWS : [],
+        nextBefore: opts.before === undefined ? 100 : null,
+      }));
+      render(<History open list={list} remove={vi.fn(async () => {})} now={() => CLOCK} />);
+      await waitFor(() => expect(screen.getByTestId('msg-3')).toBeInTheDocument());
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(list).toHaveBeenCalledTimes(1);
+      expect(observed).toHaveLength(0);
+    } finally {
+      holder.IntersectionObserver = prev;
+    }
   });
 });

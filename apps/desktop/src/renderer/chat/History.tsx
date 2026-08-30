@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { HistoryRow } from '@ds/protocol';
 
@@ -33,12 +33,22 @@ export function History(props: HistoryProps): JSX.Element {
   const [nextBefore, setNextBefore] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  // The top sentinel is only a paging trigger once the pane is scrolled away from it. At
+  // scrollTop 0 it is permanently intersecting, so observing it there loads page after page in
+  // one burst and 6.3's 50-row paging throttles nothing.
+  const [pagingArmed, setPagingArmed] = useState(false);
   const startedRef = useRef(false);
+  const parkedRef = useRef(false);
+  const anchorRef = useRef<number | null>(null);
+  const paneRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const loadPage = useCallback(
     async (before?: number) => {
       setLoading(true);
+      // An older page is prepended above the sentinel. Remember the height first so the layout
+      // effect below can hold the reader's place instead of letting the offset slide.
+      if (before !== undefined) anchorRef.current = paneRef.current?.scrollHeight ?? null;
       try {
         const page = await list(before === undefined ? { limit: HISTORY_PAGE } : { before, limit: HISTORY_PAGE });
         setRows((prev) => {
@@ -62,9 +72,43 @@ export function History(props: HistoryProps): JSX.Element {
     void loadPage();
   }, [open, loadPage]);
 
+  // 6.3 orders rows newest-at-the-bottom, so the pane opens on the newest row, not the oldest one.
+  // Parking also moves the top sentinel out of view, which is what keeps the paging effect below
+  // from firing the moment the pane opens.
+  useLayoutEffect(() => {
+    if (!open) {
+      // Closing unmounts the pane; reopening builds a fresh div at scrollTop 0, so the park has to
+      // run again or the second open lands on the oldest row.
+      parkedRef.current = false;
+      setPagingArmed(false);
+      return;
+    }
+    if (!loaded || parkedRef.current) return;
+    const el = paneRef.current;
+    if (el === null) return;
+    parkedRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    setPagingArmed(el.scrollTop > 0);
+  }, [open, loaded]);
+
+  // Hold the reader's place when an older page lands above them.
+  useLayoutEffect(() => {
+    const before = anchorRef.current;
+    if (before === null) return;
+    anchorRef.current = null;
+    const el = paneRef.current;
+    if (el === null) return;
+    el.scrollTop += el.scrollHeight - before;
+  }, [rows]);
+
+  const onScroll = useCallback(() => {
+    const el = paneRef.current;
+    setPagingArmed(el !== null && el.scrollTop > 0);
+  }, []);
+
   // Paging: the top sentinel scrolls into view -> fetch the previous page. No virtualization (6.3).
   useEffect(() => {
-    if (!open || nextBefore === null || loading) return;
+    if (!open || nextBefore === null || loading || !pagingArmed) return;
     if (typeof IntersectionObserver === 'undefined') return;
     const el = sentinelRef.current;
     if (el === null) return;
@@ -75,7 +119,7 @@ export function History(props: HistoryProps): JSX.Element {
     return () => {
       io.disconnect();
     };
-  }, [open, nextBefore, loading, loadPage]);
+  }, [open, nextBefore, loading, pagingArmed, loadPage]);
 
   const onDelete = useCallback(
     async (turnId: string) => {
@@ -141,7 +185,7 @@ export function History(props: HistoryProps): JSX.Element {
   }
 
   return (
-    <div className="history" role="log" aria-label="聊天记录">
+    <div className="history" role="log" aria-label="聊天记录" ref={paneRef} onScroll={onScroll}>
       <div className="history__sentinel" ref={sentinelRef} />
       {items}
       {loaded && rows.length === 0 && <p className="history__empty">还没聊过。说点什么吧。</p>}
