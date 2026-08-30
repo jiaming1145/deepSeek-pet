@@ -312,6 +312,9 @@ describe('rebase / cancel / dispose (§7.7)', () => {
     const h = make({ pos: [1000, 100], areas: [AREA, { x: 1920, y: 0, width: 1920, height: 1040 }] });
     const r = runDisplayUnplug(h);
     expect(r.dragGenerationKept).toBe(true);
+    // Read inside the fixture BEFORE the next motor frame, so the pull is attributed to rebase()
+    // itself and not to the writePosition() that follows it (fix round 2, finding 2).
+    expect(r.dragClampedByRebase).toBe(true);
     expect(r.dragClamped).toBe(true);
     // B-07's "emitted" column, observable through WindowMotionDeps.trace: the `motion` records that
     // follow the unplug keep the generation and carry `clamped: true` (fix round 1, finding 4).
@@ -322,6 +325,36 @@ describe('rebase / cancel / dispose (§7.7)', () => {
     // above compare two genuinely different records (fix round 1, finding 1).
     expect(r.flingGenerationTraced).toBe(true);
     expect(r.finalGrabbable).toBe(true);
+  });
+
+  it('a clampDrag pull by rebase() is reported by the next motion record, not swallowed by the frame between', () => {
+    const SECOND = { x: 1920, y: 0, width: 1920, height: 1040 };
+    const BAND_MAX = AREA.width - 48; // clampDrag's grabbable band on the primary: x <= 1872
+    const h = make({ pos: [1000, 100], areas: [AREA, SECOND] });
+    h.setCursor(1100, 200);
+    h.ctl.grab({ pressId: 1, modelX: 0, modelY: 0, screenX: 1100, screenY: 200 });
+    h.setCursor(2600, 200);
+    h.frame(400); // terminal k·L/c = 189.4 DIP/s under the ±24 lag clamp -> x ≈ 2288, second display
+    expect(h.position()[0]).toBeGreaterThan(BAND_MAX);
+    // Turn her around BEFORE the unplug. After the rebase she must be travelling INWARD, so the
+    // frame that publishes the record clamps nothing on its own: the `clamped: true` it carries can
+    // then only have come from the rebase.
+    h.setCursor(600, 200);
+    h.frame(30);
+    expect(h.position()[0]).toBeGreaterThan(BAND_MAX);
+    const nTrace = h.motionTraces().length;
+    h.setAreas([AREA]);
+    h.ctl.rebase();
+    expect(h.position()[0]).toBe(BAND_MAX); // §7.7: rebase() re-clamps AND writes, before any frame
+    // §7.8 publishes on every SECOND motor frame, so the rebase may land on an odd one. `clamped`
+    // means "a pull happened since the last snapshot" and is cleared at the END of snapshot(),
+    // never at the top of frame() — clearing it there reports `false` here (fix round 2, finding 3).
+    for (let i = 0; i < 4 && h.motionTraces().length === nTrace; i++) h.frame(1);
+    const after = h.motionTraces().slice(nTrace);
+    expect(after.length).toBeGreaterThan(0);
+    expect(after[0].clamped).toBe(true);
+    expect(after[0].generation).toBe(1);
+    expect(h.position()[0]).toBeLessThan(BAND_MAX); // she moved inward: no pull of the frame's own
   });
 
   it('cancel() ends a live episode: rest frame, hover switching resumed, position persisted, no timer', () => {

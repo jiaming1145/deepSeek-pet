@@ -52,7 +52,9 @@ export interface DragPose {
 
 /** The slice of CubismMatrix44 the squash needs. */
 export interface SquashMatrix {
+  /** CubismMatrix44 returns its LIVE `_tr` by reference (cubismmatrix44.ts:85-87) — never a copy. */
   getArray(): Float32Array;
+  /** CubismMatrix44 copies element-wise INTO that same live `_tr` (cubismmatrix44.ts:74-78). */
   setMatrix(a: Float32Array): void;
   scaleRelative(x: number, y: number): void;
   translateRelative(x: number, y: number): void;
@@ -60,7 +62,16 @@ export interface SquashMatrix {
 
 /**
  * §5.5: `scaleRelative(1 + s/2, 1 − s)` plus a compensating translate so the feet stay planted.
- * `base` is the model matrix as fitted by the stage (captured once, before any squash);
+ *
+ * `base` is the model matrix as fitted by the stage, captured once before any squash, and it MUST
+ * be a PRIVATE COPY owned by the caller — `new Float32Array(matrix.getArray())`, never
+ * `matrix.getArray()` itself. CubismMatrix44's `getArray()` hands back the live `_tr` by reference
+ * and `setMatrix()` copies element-wise into that same buffer, so an aliased `base` is destroyed by
+ * the first squash frame (`scaleRelative`/`translateRelative` mutate it in place) and every later
+ * frame then squashes an already-squashed matrix — the y scale compounds as (1−s)ⁿ instead of
+ * holding at (1−s). Pinned by 'needs a PRIVATE base copy' in drag-visual.test.ts (fix round 2,
+ * finding 4); the stage (Task 13) owns the capture site and must make that copy.
+ *
  * `feetY` is the feet's y in MODEL space — the coordinate you would pass to `base.transformY`,
  * not a screen value — so the bottom edge lands back exactly where `base` put it.
  * `translateRelative`, not `translateY`: CubismMatrix44's translate* ASSIGN _tr[12]/_tr[13]
