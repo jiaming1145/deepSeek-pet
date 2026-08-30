@@ -98,17 +98,15 @@ bridge?.on(Channels.hintShow, (h) => {
   scheduleReport();
 });
 // The bubble follows the pet's visibility state (§5.4 rule 5): hidden means nobody can see her.
+// CX-2 / I-6: the controller owns the visible state — pause() stops the reveal, the acks and the
+// mouth and hides the band; resume() re-shows the band if a turn is still on it and carries on.
 bridge?.on(Channels.shellVisibility, ({ hidden }) => {
   if (hidden) {
     hint.dismiss();
-    bubble.hide();
+    speech.pause();
     return;
   }
-  // I-6: main re-shows the WINDOW on this edge while she is still speaking; the band ELEMENT was
-  // hidden above and Bubble.show() otherwise only runs from beginTurn(), so the rest of the reply
-  // (and its linger) would paint into nothing. Re-show it whenever the controller still has a turn.
-  if (!speech.active) return;
-  bubble.show();
+  speech.resume();
   scheduleReport();
 });
 
