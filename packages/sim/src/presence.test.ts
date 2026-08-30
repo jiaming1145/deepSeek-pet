@@ -78,8 +78,10 @@ describe('typingStep (§10.4 — the probableTyping predicate, exactly R3-9)', (
     expect(s2.probableTyping).toBe(false);
   });
   it('thresholds are strict: age 1000 and delta 2 are NOT typing samples; 999 and 1.99 are', () => {
-    expect(typingStep({ ...idle, rose: false, fell: false }, { inputAgeMs: 1000, cursorDeltaDip: 0 }, 0).typingSamples).toBe(0);
-    expect(typingStep({ ...idle, rose: false, fell: false }, { inputAgeMs: 0, cursorDeltaDip: 2 }, 0).typingSamples).toBe(0);
-    expect(typingStep({ ...idle, rose: false, fell: false }, { inputAgeMs: 999, cursorDeltaDip: 1.99 }, 0).typingSamples).toBe(1);
+    // `idle` carries exactly the four TypingState fields; `rose`/`fell` are OUTPUTS of typingStep,
+    // so a fresh literal carrying them is an excess-property error under `strict` (tsc TS2353).
+    expect(typingStep(idle, { inputAgeMs: 1000, cursorDeltaDip: 0 }, 0).typingSamples).toBe(0);
+    expect(typingStep(idle, { inputAgeMs: 0, cursorDeltaDip: 2 }, 0).typingSamples).toBe(0);
+    expect(typingStep(idle, { inputAgeMs: 999, cursorDeltaDip: 1.99 }, 0).typingSamples).toBe(1);
   });
 });
