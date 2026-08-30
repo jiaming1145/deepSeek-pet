@@ -47,6 +47,42 @@ describe('HoverAckMachine', () => {
     expect(log).toHaveLength(3);
   });
 
+  // Fix round 1 (finding 3): `ackLatencyMs` was a hardcoded 0, so the `<= HOVER_ACK_MAX_MS`
+  // assertion above could not fail and bar §0's "hover < 250 ms -> acknowledge" was unmeasured.
+  // `enter` now takes the picker's opaque-report timestamp; the full picker->enter path is still
+  // Task 13/17's to prove end to end.
+  it('measures the picker → acknowledge latency instead of reporting a constant 0', () => {
+    const a = harness();
+    a.m.enter(1_040, 1_000);
+    expect(a.m.ackLatencyMs).toBe(40);
+    expect(a.m.ackLatencyMs).toBeLessThanOrEqual(HOVER_ACK_MAX_MS);
+    const late = harness();
+    late.m.enter(1_400, 1_000);                             // a report the frame loop sat on
+    expect(late.m.ackLatencyMs).toBe(400);
+    expect(late.m.ackLatencyMs).toBeGreaterThan(HOVER_ACK_MAX_MS);   // the bound can now fail
+    const now = harness();
+    now.m.enter(500);                                       // default: reported this frame
+    expect(now.m.ackLatencyMs).toBe(0);
+  });
+
+  // Fix round 1 (finding 7): contracts §12 reads one `hoverAck` record per state change; `held` and
+  // `out` emitted nothing, so a later assertion on the state sequence would have found gaps.
+  it('traces every state change, not only acknowledging and faded', () => {
+    const { m, log } = harness(true);
+    const traces = () => log.filter((l) => l.startsWith('trace:'));
+    m.enter(0);
+    m.tick(400);
+    m.tick(3_401);
+    m.leave(4_000);
+    expect(m.state).toBe('out');
+    expect(traces()).toEqual([
+      'trace:hoverAck:acknowledging', 'trace:hoverAck:held', 'trace:hoverAck:faded', 'trace:hoverAck:out',
+    ]);
+    m.enter(5_000);
+    m.leave(5_100);
+    expect(traces().slice(-2)).toEqual(['trace:hoverAck:acknowledging', 'trace:hoverAck:out']);
+  });
+
   it('acknowledging → held when the glance ends; the freeze stays', () => {
     const { m, log } = harness();
     m.enter(0);

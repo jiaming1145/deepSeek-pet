@@ -39,17 +39,24 @@ export class HoverAckMachine {
   constructor(private readonly deps: HoverAckDeps) {}
 
   get state(): HoverState { return this.st; }
-  /** ms between `enter` and the glance request — 0 by construction (the glance is issued inside `enter`). */
+  /**
+   * ms from the picker's opaque report to the glance request, i.e. `nowMs - opaqueAt` at `enter`.
+   * FIX ROUND 1 (finding 3): this was a hardcoded 0, which made
+   * `expect(m.ackLatencyMs).toBeLessThanOrEqual(HOVER_ACK_MAX_MS)` a test that could not fail and
+   * left bar §0's "hover < 250 ms -> acknowledge" unmeasured by anything. The caller (Task 13's
+   * picker path) passes the timestamp the pixel was reported opaque; the whole picker->enter path
+   * is still Task 13/17's to prove end to end, but the bound is now a real measurement here.
+   */
   get ackLatencyMs(): number { return this.latency; }
 
-  /** Row 1: picker reports opaque. */
-  enter(nowMs: number): void {
+  /** Row 1: picker reports opaque. `opaqueAt` defaults to `nowMs` (the picker reported this frame). */
+  enter(nowMs: number, opaqueAt: number = nowMs): void {
     if (this.st !== 'out') return;
     this.st = 'acknowledging';
     this.stillSince = nowMs;
     this.glanceEndsAt = nowMs + HOVER_ACK_GLANCE_MS;
     this.deps.glance(HOVER_ACK_GLANCE_MS);
-    this.latency = 0;
+    this.latency = Math.max(0, nowMs - opaqueAt);
     this.deps.setFrozen(true);
     this.deps.trace({ kind: 'hoverAck', label: 'acknowledging' });
   }
@@ -63,6 +70,11 @@ export class HoverAckMachine {
   /** Rows 4 and 5: cursor leaves. */
   leave(_nowMs: number): void {
     if (this.st === 'out') return;
+    // FIX ROUND 1 (finding 7): §12's trace table is one record per state change, so `held` and `out`
+    // are traced too. The `out` record is emitted BEFORE the effects (unlike `acknowledging` and
+    // `faded`, which follow theirs) so that the ordering assertions in `hover-ack.test.ts` keep
+    // reading the effect sequence; the two are one synchronous transition either way.
+    this.deps.trace({ kind: 'hoverAck', label: 'out' });
     if (this.st === 'faded') {
       this.deps.setModelOapcity(1, WORK_MODE_FADE_MS);
       this.deps.sendPassthrough(false);
@@ -79,7 +91,10 @@ export class HoverAckMachine {
 
   /** Rows 2 and 3, driven per frame. */
   tick(nowMs: number): void {
-    if (this.st === 'acknowledging' && nowMs >= this.glanceEndsAt) this.st = 'held';
+    if (this.st === 'acknowledging' && nowMs >= this.glanceEndsAt) {
+      this.st = 'held';
+      this.deps.trace({ kind: 'hoverAck', label: 'held' });
+    }
     if (this.st === 'held' && this.deps.workMode() && nowMs - this.stillSince > WORK_MODE_FADE_AFTER_MS) {
       this.st = 'faded';
       this.deps.setModelOapcity(WORK_MODE_FADE_OPACITY, WORK_MODE_FADE_MS);

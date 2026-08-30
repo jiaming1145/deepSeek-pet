@@ -80,7 +80,13 @@ describe('drawSaccadeInterval', () => {
       if (low === SACCADE_MIN_MS) clampedAtMin += 1;
       expect(drawSaccadeInterval(200_000, hi)).toBe(SACCADE_MAX_MS);
     }
-    expect(clampedAtMin).toBeGreaterThanOrEqual(195);
+    // Fix round 1 (finding 6): this bound was 195, a number read off ONE seed (mulberry32(3) yields
+    // exactly 198/200). The spec-level statement is "the floor bites for all but the lognormal's
+    // upper tail": with CV = sigma/mean = 4 the tail above 8 000 ms is ~1.9 %, so even a 5-sigma
+    // unlucky seed stays far above 150/200. A future seed or sampler change now has to break the
+    // DISTRIBUTION, not one draw, before this fails. (The tail itself is C-1's open ruling: a
+    // mean-relative sigma would make a below-range mean clamp deterministically.)
+    expect(clampedAtMin).toBeGreaterThanOrEqual(150);
   });
 });
 
@@ -179,6 +185,49 @@ describe('GazeLane', () => {
     expect(log).toEqual(['llm:preempted', 'llm2:preempted']);
     lane.tick(500);
     expect(log).toEqual(['llm:preempted', 'llm2:preempted', 'touch:expired']);
+  });
+
+  // Fix round 1 (finding 1). The sleep branch never advanced `nextBreakAt` and neither did
+  // `setPresentation`, so after a sleep longer than the pending interval the very first awake tick
+  // satisfied the break guard and fired a saccade at t+0 -- an interval of 0 ms relative to wake
+  // (not D3's 8-20 s) and a spurious `gazeBreak` in Task 17's D16 trace. 120 s asleep reproduces it
+  // for every seed, because it is longer than SACCADE_MAX_MS.
+  it('waking from a sleep longer than SACCADE_MAX_MS reschedules the break instead of firing one', () => {
+    const { lane, traces } = harness();
+    lane.setCursor({ x: 0, y: 0, dipX: 0, dipY: 0 }, 0);
+    lane.tick(0);
+    lane.setPresentation('sleep');
+    lane.tick(1_000);
+    expect(lane.state).toBe('sleep');
+    lane.tick(121_000);                                        // 120 s asleep, > SACCADE_MAX_MS
+    expect(lane.state).toBe('sleep');
+    lane.setPresentation('awake');
+    lane.setCursor({ x: 0, y: 0, dipX: 4, dipY: 0 }, 121_016);  // a real move: follow, not restDrift
+    lane.tick(121_016);
+    expect(lane.state).toBe('follow');
+    expect(traces).toEqual([]);
+    lane.tick(121_016 + SACCADE_SUPPRESS_MS - 1);
+    expect(lane.state).toBe('follow');
+    expect(traces).toEqual([]);
+  });
+
+  // Fix round 1 (finding 5). `setEyes` re-armed the recruitment window on EVERY tick whose target
+  // moved at all, so while the cursor kept drifting `nowMs - jump.at >= GAZE_HEAD_DELAY_MS` was
+  // never true and the head/body outputs never left 0.
+  it('a supra-threshold shift recruits the head even while the cursor keeps drifting', () => {
+    const { lane } = harness();
+    lane.setCursor({ x: 0, y: 0, dipX: 0, dipY: 0 }, 0);
+    lane.tick(0);
+    lane.setCursor({ x: 0.6, y: 0, dipX: 300, dipY: 0 }, 16);   // 0.6 x 30 = 18 deg > the threshold
+    expect(lane.tick(16).head.x).toBe(0);
+    let headMovedAt = -1;
+    for (let t = 32; t <= 480; t += 16) {
+      lane.setCursor({ x: 0.6 + (t - 16) * 0.0001, y: 0, dipX: 300 + (t - 16), dipY: 0 }, t);
+      const out = lane.tick(t);                                 // ~0.05 deg per frame: eyes-only
+      if (headMovedAt < 0 && out.head.x > 0) headMovedAt = t;
+    }
+    expect(headMovedAt).toBeGreaterThanOrEqual(16 + GAZE_HEAD_DELAY_MS);
+    expect(headMovedAt).toBeLessThan(16 + GAZE_HEAD_DELAY_MS + 32);
   });
 
   it('sleep overrides everything; head and body lag the eyes on a large jump, not on a small one', () => {

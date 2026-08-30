@@ -77,6 +77,16 @@ export class ExpressionLane {
   }
 
   request(cmd: LaneRequest<ExpressionPayload>, nowMs: number): LaneLease<ExpressionPayload> | null {
+    // FIX ROUND 1 (finding 4). A payload whose clamped weight is not positive is not an expression:
+    // `clampExpressionWeight` maps NaN and negatives to 0, and granting that showed one frame of a
+    // weight-0 expression, swapped the model away from the mood baseline, and ended `completed` on
+    // the very next tick with a spurious `laneResult` trace. Refused BEFORE the holder is touched,
+    // so a covered LLM lease is never disturbed by an invalid overlay. `cancelled` (not `preempted`)
+    // because this is a malformed command, not a lost arbitration (§5.1's refusal rule).
+    if (!(cmd.payload.weight > 0)) {
+      cmd.onResult?.('cancelled');
+      return null;
+    }
     const cur = this.holder.current;
     if (cmd.source === 'touch' && cur?.source === 'llm') {
       // §5.1: "cover, do not cancel" — the LLM lease keeps expiring underneath.
