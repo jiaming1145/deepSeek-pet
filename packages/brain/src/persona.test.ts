@@ -88,6 +88,16 @@ describe('CharacterCardSchema / parseCharacterBundle', () => {
     expect(countChars('你好')).toBe(2);
     expect(countChars('')).toBe(0);
   });
+
+  it('widens cannedLines with §4.10 defaults so an older bundle still loads', () => {
+    const b = parseCharacterBundle({ card: RAW_CARD, cannedLines: { offline: ['a'], empty: ['b'] } });
+    expect(b.cannedLines.remember).toEqual(['嗯，记下了。']);
+    expect(b.cannedLines.forget).toEqual(['那就当没听过。']);
+    expect(b.cannedLines.mode).toEqual({ toPlain: ['好，接下来正常回答。'], toCharacter: ['嗯，回来了。'] });
+    const explicit = parseCharacterBundle({ card: RAW_CARD, cannedLines: {
+      offline: ['a'], empty: ['b'], remember: ['r'], forget: ['f'], mode: { toPlain: ['p'], toCharacter: ['c'] } } });
+    expect(explicit.cannedLines.mode.toPlain).toEqual(['p']);
+  });
 });
 
 describe('renderStaticSystem', () => {
@@ -140,15 +150,33 @@ describe('renderStaticSystem', () => {
     expect(renderStaticSystem({ ...CARD, system_prompt: '' }, [])).not.toContain('【说话方式】');
   });
 
-  it('plain mode drops every persona section and keeps the tag grammar (P3)', () => {
+  it('plain mode drops every persona section AND the tag grammar (R3-12, §9.2)', () => {
     const s = renderStaticSystem(CARD, ['nod'], 'plain');
     expect(s).toContain('【当前模式】');
-    expect(s).toContain('【标记语法】');
+    expect(s).toContain('【输出格式】');
+    expect(s).toContain('不要写 <|ACT ...|>');
+    expect(s).not.toContain('【标记语法】');
     expect(s).not.toContain('MARKER_LINE');
     expect(s).not.toContain('【硬性规则】');
     expect(s).not.toContain('【我是谁】');
     expect(s).not.toContain('【性格】');
     expect(s).not.toContain('【示例】');
+    // Both profiles keep the safety/output grammar (R3-12).
+    expect(s).toContain('不要用 markdown');
+    expect(s).toContain('不知道就说不知道');
+  });
+
+  it('plain profile is byte-stable across motionKeys (§9.2 identity)', () => {
+    expect(renderStaticSystem(CARD, [], 'plain')).toBe(renderStaticSystem(CARD, bundleMotionKeys, 'plain'));
+    expect(renderStaticSystem(CARD, [], 'plain')).toBe(renderStaticSystem(bundle.card, ['zzz', 'a'], 'plain'));
+  });
+
+  it('plain profile matches the measured evidence file (R3-21)', () => {
+    const evidence = readFileSync(fileURLToPath(new URL('../../../docs/evidence/phase3/persona-tokens.txt', import.meta.url)), 'utf8');
+    const plain = Number(/^plain: (\d+)$/m.exec(evidence)?.[1]);
+    const character = Number(/^character: (\d+)$/m.exec(evidence)?.[1]);
+    expect(staticSystemTokens(CARD, [], 'plain')).toBe(plain);
+    expect(staticSystemTokens(bundle.card, bundleMotionKeys, 'character')).toBe(character);
   });
 
   it('plain mode is byte-stable and independent of the card', () => {
