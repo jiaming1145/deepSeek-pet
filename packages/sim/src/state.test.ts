@@ -130,3 +130,15 @@ describe('initialSimState (§3.1)', () => {
     expect(SimStateSchema.safeParse({ ...s, localDate: '2026-8-30' }).success).toBe(false);
   });
 });
+
+// ---- §5.13: the ONLY permitted duplicate, with its equality test ----------------------------
+import { TAP_BURST_COUNT, TAP_BURST_WINDOW_MS, ANNOY_COOLDOWN_MS } from '../../../apps/desktop/src/renderer/shared/lane-metrics';
+
+describe('§5.13 lane-metrics mirror', () => {
+  it('SIM_DEFAULTS mirrors the three touch constants exactly', () => {
+    expect(SIM_DEFAULTS.TAP_BURST_COUNT).toBe(TAP_BURST_COUNT);
+    expect(SIM_DEFAULTS.TAP_BURST_WINDOW_MS).toBe(TAP_BURST_WINDOW_MS);
+    expect(SIM_DEFAULTS.ANNOY_COOLDOWN_MS).toBe(ANNOY_COOLDOWN_MS);
+    expect([TAP_BURST_COUNT, TAP_BURST_WINDOW_MS, ANNOY_COOLDOWN_MS]).toEqual([7, 1_000, 4_000]);
+  });
+});
