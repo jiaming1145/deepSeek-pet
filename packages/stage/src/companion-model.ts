@@ -6,6 +6,7 @@ import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismUserModel } from '@framework/model/cubismusermodel';
 import { CubismMoc } from '@framework/model/cubismmoc';
 import type { CubismMatrix44 } from '@framework/math/cubismmatrix44';
+import type { ICubismUpdater } from '@framework/motion/icubismupdater';
 import { ACubismMotion } from '@framework/motion/acubismmotion';
 import { InvalidMotionQueueEntryHandleValue } from '@framework/motion/cubismmotionqueuemanager';
 import { CubismUpdateScheduler } from '@framework/motion/cubismupdatescheduler';
@@ -58,6 +59,11 @@ export interface CompanionModelOptions {
    * "with a fixed seed" screenshot comparison stops racing a random idle animation.
    */
   rng?: Rng;
+  /**
+   * §4.10 `extraMotions`: motion files model3.json does not register, keyed by group. Loaded after
+   * the registered groups so `motionGroups()` reports them for bindResources (§4.7).
+   */
+  extraMotions?: Readonly<Record<string, readonly { file: string }[]>>;
 }
 
 export class CompanionModel extends CubismUserModel {
@@ -81,10 +87,18 @@ export class CompanionModel extends CubismUserModel {
   private layoutMatrix: Float32Array = null;
   private released = false;
   public idleGroup = 'Idle';
+  /** §5.14 item 3: false once the arbiter owns the body lane; tick() then never self-starts idle. */
+  public autoIdle = true;
+  /** §5.14 item 7: parameter ids the model declares, computed once at the end of setup(). */
+  private parameterIdCache: readonly string[] = Object.freeze([]);
+  /** Item 8 (gap): extra motion groups loaded from character.json `extraMotions` — group -> count. */
+  private extraGroups: Record<string, number> = {};
+  private extraMotions: Readonly<Record<string, readonly { file: string }[]>> = {};
 
   static async load(opts: CompanionModelOptions): Promise<CompanionModel> {
     const m = new CompanionModel();
     if (opts.rng) m.rng = opts.rng;
+    if (opts.extraMotions) m.extraMotions = opts.extraMotions;
     // model3.json references its siblings (moc3, textures, expressions/, motions/) relative to ITS
     // OWN directory, so every fetch is rooted at <characterUrl>/<dirname(modelJson)>/, not the character dir.
     const charBase = opts.baseUrl.endsWith('/') ? opts.baseUrl : opts.baseUrl + '/';
@@ -138,6 +152,8 @@ export class CompanionModel extends CubismUserModel {
       const motion = this.loadExpression(buf, buf.byteLength, name);
       if (motion) this.expressions.set(name, motion);
     }
+    // §5.4 / §5.14 item 1: bar §0 "expressions <= 300 ms"; the Framework default is 1.0 s (§0.2).
+    this.setExpressionFades(0.3, 0.3);
     this.scheduler.addUpdatableList(new CubismExpressionUpdater(this._expressionManager));
 
     // physics / pose
@@ -249,6 +265,19 @@ export class CompanionModel extends CubismUserModel {
         this.motions.set(`${group}_${i}`, motion);
       }
     }
+    // Item 8 (gap): extraMotions, indexed by array position, so ["Extra", 0] is a normal MotionRef.
+    for (const [group, entries] of Object.entries(this.extraMotions)) {
+      let count = 0;
+      for (let i = 0; i < entries.length; i++) {
+        const buf = await fetchBuffer(this.baseUrl + entries[i].file);
+        const motion = this.loadMotion(buf, buf.byteLength, `${group}_${i}`, null, null, s, group, i, this._motionConsistency);
+        if (!motion) continue;
+        motion.setEffectIds(this.eyeBlinkIds, this.lipSyncIds);
+        this.motions.set(`${group}_${i}`, motion);
+        count++;
+      }
+      this.extraGroups[group] = count;
+    }
     this._motionManager.stopAllMotions();
 
     // renderer + textures
@@ -263,6 +292,10 @@ export class CompanionModel extends CubismUserModel {
       this.textures.push(tex);
       this.getRenderer().bindTexture(i, tex);
     }
+    // Item 7: computed once; CubismId.getString() returns the raw id string.
+    const ids: string[] = [];
+    for (let i = 0; i < this._model.getParameterCount(); i++) ids.push(this._model.getParameterId(i).getString());
+    this.parameterIdCache = Object.freeze(ids);
     this._updating = false;
     this._initialized = true;
   }
@@ -279,6 +312,7 @@ export class CompanionModel extends CubismUserModel {
       const name = this.setting.getMotionGroupName(g);
       out[name] = this.setting.getMotionCount(name);
     }
+    for (const [group, count] of Object.entries(this.extraGroups)) out[group] = count;
     return out;
   }
 
@@ -343,6 +377,42 @@ export class CompanionModel extends CubismUserModel {
     this.gaze.setTarget(x, y);
   }
 
+  /** §5.14 item 1: fade-in/out for every loaded expression. Called with (0.30, 0.30) at load. */
+  setExpressionFades(inS: number, outS: number): void {
+    for (const e of this.expressions.values()) {
+      e.setFadeInTime(inS);
+      e.setFadeOutTime(outS);
+    }
+  }
+
+  /** §5.14 item 2: ACubismMotion.setWeight — the arbiter is the only caller and resets to 1.0 on release. */
+  setExpressionWeight(name: string, w: number): void {
+    const motion = this.expressions.get(name);
+    if (!motion) throw new Error(`unknown expression ${name}`);
+    motion.setWeight(w);
+  }
+
+  /** §5.14 item 4: every arbiter-issued motion. Sets the fade-in, then starts at Priority.force. */
+  startMotionForced(group: string, index: number, fadeInS: number, onFinished?: () => void): boolean {
+    if (this.released) return false;
+    const motion = this.motions.get(`${group}_${index}`);
+    if (!motion) return false;
+    motion.setFadeInTime(fadeInS);
+    return this.startMotion(group, index, Priority.force, onFinished);
+  }
+
+  /** §5.14 item 6: registers an updater and re-sorts, so a post-setup add still lands in execution order. */
+  addUpdater(u: ICubismUpdater): void {
+    if (this.released) return;
+    this.scheduler.addUpdatableList(u);
+    this.scheduler.sortUpdatableList();
+  }
+
+  /** §5.14 item 7: parameter ids the model declares (ResourceCatalogue.parameters). */
+  parameterIds(): readonly string[] {
+    return this.parameterIdCache;
+  }
+
   /** The post-setupFromLayout model matrix, or null before setup finished. Do not mutate. */
   getLayoutMatrix(): Float32Array | null {
     return this.layoutMatrix;
@@ -354,8 +424,11 @@ export class CompanionModel extends CubismUserModel {
     this._model.loadParameters();
     this.motionUpdated = false;
     if (this._motionManager.isFinished()) {
-      const n = this.setting.getMotionCount(this.idleGroup);
-      if (n > 0) this.startMotion(this.idleGroup, pickIndex(n, this.rng), Priority.idle);
+      // Item 3: with the arbiter owning the body lane this restart would be a second owner.
+      if (this.autoIdle) {
+        const n = this.setting.getMotionCount(this.idleGroup);
+        if (n > 0) this.startMotion(this.idleGroup, pickIndex(n, this.rng), Priority.idle);
+      }
     } else {
       this.motionUpdated = this._motionManager.updateMotion(this._model, dt);
     }

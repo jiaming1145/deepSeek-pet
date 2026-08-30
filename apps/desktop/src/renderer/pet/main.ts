@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   // hover → click-through toggle (main decides), tap → motion, drag → move window
   // D7: one policy (fpsFor), one writer (applyFps). Hover and speech both flow through it, so
   // un-hovering mid-reveal can no longer drop the stage to 30 Hz.
-  const fpsState = { hovering: false, speaking: false };
+  const fpsState = { hovering: false, speaking: false, moving: false };
   const applyFps = (): void => stage.setFps(fpsFor(fpsState));
   const hover = new HoverTracker((inside) => {
     bridge?.send(Channels.avatarHover, { inside });
