@@ -195,14 +195,63 @@ describe('placeBubble — the band steps clear of the visible composer (fix roun
     expect(insideWorkArea(withChat, band, WA)).toBe(true);
   });
 
-  it('goes above the composer when the work area has no room below it', () => {
-    // A six-row composer plus a full-height band cannot both fit under the anchor row, so the band
-    // takes the other side of the same flip.
+  it('goes above the composer when there is no room below AND the 55 % floor allows it', () => {
+    // A shorter work area (a tall taskbar) leaves no room under a one-row composer for an 80 DIP
+    // band, and 790 - 12 - 80 = 698 is still below the floor at 692 — so the band takes the other
+    // side of the same flip. This is the ONLY shape the above branch has after fix round 2.
+    const shortWa = { x: 0, y: 0, width: 1920, height: 920 };
+    const chat = composer(CHAT_BASE, PET, shortWa);
+    const band: Size = { width: 320, height: 80 };
+    const p = placeBubble(PET, band, shortWa, 'left', chat);
+    expect(chat.y + chat.height + BUBBLE_GAP + band.height)
+      .toBeGreaterThan(shortWa.y + shortWa.height - BUBBLE_PADDING); // no room below
+    expect(p.y).toBe(chat.y - BUBBLE_GAP - band.height);
+    expect(p.y).toBeGreaterThanOrEqual(Math.floor(topFloor(PET))); // and still off her face
+    expect(overlap(rectOf(p, band), chat)).toBe(false);
+    expect(insideWorkArea(p, band, shortWa)).toBe(true);
+  });
+
+  it('fix round 2 — the 55 % floor outranks the dodge: it overlaps rather than flip onto her face', () => {
+    // REGRESSION GUARD. Fix round 1 gated the above branch on `waT` alone, so a six-row composer
+    // plus a full-height band flipped the band to y = 403 — 14.9 % of the pet window, i.e. her
+    // face, the exact defect commit 02ad454 exists to prevent. The floor is a placement ruling; the
+    // dodge is a courtesy. With no room below the floor, the band keeps step 2's row and overlaps.
     const chat = composer(CHAT_SIX_ROWS);
     const p = placeBubble(PET, BUBBLE_MAX, WA, 'left', chat);
-    expect(p.y).toBe(chat.y - BUBBLE_GAP - BUBBLE_MAX.height);
-    expect(overlap(rectOf(p, BUBBLE_MAX), chat)).toBe(false);
+    expect(chat.y - BUBBLE_GAP - BUBBLE_MAX.height).toBeLessThan(Math.floor(topFloor(PET)));
+    expect(p.y).toBe(Math.round(topFloor(PET)));
+    expect(p.y).toBe(placeBubble(PET, BUBBLE_MAX, WA, 'left').y); // step 2's row, unchanged
+    expect(overlap(rectOf(p, BUBBLE_MAX), chat)).toBe(true);
     expect(insideWorkArea(p, BUBBLE_MAX, WA)).toBe(true);
+  });
+
+  it('fix round 2 — the dodge never lifts the band above the 55 % floor, at any size or display', () => {
+    // The sweep the round-1 tests did not have: floor test A runs without `avoid`, and the C14
+    // sweep below checks only the work area, so nothing caught the history-open composer pushing
+    // every band up onto her face. Note the one legitimate exception, already pinned by "the work
+    // area wins over the 55 % floor": when the band is too tall to fit between the floor and the
+    // work-area bottom, step 2 itself starts above the floor. The dodge must never make that worse.
+    const displays: Rect[] = [WA, { x: 1280, y: 0, width: 1920, height: 1040 }, { x: 0, y: 0, width: 1000, height: 600 }];
+    const aboveFloor: string[] = [];
+    const raisedByDodge: string[] = [];
+    for (const wa of displays) {
+      for (const px of [wa.x, wa.x + 40, wa.x + wa.width / 2 - 210, wa.x + wa.width - 420]) {
+        const pet = { x: px, y: wa.y + Math.max(0, wa.height - 720), width: 420, height: 720 };
+        const floor = Math.floor(topFloor(pet));
+        for (const chatSize of [CHAT_BASE, CHAT_SIX_ROWS, CHAT_HISTORY_OPEN]) {
+          const chat = composer(chatSize, pet, wa);
+          for (const size of everyBandSize()) {
+            const withChat = placeBubble(pet, size, wa, preferredSideFor(pet, wa), chat);
+            const alone = placeBubble(pet, size, wa, preferredSideFor(pet, wa));
+            const row = JSON.stringify({ wa, pet, chatSize, size, withChat, alone, floor });
+            if (alone.y >= floor && withChat.y < floor) aboveFloor.push(row);
+            if (withChat.y < Math.min(floor, alone.y)) raisedByDodge.push(row);
+          }
+        }
+      }
+    }
+    expect(aboveFloor).toEqual([]);
+    expect(raisedByDodge).toEqual([]);
   });
 
   it('never leaves the work area while dodging, at any band size or pet position (C14 still wins)', () => {
@@ -237,7 +286,9 @@ describe('placeBubble — the band steps clear of the visible composer (fix roun
             const p = placeBubble(pet, size, wa, preferredSideFor(pet, wa), chat);
             if (!overlap(rectOf(p, size), chat)) continue;
             const roomBelow = chat.y + chat.height + BUBBLE_GAP + size.height <= waB;
-            const roomAbove = chat.y - BUBBLE_GAP - size.height >= waT;
+            // `waT` is not the only constraint above: fix round 2 made the 55 % floor outrank the
+            // dodge, so "room above" means room above the FLOOR, not merely inside the work area.
+            const roomAbove = chat.y - BUBBLE_GAP - size.height >= Math.max(waT, topFloor(pet));
             if (roomBelow || roomAbove) unexplained.push(JSON.stringify({ wa, pet, chatSize, size, p }));
           }
         }
