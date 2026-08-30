@@ -29,6 +29,7 @@ const core: Record<string, unknown> = {
 
 const { ACubismMotion } = await import('@framework/motion/acubismmotion');
 const { CompanionModel, Priority } = await import('./companion-model');
+const { CubismUpdateOrder, ICubismUpdater } = await import('@framework/motion/icubismupdater');
 
 type AnyModel = InstanceType<typeof CompanionModel> & Record<string, never>;
 
@@ -235,5 +236,97 @@ describe('CompanionModel after release()', () => {
     expect(model.hitAny(0, 0)).toBeNull();
     expect(() => model.setExpression(null)).not.toThrow();
     expect(model.startMotion('Idle', 0, 1)).toBe(false);
+  });
+});
+
+describe('CompanionModel — Phase 3 hooks (§5.14)', () => {
+  class StubUpdater extends ICubismUpdater {
+    onLateUpdate(): void {}
+  }
+  function hooked() {
+    const model = new CompanionModel();
+    const internals = model as unknown as {
+      motions: Map<string, InstanceType<typeof StubMotion>>;
+      expressions: Map<string, InstanceType<typeof StubMotion>>;
+      scheduler: { getUpdatableCount(): number; getUpdatable(i: number): InstanceType<typeof ICubismUpdater> | null };
+      extraGroups: Record<string, number>;
+      parameterIdCache: readonly string[];
+      setting: unknown;
+      _model: unknown;
+      _initialized: boolean;
+      _motionManager: { setReservePriority(p: number): void };
+    };
+    return { model, internals };
+  }
+
+  it('item 1: setExpressionFades applies both fades to every loaded expression', () => {
+    const { model, internals } = hooked();
+    const a = new StubMotion(); const b = new StubMotion();
+    internals.expressions.set('F01', a); internals.expressions.set('F02', b);
+    model.setExpressionFades(0.3, 0.3);
+    expect([a.getFadeInTime(), a.getFadeOutTime(), b.getFadeInTime(), b.getFadeOutTime()]).toEqual([0.3, 0.3, 0.3, 0.3]);
+  });
+
+  it('item 2: setExpressionWeight sets ACubismMotion.setWeight on the named expression and throws on unknown', () => {
+    const { model, internals } = hooked();
+    const f = new StubMotion(); internals.expressions.set('F07', f);
+    model.setExpressionWeight('F07', 0.65);
+    expect(f.getWeight()).toBe(0.65);
+    expect(() => model.setExpressionWeight('F99', 1)).toThrow('unknown expression F99');
+  });
+
+  it('item 3: autoIdle defaults to true and, when false, tick() never restarts the idle group', () => {
+    const { model, internals } = hooked();
+    expect(model.autoIdle).toBe(true);
+    internals._initialized = true;
+    internals._model = { loadParameters() {}, saveParameters() {}, update() {} };
+    internals.setting = { getMotionCount: () => 2 };
+    const start = vi.spyOn(model, 'startMotion').mockReturnValue(true);
+    model.autoIdle = false;
+    model.tick(1 / 60);
+    expect(start).not.toHaveBeenCalled();
+    model.autoIdle = true;
+    model.tick(1 / 60);
+    expect(start).toHaveBeenCalledWith('Idle', expect.any(Number), Priority.idle);
+  });
+
+  it('item 4: startMotionForced sets the fade-in then starts at Priority.force', () => {
+    const { model, internals } = hooked();
+    const m = new StubMotion(); internals.motions.set('TapBody_1', m);
+    const reserve = vi.spyOn(internals._motionManager, 'setReservePriority');
+    let done = 0;
+    expect(model.startMotionForced('TapBody', 1, 0.12, () => done++)).toBe(true);
+    expect(m.getFadeInTime()).toBeCloseTo(0.12, 6);
+    expect(reserve).toHaveBeenCalledWith(Priority.force);
+    expect(model.startMotionForced('TapBody', 9, 0.12)).toBe(false);
+    expect(done).toBe(0);
+  });
+
+  it('item 6: addUpdater lands in execution order (450 sits between Drag 400 and Breath 500) and is a no-op after release', () => {
+    const { model, internals } = hooked();
+    const breath = new StubUpdater(CubismUpdateOrder.CubismUpdateOrder_Breath);
+    const drag = new StubUpdater(CubismUpdateOrder.CubismUpdateOrder_Drag);
+    const overlay = new StubUpdater(450);
+    model.addUpdater(breath); model.addUpdater(drag); model.addUpdater(overlay);
+    expect(internals.scheduler.getUpdatableCount()).toBe(3);
+    expect([0, 1, 2].map((i) => internals.scheduler.getUpdatable(i)?.getExecutionOrder())).toEqual([400, 450, 500]);
+    model.release();
+    model.addUpdater(new StubUpdater(450));
+    expect(internals.scheduler.getUpdatableCount()).toBe(0);
+  });
+
+  it('item 7: parameterIds() returns the cached, frozen list', () => {
+    const { model, internals } = hooked();
+    expect(model.parameterIds()).toEqual([]);
+    internals.parameterIdCache = Object.freeze(['ParamAngleX', 'ParamTere']);
+    expect(model.parameterIds()).toEqual(['ParamAngleX', 'ParamTere']);
+    expect(Object.isFrozen(model.parameterIds())).toBe(true);
+  });
+
+  it('item 8 (gap): motionGroups() merges extraMotions groups after the model3.json groups', () => {
+    const { model, internals } = hooked();
+    internals.setting = { getMotionGroupCount: () => 1, getMotionGroupName: () => 'Idle', getMotionCount: () => 2 };
+    internals.extraGroups = { Extra: 1 };
+    expect(model.motionGroups()).toEqual({ Idle: 2, Extra: 1 });
   });
 });
