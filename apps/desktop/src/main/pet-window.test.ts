@@ -78,10 +78,11 @@ vi.mock('electron', () => ({
 
 const { createPetWindow, handleLoadFailure, moveBy, PET_SIZE, reconcileDisplays, setClickThrough } = await import('./pet-window');
 
-function build(overrides: { onReadyToShow?: () => void; onLoadFailure?: (err: unknown) => void } = {}) {
+function build(overrides: { onReadyToShow?: () => void; onLoadFailure?: (err: unknown) => void; onRendererReset?: () => void } = {}) {
   const onReadyToShow = overrides.onReadyToShow ?? vi.fn();
   const onLoadFailure = overrides.onLoadFailure ?? vi.fn();
-  const win = createPetWindow({ onReadyToShow, onLoadFailure }) as unknown as FakeWindow;
+  const onRendererReset = overrides.onRendererReset;
+  const win = createPetWindow({ onReadyToShow, onLoadFailure, onRendererReset }) as unknown as FakeWindow;
   return { win, onReadyToShow, onLoadFailure };
 }
 
@@ -192,6 +193,40 @@ describe('createPetWindow', () => {
     setClickThrough(win as never, false);
     win.emitWebContents('render-process-gone', {}, { reason: 'crashed' });
     expect(win.ignoreMouse.at(-1)).toEqual({ ignore: true, forward: true });
+  });
+
+  it('§7.7 / B-09: a dead renderer resets the motion episode through onRendererReset', () => {
+    const onRendererReset = vi.fn();
+    const { win } = build({ onRendererReset });
+    win.emitWebContents('render-process-gone', {}, { reason: 'crashed' });
+    expect(onRendererReset).toHaveBeenCalledTimes(1);
+    // Click-through is still forced on, as Phase 1 did.
+    expect(win.ignoreMouse.at(-1)).toEqual({ ignore: true, forward: true });
+  });
+
+  it('§7.7: a main-frame navigation resets the motion episode; a subframe navigation does not', () => {
+    const onRendererReset = vi.fn();
+    const { win } = build({ onRendererReset });
+    win.emitWebContents('did-start-navigation', { isMainFrame: false, url: 'app://local/frame.html' });
+    expect(onRendererReset).not.toHaveBeenCalled();
+    // The pet document's own load. The guard is registered before loadURL, so this navigation
+    // arrives while Task 15's `const motion` is still in its temporal dead zone — resetting here
+    // would throw a ReferenceError inside an Electron listener at startup (fix round 1, finding 5).
+    win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).not.toHaveBeenCalled();
+    expect(win.ignoreMouse.at(-1)).toEqual({ ignore: true, forward: true }); // still recovered
+    // A reload (or any later top-level navigation) is a real reset.
+    win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).toHaveBeenCalledTimes(1);
+    win.emitWebContents('did-start-navigation', { isMainFrame: true, url: 'app://local/pet.html' });
+    expect(onRendererReset).toHaveBeenCalledTimes(2);
+  });
+
+  it('§7.7: a crash before the document ever loaded still resets the motion episode', () => {
+    const onRendererReset = vi.fn();
+    const { win } = build({ onRendererReset });
+    win.emitWebContents('render-process-gone', {}, { reason: 'crashed' });
+    expect(onRendererReset).toHaveBeenCalledTimes(1);
   });
 
   it('routes a rejected loadURL to onLoadFailure', async () => {
