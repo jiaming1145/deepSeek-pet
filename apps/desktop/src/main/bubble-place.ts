@@ -8,83 +8,116 @@ export interface Rect { x: number; y: number; width: number; height: number }
 export interface Size { width: number; height: number }
 export interface Placement { x: number; y: number; side: Side; arrowOffset: number }
 
-export const BUBBLE_GAP = 12; // addendum C6 offset(12)
+/**
+ * addendum C6 offset(12). Kept as the contract's number, but the band geometry below does NOT use
+ * it: the band OVERLAPS her body (she stands in its right third), so there is no gap to offset by.
+ * The composer's own `CHAT_GAP` in `renderer/shared/chat-metrics.ts` is a separate constant.
+ */
+export const BUBBLE_GAP = 12;
 export const BUBBLE_PADDING = 16; // addendum C6 shift({ padding: 16 })
 export const BUBBLE_MAX: Size = { width: 460, height: 320 }; // R3 — sized by content up to 460x320 DIP
 export const BUBBLE_MIN: Size = { width: 120, height: 44 };
 export const ARROW_MARGIN = 18;
-export const HEAD_ANCHOR = { x: 0.5, y: 0.18 } as const; // fraction of petBounds
 
-const OPPOSITE: Record<Side, Side> = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' };
-const ALL_SIDES: readonly Side[] = ['left', 'right', 'top', 'bottom'];
+/**
+ * The band's vertical CENTRE, as a fraction of the pet window's height.
+ *
+ * Task 0's direction contract (`task-0-direction.md`, FIRST VIEWPORT; `DESIGN.md`): "the band sits
+ * over her LOWER THIRD, extending LEFT from her body so she stands in its right third". 0.72 is
+ * inside that lower third (0.667–1.0). The retired `HEAD_ANCHOR = {x: 0.5, y: 0.18}` centred the
+ * band on her FACE, which is the defect `desktop-chat-over-pet.png` and `task6-fake-brain-run.png`
+ * recorded and which this constant replaces.
+ */
+export const BAND_ANCHOR_Y = 0.72;
+
+/**
+ * Hard floor for the band's TOP edge, as a fraction of the pet window's height: the window never
+ * starts above 55 % of the pet. This is what keeps her face clear for a tall band — a 6-line band
+ * centred on 0.72 would otherwise reach up past her collar.
+ *
+ * It yields to the work area: C14 ("never crosses the pet's display work area") is a contract, this
+ * is a composition rule, and a window too tall to fit between this floor and the work-area bottom
+ * is placed against the work area instead. `bubble-place.test.ts` pins both halves.
+ */
+export const BAND_TOP_MAX_FRACTION = 0.55;
+
+/**
+ * Where the pet's horizontal centre sits inside the band, as a fraction of the band's width, when
+ * the band extends LEFT: 0.80 puts her in the band's right third (0.667–1.0) at every band width.
+ * Mirrored to `1 - BAND_PET_FRACTION` when the band flips right.
+ */
+export const BAND_PET_FRACTION = 0.8;
+
+const OPPOSITE_BAND: Record<'left' | 'right', 'left' | 'right'> = { left: 'right', right: 'left' };
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v, lo), hi);
 
 /**
- * Which side has more room. Main calls it on every placement, so a pet dragged across the screen
- * flips the bubble to the roomier side instead of honouring a stale preference.
+ * The direction contract's preferred side is LEFT — always, at every pet position — and right is
+ * the fallback taken only when the work area has no room. This deliberately does NOT pick "the
+ * roomier half of the screen" the way the retired implementation did: a pet dragged to the left
+ * half must still speak leftwards while a minimum band fits there, otherwise the band flips sides
+ * halfway across the desktop for no reason the user can see.
+ *
+ * `placeBubble` re-tests the fit against the ACTUAL band size, so this is a hint, not the decision.
  */
 export function preferredSideFor(pet: Rect, workArea: Rect): Side {
-  return pet.x + pet.width / 2 > workArea.x + workArea.width / 2 ? 'left' : 'right';
+  const roomLeft = pet.x + pet.width * BAND_PET_FRACTION - (workArea.x + BUBBLE_PADDING);
+  return roomLeft >= BUBBLE_MIN.width ? 'left' : 'right';
 }
 
 /**
- * Pure flip/shift placement in DIP screen coordinates — the same space `BrowserWindow.getBounds()`
- * and `Display.workArea` use.
+ * Pure band placement in DIP screen coordinates — the same space `BrowserWindow.getBounds()` and
+ * `Display.workArea` use. Both the bubble window and the chat window go through it, so the composer
+ * opens on the band's rect rather than somewhere of its own (controller ruling, 2026-08-29).
  *
  * `workArea` MUST come from `screen.getDisplayMatching(petBounds).workArea`, never from the primary
- * display: on a mixed-DPI desktop the primary's work area would clamp the bubble onto the wrong
+ * display: on a mixed-DPI desktop the primary's work area would clamp the band onto the wrong
  * monitor. That single argument is what makes C14 true (test E).
  */
 export function placeBubble(pet: Rect, size: Size, workArea: Rect, preferredSide: Side): Placement {
-  const ax = pet.x + pet.width * HEAD_ANCHOR.x;
-  const ay = pet.y + pet.height * HEAD_ANCHOR.y;
-
-  const order: Side[] = [
-    preferredSide,
-    OPPOSITE[preferredSide],
-    ...ALL_SIDES.filter((s) => s !== preferredSide && s !== OPPOSITE[preferredSide]),
-  ];
-
-  const originFor = (side: Side): { x: number; y: number } => {
-    if (side === 'top') return { x: ax - size.width / 2, y: ay - BUBBLE_GAP - size.height };
-    if (side === 'bottom') return { x: ax - size.width / 2, y: ay + BUBBLE_GAP };
-    if (side === 'left') return { x: pet.x - BUBBLE_GAP - size.width, y: ay - size.height / 2 };
-    return { x: pet.x + pet.width + BUBBLE_GAP, y: ay - size.height / 2 };
-  };
+  const petCx = pet.x + pet.width / 2;
+  const bandCy = pet.y + pet.height * BAND_ANCHOR_Y;
+  const topFloor = pet.y + pet.height * BAND_TOP_MAX_FRACTION;
 
   const waL = workArea.x + BUBBLE_PADDING;
   const waR = workArea.x + workArea.width - BUBBLE_PADDING;
   const waT = workArea.y + BUBBLE_PADDING;
   const waB = workArea.y + workArea.height - BUBBLE_PADDING;
-  const fits = (o: { x: number; y: number }): boolean =>
-    o.x >= waL && o.x + size.width <= waR && o.y >= waT && o.y + size.height <= waB;
 
-  // flip(): the first candidate that fits wins. If none fit, keep candidate[0] and shift it in.
+  // The lowest top edge the work area allows. `max(waT, …)` keeps the range non-negative when the
+  // window is taller than the work area, which top-aligns it instead of producing a reversed clamp.
+  const yMax = Math.max(waT, waB - size.height);
+  const y = clamp(Math.max(bandCy - size.height / 2, topFloor), waT, yMax);
+
+  const xFor = (side: Side): number =>
+    side === 'right'
+      ? petCx - size.width * (1 - BAND_PET_FRACTION)
+      : petCx - size.width * BAND_PET_FRACTION;
+
+  // `preferredSide` may arrive as 'top'/'bottom' from a caller that predates the band geometry;
+  // anything that is not 'right' means the direction contract's default, left.
+  const first: 'left' | 'right' = preferredSide === 'right' ? 'right' : 'left';
+  const order: ('left' | 'right')[] = [first, OPPOSITE_BAND[first]];
+  const fitsX = (x: number): boolean => x >= waL && x + size.width <= waR;
+
   let side: Side = order[0];
-  let origin = originFor(side);
+  let x = xFor(side);
   for (const candidate of order) {
-    const o = originFor(candidate);
-    if (fits(o)) {
+    const cx = xFor(candidate);
+    if (fitsX(cx)) {
       side = candidate;
-      origin = o;
+      x = cx;
       break;
     }
   }
+  // Neither side fits (a band wider than the room either way): keep the preferred side and shift in.
+  if (!fitsX(x)) x = clamp(x, waL, Math.max(waL, waR - size.width));
 
-  let { x, y } = origin;
-  if (!fits(origin)) {
-    // The max(...) keeps the range non-negative when the bubble is wider or taller than the work
-    // area, which left/top-aligns it instead of producing a reversed clamp.
-    x = clamp(origin.x, waL, Math.max(waL, waR - size.width));
-    y = clamp(origin.y, waT, Math.max(waT, waB - size.height));
-  }
+  // The notch sits on the pet-facing vertical edge, at the band's anchor row.
+  const arrowOffset = clamp(bandCy - y, ARROW_MARGIN, Math.max(ARROW_MARGIN, size.height - ARROW_MARGIN));
 
-  const arrowOffset =
-    side === 'top' || side === 'bottom'
-      ? clamp(ax - x, ARROW_MARGIN, size.width - ARROW_MARGIN)
-      : clamp(ay - y, ARROW_MARGIN, size.height - ARROW_MARGIN);
-
-  // Rounded last: the fit test runs on exact values, Electron's setBounds takes integers.
+  // Rounded last: the fit tests run on exact values, Electron's setBounds takes integers.
   return { x: Math.round(x), y: Math.round(y), side, arrowOffset: Math.round(arrowOffset) };
 }
+
