@@ -50,7 +50,19 @@ describe('WeightedShuffleBag', () => {
       expect(refills).toBeGreaterThan(300);
     }
   });
-  it('the refill swap also protects a manual refill after a deal', () => {
+  it('states its precondition: outside max(copies) <= ceil(n/2) the repeats are unavoidable, and it still deals every card', () => {
+    // Fix round 1, finding 2. `round(5*4)=20` vs `max(1, round(0.1*4))=1` — 20 of 21 cards share an
+    // id, so NO arrangement is repeat-free and the class doc says so. The bag must still deal the
+    // whole deck without throwing or spinning; the selector's recency-3 is the defence there.
+    const bag = new WeightedShuffleBag(mulberry32(7));
+    bag.refill([{ id: 'aa', weight: 5 }, { id: 'bb', weight: 0.1 }]);
+    expect(bag.size).toBe(21);
+    const counts: Record<string, number> = {};
+    for (let i = 0; i < 21; i++) { const id = bag.draw() as string; counts[id] = (counts[id] ?? 0) + 1; }
+    expect(counts).toEqual({ aa: 20, bb: 1 });
+    expect(bag.size).toBe(0);
+  });
+  it('the refill seam rule also protects a manual refill after a deal', () => {
     for (let seed = 0; seed < 200; seed++) {
       const bag = new WeightedShuffleBag(mulberry32(seed));
       bag.refill([{ id: 'p', weight: 0.25 }, { id: 'q', weight: 0.25 }]);
