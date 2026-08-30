@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "character": "haru",
+  "behaviors": [
+    { "id": "idle_breathe", "weight": 1.4, "minMs": 8000, "maxMs": 16000,
+      "motion": ["Idle", 0], "expression": null, "gaze": "follow", "overlay": "none",
+      "tags": ["quiet"] },
+
+    { "id": "idle_settle", "weight": 1.2, "minMs": 6000, "maxMs": 12000,
+      "motion": ["Idle", 1], "expression": null, "gaze": "follow", "overlay": "none",
+      "tags": ["quiet"] },
+
+    { "id": "look_around", "weight": 1.0, "minMs": 5000, "maxMs": 9000,
+      "motion": null, "expression": null, "gaze": "wander", "overlay": "headTilt",
+      "cooldownMs": 30000, "tags": [] },
+
+    { "id": "head_tilt", "weight": 0.9, "minMs": 5000, "maxMs": 8000,
+      "motion": null, "expression": "F01", "expressionWeight": 0.45,
+      "gaze": "cursorLock", "overlay": "headTiltHold", "cooldownMs": 45000, "tags": [] },
+
+    { "id": "stretch", "weight": 0.6, "minMs": 6000, "maxMs": 10000,
+      "motion": ["TapBody", 2], "expression": "F02", "expressionWeight": 0.5,
+      "gaze": "up", "overlay": "lookUp", "cooldownMs": 90000,
+      "minLiveliness": 0.35, "tags": ["big"],
+      "when": { "allOf": [ { "fact": "energy", "gt": 40 },
+                           { "fact": "presentation", "eq": "awake" } ] } },
+
+    { "id": "hum", "weight": 0.8, "minMs": 6000, "maxMs": 12000,
+      "motion": ["Idle", 1], "expression": "F01", "expressionWeight": 0.4,
+      "gaze": "away", "overlay": "none", "cooldownMs": 40000, "tags": ["quiet"],
+      "when": { "fact": "mood", "gt": 0.0 } },
+
+    { "id": "fidget_hands", "weight": 0.7, "minMs": 5000, "maxMs": 9000,
+      "motion": ["TapBody", 3], "expression": null, "gaze": "down", "overlay": "none",
+      "cooldownMs": 45000, "tags": [] },
+
+    { "id": "peek_at_cursor", "weight": 1.0, "minMs": 5000, "maxMs": 8000,
+      "motion": null, "expression": "F06", "expressionWeight": 0.4,
+      "gaze": "cursorLock", "overlay": "headTilt", "cooldownMs": 25000, "tags": ["social"],
+      "when": { "fact": "cursorNear", "eq": true } },
+
+    { "id": "yawn", "weight": 1.1, "minMs": 6000, "maxMs": 10000,
+      "motion": ["TapBody", 1], "expression": "F05", "expressionWeight": 0.6,
+      "gaze": "down", "overlay": "headDroop", "cooldownMs": 120000, "tags": ["sleepy"],
+      "when": { "anyOf": [ { "fact": "phase", "eq": "night" },
+                           { "fact": "energy", "lt": 35 } ] } },
+
+    { "id": "doze", "weight": 2.0, "minMs": 12000, "maxMs": 20000,
+      "motion": null, "expression": "F05", "expressionWeight": 0.75,
+      "gaze": "none", "overlay": "headDroop", "tags": ["sleepy"],
+      "when": { "fact": "presentation", "in": ["nap", "sleep"] } },
+
+    { "id": "window_gaze", "weight": 0.7, "minMs": 7000, "maxMs": 13000,
+      "motion": null, "expression": "F01", "expressionWeight": 0.35,
+      "gaze": "up", "overlay": "lookUp", "cooldownMs": 60000, "tags": ["quiet"],
+      "when": { "fact": "phase", "in": ["morning", "day"] } },
+
+    { "id": "sulk", "weight": 0.8, "minMs": 6000, "maxMs": 11000,
+      "motion": null, "expression": "F04", "expressionWeight": 0.5,
+      "gaze": "away", "overlay": "headDroop", "cooldownMs": 60000, "tags": [],
+      "when": { "fact": "mood", "lt": -0.25 } },
+
+    { "id": "perk_up", "weight": 0.9, "minMs": 5000, "maxMs": 9000,
+      "motion": ["TapBody", 0], "expression": "F02", "expressionWeight": 0.55,
+      "gaze": "cursorLock", "overlay": "none", "cooldownMs": 50000,
+      "minLiveliness": 0.3, "tags": ["big", "social"],
+      "when": { "allOf": [ { "fact": "mood", "gt": 0.35 },
+                           { "fact": "presentation", "eq": "awake" } ] } },
+
+    { "id": "edge_peek", "weight": 0.9, "minMs": 5000, "maxMs": 9000,
+      "motion": null, "expression": "F06", "expressionWeight": 0.45,
+      "gaze": "edge", "overlay": "leanLeft", "cooldownMs": 45000, "tags": [],
+      "when": { "fact": "nearEdge", "eq": true } },
+
+    { "id": "wander", "weight": 0.5, "minMs": 8000, "maxMs": 14000,
+      "motion": ["Idle", 1], "expression": null, "gaze": "wander", "overlay": "leanRight",
+      "locomotion": "stroll", "cooldownMs": 120000,
+      "minLiveliness": 0.4, "tags": ["big"],
+      "when": { "allOf": [ { "fact": "onFloor", "eq": true },
+                           { "fact": "nearEdge", "eq": false },
+                           { "fact": "presentation", "eq": "awake" } ] } },
+
+    { "id": "blush_fidget", "weight": 0.4, "minMs": 5000, "maxMs": 9000,
+      "motion": null, "expression": "F07", "expressionWeight": 0.5,
+      "gaze": "down", "overlay": "blush", "cooldownMs": 180000, "tags": [],
+      "when": { "fact": "affection", "gt": 55 } }
+  ]
+}
