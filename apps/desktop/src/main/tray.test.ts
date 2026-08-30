@@ -185,3 +185,37 @@ describe('createTray', () => {
     expect(local.wipeMemory).toHaveBeenCalledTimes(1);
   });
 });
+
+// R3-61: batch 3 widened TrayActions while its only caller (index.ts) is wired in batch 6. The
+// Phase 3 group is offered only when all twelve actions are present — never half-wired, never faked.
+describe('Phase 3 group gating (R3-61)', () => {
+  const labels = (menu: MenuItemTemplate[]) => menu.map((i) => i.label ?? i.type);
+  /** The Phase 1/2 five, exactly as index.ts passes them until Task 15 lands. */
+  const phase2Only = () => ({
+    toggleVisible: vi.fn(), toggleDebug: vi.fn(), openChat: vi.fn(), openKey: vi.fn(), quit: vi.fn(),
+  });
+
+  it('omits the whole Phase 3 group when none of the twelve is wired', () => {
+    createTray(phase2Only());
+    expect(labels(built[0].menu ?? [])).toEqual([
+      '显示/隐藏', '打开对话', 'separator', '设置 API Key', '调试面板', 'separator', '退出',
+    ]);
+  });
+
+  it('still wires the Phase 2 items when the group is omitted', () => {
+    const local = phase2Only();
+    createTray(local);
+    const menu = built[0].menu ?? [];
+    menu.find((i) => i.label === '打开对话')?.click?.();
+    menu.find((i) => i.label === '退出')?.click?.();
+    expect(local.openChat).toHaveBeenCalledTimes(1);
+    expect(local.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a half-wired set as unwired instead of crashing on the missing getter', () => {
+    const half: Record<string, unknown> = { ...makeActions() };
+    delete half.getMuted;
+    expect(() => createTray(half as never)).not.toThrow();
+    expect(labels(built[0].menu ?? [])).not.toContain('活泼度');
+  });
+});

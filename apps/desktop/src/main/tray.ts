@@ -41,19 +41,42 @@ function loadTrayIcon(iconPath: string): NativeImage {
 export interface TrayActions {
   // Phase 1/2, unchanged
   toggleVisible(): void; toggleDebug(): void; openChat(): void; openKey(): void; quit(): void;
-  // Phase 3
-  setLiveliness(preset: LivelinessPreset): void;   // §3.5   活泼度 ▸ 安静 / 默认 / 活泼
-  getLiveliness(): number;                          // §3.5   radio check state
-  setDnd(untilWall: number | null): void;           // §3.10.4 别打扰 ▸ 1 小时 / 今天 / 关闭主动说话
-  getDnd(): number | null;                          // §3.10.4 radio check state
-  setMode(mode: PersonaModeIpc): void;              // §9.5   普通模式 (checkbox)
-  getMode(): PersonaModeIpc;                        // §9.5
-  setWorkMode(on: boolean): void;                   // §5.9   工作模式 (checkbox)
-  getWorkMode(): boolean;                           // §5.9
-  setMuted(on: boolean): void;                      // §5.12  静音 (checkbox) — a NEW item
-  getMuted(): boolean;                              // §5.12
-  exportMemory(): void;                             // §8.9   记忆 ▸ 导出…
-  wipeMemory(): void;                               // §8.9   记忆 ▸ 清空…
+  // Phase 3. Optional by R3-61: this interface widened in batch 3 (Task 6) while its only caller,
+  // index.ts, is Task 15's file and wires it in batch 6. Rather than let main sit red for three
+  // batches — or hand the tray fake implementations — the twelve are optional and the menu shows
+  // the Phase 3 group only when they are all present. A tray must never offer a control that
+  // nothing implements. Task 15 supplies all twelve, and its test asserts the full menu.
+  setLiveliness?(preset: LivelinessPreset): void;   // §3.5   活泼度 ▸ 安静 / 默认 / 活泼
+  getLiveliness?(): number;                         // §3.5   radio check state
+  setDnd?(untilWall: number | null): void;          // §3.10.4 别打扰 ▸ 1 小时 / 今天 / 关闭主动说话
+  getDnd?(): number | null;                         // §3.10.4 radio check state
+  setMode?(mode: PersonaModeIpc): void;             // §9.5   普通模式 (checkbox)
+  getMode?(): PersonaModeIpc;                       // §9.5
+  setWorkMode?(on: boolean): void;                  // §5.9   工作模式 (checkbox)
+  getWorkMode?(): boolean;                          // §5.9
+  setMuted?(on: boolean): void;                     // §5.12  静音 (checkbox) — a NEW item
+  getMuted?(): boolean;                             // §5.12
+  exportMemory?(): void;                            // §8.9   记忆 ▸ 导出…
+  wipeMemory?(): void;                              // §8.9   记忆 ▸ 清空…
+}
+
+/** The twelve Phase 3 members, all present. `template()` narrows to this before building the group. */
+export type Phase3TrayActions = Required<
+  Pick<
+    TrayActions,
+    | 'setLiveliness' | 'getLiveliness' | 'setDnd' | 'getDnd' | 'setMode' | 'getMode'
+    | 'setWorkMode' | 'getWorkMode' | 'setMuted' | 'getMuted' | 'exportMemory' | 'wipeMemory'
+  >
+>;
+
+/** All twelve or none: a half-wired action set is a wiring bug, not a menu variant. */
+export function hasPhase3Actions(a: TrayActions): a is TrayActions & Phase3TrayActions {
+  return typeof a.setLiveliness === 'function' && typeof a.getLiveliness === 'function'
+    && typeof a.setDnd === 'function' && typeof a.getDnd === 'function'
+    && typeof a.setMode === 'function' && typeof a.getMode === 'function'
+    && typeof a.setWorkMode === 'function' && typeof a.getWorkMode === 'function'
+    && typeof a.setMuted === 'function' && typeof a.getMuted === 'function'
+    && typeof a.exportMemory === 'function' && typeof a.wipeMemory === 'function';
 }
 
 /** §3.10.4: 关闭主动说话 = the ES max date, "off forever" until re-enabled. */
@@ -69,6 +92,23 @@ const LIVELINESS_ITEMS: readonly { label: string; preset: LivelinessPreset }[] =
 ];
 
 function template(actions: TrayActions): MenuItemConstructorOptions[] {
+  const head: MenuItemConstructorOptions[] = [
+    { label: '显示/隐藏', click: actions.toggleVisible },
+    { label: '打开对话', click: actions.openChat },
+  ];
+  const tail: MenuItemConstructorOptions[] = [
+    { label: '设置 API Key', click: actions.openKey },
+    { label: '调试面板', click: actions.toggleDebug },
+    { type: 'separator' },
+    { label: '退出', click: actions.quit },
+  ];
+  // R3-61: before Task 15 wires them, the Phase 3 group simply is not offered — and the separator
+  // that would have introduced it still divides the two Phase 2 groups.
+  if (!hasPhase3Actions(actions)) return [...head, { type: 'separator' }, ...tail];
+  return [...head, ...phase3Group(actions), ...tail];
+}
+
+function phase3Group(actions: TrayActions & Phase3TrayActions): MenuItemConstructorOptions[] {
   const now = Date.now();
   const liveliness = actions.getLiveliness();
   const dnd = actions.getDnd();
@@ -84,8 +124,6 @@ function template(actions: TrayActions): MenuItemConstructorOptions[] {
     label, type: 'radio', checked, click: () => actions.setDnd(checked ? null : value()),
   });
   return [
-    { label: '显示/隐藏', click: actions.toggleVisible },
-    { label: '打开对话', click: actions.openChat },
     { type: 'separator' },
     { label: '活泼度', submenu: LIVELINESS_ITEMS.map((i) => ({
       label: i.label, type: 'radio', checked: liveliness === LIVELINESS_PRESETS[i.preset],
@@ -107,10 +145,6 @@ function template(actions: TrayActions): MenuItemConstructorOptions[] {
       { label: '导出…', click: actions.exportMemory },
       { label: '清空…', click: actions.wipeMemory },
     ] },
-    { label: '设置 API Key', click: actions.openKey },
-    { label: '调试面板', click: actions.toggleDebug },
-    { type: 'separator' },
-    { label: '退出', click: actions.quit },
   ];
 }
 
