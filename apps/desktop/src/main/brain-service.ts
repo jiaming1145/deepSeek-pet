@@ -10,7 +10,7 @@ import {
 } from '@ds/brain';
 import { KV_FIRST_RUN_DONE, getKv, setKv } from '@ds/memory';
 import type { HistoryStore } from '@ds/memory';
-import { BUBBLE_MAX } from './bubble-place';
+import { BUBBLE_MAX, type Rect } from './bubble-place';
 import {
   BUBBLE_HIDE_DELAY_MS, BUBBLE_LINGER_MS,
   placeBubbleWindow, repositionBubble, setBubbleClickThrough,
@@ -153,7 +153,17 @@ export class BrainService {
       setChatComposing(on);
       this.setListening(on);
     });
-    onFromAny([chat], Channels.chatResize, ({ rows, historyOpen }) => resizeChat(chat, pet, rows, historyOpen));
+    onFromAny([chat], Channels.chatResize, ({ rows, historyOpen }) => {
+      resizeChat(chat, pet, rows, historyOpen);
+      // A grown composer covers more of the band's column, so the band has to step clear again.
+      this.reposition();
+    });
+    // The composer takes the band's own anchor rect (§6.1), so the band has to move out of its way
+    // for as long as the composer is up. `show`/`hide` on the chat window is the one place that
+    // catches EVERY path into and out of that state - the band click, the hotkey, the tray item,
+    // Escape, the blur light-dismiss and VisibilityState - without widening openChat/closeChat.
+    chat.on('show', this.onChatVisibilityChanged);
+    chat.on('hide', this.onChatVisibilityChanged);
     // Two relays, because the mouth lives in the pet window while the reveal lives in the bubble.
     onFromAny([chat], Channels.speechComplete, (p) => sendTo(bubble, Channels.speechComplete, p));
     onFromAny([bubble], Channels.speechMouth, (p) => sendTo(pet, Channels.speechMouth, p));
@@ -168,7 +178,7 @@ export class BrainService {
     });
 
     onFromAny([bubble], Channels.bubbleSize, (size) => {
-      const placement = placeBubbleWindow(bubble, pet, size);
+      const placement = placeBubbleWindow(bubble, pet, size, this.composerRect());
       sendTo(bubble, Channels.bubblePlace, {
         // The renderer lays out inside the maxima and reports what it actually needs (§5.4 rule 2).
         maxWidth: BUBBLE_MAX.width,
@@ -208,11 +218,26 @@ export class BrainService {
     return this.client;
   }
 
+  /**
+   * Bound once so `dispose()` can take it off the chat window again — the same discipline
+   * OWNED_SEND_CHANNELS applies to the ipcMain listeners.
+   */
+  private readonly onChatVisibilityChanged = (): void => this.reposition();
+
+  /**
+   * The VISIBLE composer's rect, which the band must not share pixels with, or null when the
+   * composer is not on screen — in which case the band takes its own anchor rect back.
+   */
+  private composerRect(): Rect | null {
+    const { chat } = this.deps;
+    return chat.isDestroyed() || !chat.isVisible() ? null : chat.getBounds();
+  }
+
   /** §5.4 rule 3: re-place the bubble at its current size — pet drag, drag end, display change. */
   reposition(): void {
     const { bubble, pet } = this.deps;
     if (bubble.isDestroyed() || pet.isDestroyed() || !bubble.isVisible()) return;
-    const placement = repositionBubble(bubble, pet);
+    const placement = repositionBubble(bubble, pet, this.composerRect());
     sendTo(bubble, Channels.bubblePlace, {
       maxWidth: BUBBLE_MAX.width,
       maxHeight: BUBBLE_MAX.height,
@@ -243,6 +268,10 @@ export class BrainService {
     if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
     for (const channel of Object.values(InvokeChannels)) ipcMain.removeHandler(channel);
     for (const channel of OWNED_SEND_CHANNELS) ipcMain.removeAllListeners(channel);
+    if (!this.deps.chat.isDestroyed()) {
+      this.deps.chat.removeListener('show', this.onChatVisibilityChanged);
+      this.deps.chat.removeListener('hide', this.onChatVisibilityChanged);
+    }
   }
 
   // ---------------------------------------------------------------------------------------

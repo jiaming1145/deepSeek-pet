@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import { Channels } from '@ds/protocol';
 import { isAllowedPetUrl, rendererUrl } from './app-protocol';
-import { placeBubble } from './bubble-place';
+import { placeBubble, preferredSideFor } from './bubble-place';
 import { sendTo } from './ipc';
 // contracts.md 6.1: the numbers live in the renderer's chat-metrics.ts, which T8 owns; main
 // re-exports them so the sizer and the composer cannot drift.
@@ -82,15 +82,24 @@ function guardChatWebContents(win: BrowserWindow): void {
 }
 
 /**
- * One placement implementation for both surfaces (contracts.md §6.1): the composer is a popover at
- * her head with the same flip/shift discipline, the same gap and the same work-area rule as the
- * bubble, so a grown chat can no more cross a monitor edge than the bubble can (C14).
+ * One placement implementation for both surfaces (contracts.md §6.1): the composer opens on the
+ * BAND's rect — the same anchor, the same preferred side, the same flip/shift discipline and the
+ * same work-area rule (C14) — so the two surfaces are the same object in two states rather than two
+ * popovers in two places (controller ruling, 2026-08-29).
+ *
+ * It used to pass a literal `'top'`, which combined with the retired head anchor to open the
+ * composer across her face; `docs/evidence/phase2/desktop-chat-over-pet.png` is that defect.
+ *
+ * The composer is the surface that KEEPS this rect, and it never passes `avoid`. §6.2 rule 4 holds
+ * the composer open through her whole reply, so both windows really are on screen at once; the BAND
+ * is the one that steps clear (`placeBubble`'s `avoid`, driven from `brain-service.ts`). Placing
+ * both here would make them chase each other.
  */
 function place(win: BrowserWindow, pet: BrowserWindow): void {
   const petBounds = pet.getBounds();
   const workArea = screen.getDisplayMatching(petBounds).workArea;
   const size = { width: CHAT_WIDTH, height: win.getBounds().height };
-  const p = placeBubble(petBounds, size, workArea, 'top');
+  const p = placeBubble(petBounds, size, workArea, preferredSideFor(petBounds, workArea));
   win.setBounds({ x: p.x, y: p.y, width: size.width, height: size.height });
 }
 

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isAllowedPetUrl, rendererUrl } from './app-protocol';
 import {
   BUBBLE_MAX, BUBBLE_MIN, placeBubble, preferredSideFor,
-  type Placement, type Size,
+  type Placement, type Rect, type Size,
 } from './bubble-place';
 
 /** Must equal SpeechController's LINGER_MS (contracts.md §5.2). */
@@ -94,21 +94,35 @@ export function clampBubbleSize(size: Size): Size {
 /**
  * Places the bubble for a freshly measured content size and returns the placement main sends back
  * as `bubble:place` so the renderer can draw the notch on the right edge.
+ *
+ * `avoid` is the VISIBLE composer's rect, or `null` when the composer is hidden: the composer keeps
+ * the band's anchor rect (§6.1) and the band is the surface that steps clear, so the two
+ * always-on-top windows never render two texts into the same pixels. `brain-service.ts` is the only
+ * caller and derives it from the chat window on every placement.
  */
-export function placeBubbleWindow(bubble: BrowserWindow, pet: BrowserWindow, size: Size): Placement {
+export function placeBubbleWindow(
+  bubble: BrowserWindow,
+  pet: BrowserWindow,
+  size: Size,
+  avoid: Rect | null = null,
+): Placement {
   const petBounds = pet.getBounds();
   // getDisplayMatching(petBounds), never getPrimaryDisplay(): that single choice is C14.
   const workArea = screen.getDisplayMatching(petBounds).workArea;
   const clamped = clampBubbleSize(size);
-  const placement = placeBubble(petBounds, clamped, workArea, preferredSideFor(petBounds, workArea));
+  const placement = placeBubble(petBounds, clamped, workArea, preferredSideFor(petBounds, workArea), avoid);
   bubble.setBounds({ x: placement.x, y: placement.y, width: clamped.width, height: clamped.height });
   return placement;
 }
 
 /** §5.4 rule 3: re-place at the current size — pet drag, drag end, display-metrics-changed. */
-export function repositionBubble(bubble: BrowserWindow, pet: BrowserWindow): Placement {
+export function repositionBubble(
+  bubble: BrowserWindow,
+  pet: BrowserWindow,
+  avoid: Rect | null = null,
+): Placement {
   const b = bubble.getBounds();
-  return placeBubbleWindow(bubble, pet, { width: b.width, height: b.height });
+  return placeBubbleWindow(bubble, pet, { width: b.width, height: b.height }, avoid);
 }
 
 /**
