@@ -95,7 +95,7 @@
                       "text": "[check] cold-profile first message (light): visible after 382 ms (bar <= 3000 ms)\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWZpcnN0LW1lc3NhZ2UtY29sZC5wbmcNCg=="
+                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWZpcnN0LW1lc3NhZ2UtY29sZC5wbmcNCg=="
                     },
                     {
                       "text": "[check] placement (light): composer top at 68.6 % of the pet window (bar >= 55 %), x 2038 vs pet 2116\n"
@@ -104,7 +104,7 @@
                       "text": "[check] band vs composer (light): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":104,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLXBsYWNlbWVudC5wbmcNCg=="
+                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLXBsYWNlbWVudC5wbmcNCg=="
                     },
                     {
                       "buffer": "aWRsZTogY3B1PTAuOTMlIHdzPTc1Ny4yTUIgcHJvY3M9Nw0K"
@@ -238,7 +238,7 @@
                       "text": "[check] band and composer never share a pixel: PASS — mid-reply, both windows visible: band {\"x\":2047,\"y\":1144,\"width\":125,\"height\":102,\"scaleFactor\":1.5}, composer {\"x\":1858,\"y\":1082,\"width\":360,\"height\":50,\"scaleFactor\":1.5}, pet.y 588. The band steps below the composer (contracts 5.3 step 6 / 6.1), so app-desktop.png carries both.\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgODE5eDExNTIgYXQgMjc1MSw4NDYgKGRjIG9mZnNldCAyNzUxLDg0NikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWRlc2t0b3AucG5nDQo="
+                      "buffer": "Y2FwdHVyZWQgODE5eDExNTIgYXQgMjc1MSw4NDYgKGRjIG9mZnNldCAyNzUxLDg0NikgLT4gRDpcZHNcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWRlc2t0b3AucG5nDQo="
                     },
                     {
                       "buffer": "c3BlYWtpbmc6IGNwdT0xLjkyJSB3cz03NDYuNE1CIHByb2NzPTcNCg=="
