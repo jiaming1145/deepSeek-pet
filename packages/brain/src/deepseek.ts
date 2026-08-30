@@ -132,7 +132,7 @@ export function parseSseLine(line: string): StreamChunk[] {
   try {
     parsed = JSON.parse(payload);
   } catch {
-    console.warn(`[deepseek] skipped a malformed SSE frame: ${payload.slice(0, 120)}`);
+    console.warn(`[deepseek] skipped a malformed SSE frame (${payload.length} chars)`);
     return [];
   }
   if (parsed === null || typeof parsed !== 'object') return [];

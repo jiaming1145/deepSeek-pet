@@ -89,7 +89,15 @@ interface Turn {
   lastLint: LintResult;
   commit: Promise<void> | null;
   committed: boolean;
-  /** Reached a terminal outcome (normal, empty, error, retire). Guards cancel()/send() and fail(). */
+  /**
+   * The stream ended normally and turnDone/metrics are out — but the turn is NOT settled until
+   * the bubble has revealed it (turnShown): a send()/cancel() before that still retires it and
+   * history gets only the shown prefix, interrupted (CX-1 / R2).
+   */
+  streamFinished: boolean;
+  /** turnDone was emitted (by finish() or retire()) — exactly once per turn. */
+  reported: boolean;
+  /** Terminal for send()/cancel()/fail(): nothing left to retire — history is final for this turn. */
   settled: boolean;
   /** Abandoned by cancel() or a superseding send() — the only reason the turn body stops early (G-4). */
   interrupted: boolean;
@@ -193,6 +201,8 @@ export class TurnRunner {
       lastLint: cleanLint(),
       commit: null,
       committed: false,
+      streamFinished: false,
+      reported: false,
       settled: false,
       interrupted: false,
       acknowledged: false,
@@ -230,6 +240,13 @@ export class TurnRunner {
     const turn = this.current;
     if (turn === null || turn.id !== turnId) return;
     turn.acknowledged = true;
+    if (turn.streamFinished && !turn.settled) {
+      // CX-1: the bubble has revealed everything — only now is the full reply a truthful row.
+      turn.settled = true;
+      this.detach(this.commitAssistant(turn));
+      this.toIdle(turn);
+      return;
+    }
     if (turn.settled) this.toIdle(turn);
   }
 
@@ -457,15 +474,27 @@ export class TurnRunner {
   private async settleNormal(turn: Turn): Promise<void> {
     if (turn.pending !== null) this.release(turn);
     if (this.abandoned(turn)) return;
-    turn.settled = true;
-    const text = turn.emitted.map((s) => s.text).join('');
+    turn.streamFinished = true;
     const writes = [this.commitUser(turn)];
-    if (text !== '') {
-      writes.push(this.enqueue('assistant row', () =>
-        this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind })));
+    // CX-1: the full assistant row is written only once playback is acknowledged. When turnShown
+    // already arrived (or there is nothing to show) the turn settles here; otherwise turnShown()
+    // writes the row, and a send()/cancel() before it retires the turn with the shown prefix.
+    const settleNow = turn.emitted.length === 0 || turn.acknowledged;
+    if (settleNow) {
+      turn.settled = true;
+      writes.push(this.commitAssistant(turn));
     }
     await Promise.all(writes);
+    if (this.abandoned(turn)) return; // retire() already reported this turn
     await this.finish(turn, null);
+  }
+
+  /** The normal (un-flagged) assistant row: the whole emitted reply. Enqueued synchronously (G-5). */
+  private commitAssistant(turn: Turn): Promise<void> {
+    const text = turn.emitted.map((s) => s.text).join('');
+    if (text === '') return Promise.resolve();
+    return this.enqueue('assistant row', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind }));
   }
 
   private async settleEmpty(turn: Turn): Promise<void> {
@@ -500,14 +529,18 @@ export class TurnRunner {
   /** cancel() and send()-while-busy share this path (§3.11.4). */
   private async retire(turn: Turn, commitUser: boolean, goIdle: boolean): Promise<void> {
     const totalMs = this.now() - turn.startedAt;
-    this.emitTurnDone(turn, totalMs);
+    // A stream-finished turn already reported (turnDone + metrics): retiring it during playback
+    // only rewrites history to the shown prefix (CX-1) — never a second turnDone.
+    const report = !turn.reported;
+    turn.reported = true;
+    if (report) this.emitTurnDone(turn, totalMs);
     if (goIdle) this.toIdle(turn);
     // Both writes are enqueued before the first await, so they precede anything a new turn does.
     const writes: Promise<void>[] = [];
     if (commitUser) writes.push(this.commitUser(turn));
     writes.push(this.persistShown(turn));
     await Promise.all(writes);
-    await this.record(turn, totalMs, null);
+    if (report) await this.record(turn, totalMs, null);
   }
 
   /** A DeepSeekError gets `error` + a MetricsRecord and NO turnDone (§3.11.5). */
@@ -528,8 +561,8 @@ export class TurnRunner {
   }
 
   private async finish(turn: Turn, errorCode: ErrorCode | null): Promise<void> {
-    turn.settled = true;
     const totalMs = this.now() - turn.startedAt;
+    turn.reported = true;
     this.emitTurnDone(turn, totalMs);
     if (turn.emitted.length === 0 || turn.acknowledged) this.toIdle(turn);
     await this.record(turn, totalMs, errorCode);

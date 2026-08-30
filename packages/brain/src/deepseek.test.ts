@@ -177,6 +177,18 @@ describe('parseSseLine', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it('CX-8: the malformed-frame warning carries the frame length, never the payload bytes', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const secret = '{"choices":[{"delta":{"content":"我昨天跟老板吵架了"';
+    expect(parseSseLine(`data: ${secret}`)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = warn.mock.calls.flat().map((a) => String(a)).join(' ');
+    expect(logged).not.toContain('我昨天跟老板吵架了');
+    expect(logged).not.toContain('choices');
+    expect(logged).toContain(`${secret.length} chars`);
+    expect(logged).toContain('malformed SSE frame');
+  });
+
   it('accepts a frame with no space after the colon', () => {
     expect(parseSseLine('data:{"choices":[{"delta":{"content":"嗯"}}]}')).toEqual([
       { kind: 'delta', text: '嗯' },
@@ -396,6 +408,7 @@ describe('DeepSeekClient.stream', () => {
     const err = await caught(() => drain(client.stream(REQ, freshSignal())));
     expect((err as DeepSeekError).code).toBe('network');
     expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls.flat().map((a) => String(a)).join(' ')).not.toContain('choices'); // CX-8
   });
 
   it('G-2: EOF before any delta and before [DONE] is retried through the existing gate', async () => {
