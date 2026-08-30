@@ -16,11 +16,17 @@ import {
  * pins that this stand-in agrees with it on the identity and on a pure scale+translate base.
  */
 class FakeMatrix44 {
-  private tr = new Float32Array(16);
+  private readonly tr = new Float32Array(16);
   constructor() { this.loadIdentity(); }
-  loadIdentity(): void { this.tr = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
+  loadIdentity(): void { this.tr.set([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]); }
+  /** By REFERENCE, like the vendored class (cubismmatrix44.ts:85-87) — not a copy. */
   getArray(): Float32Array { return this.tr; }
-  setMatrix(a: Float32Array): void { this.tr = new Float32Array(a); }
+  /**
+   * Copies INTO the live buffer (cubismmatrix44.ts:74-78). `this.tr = new Float32Array(a)` would
+   * rebind instead, and a `base` that aliases `getArray()` could then never be observed being
+   * destroyed — the hazard 'needs a PRIVATE base copy' below exists to pin (fix round 2, finding 4).
+   */
+  setMatrix(a: Float32Array): void { this.tr.set(a); }
   transformY(y: number): number { return this.tr[5] * y + this.tr[13]; }
   private static multiply(a: Float32Array, b: Float32Array, dst: Float32Array): void {
     const c = new Float32Array(16);
@@ -206,5 +212,24 @@ describe('applySquash (§5.5)', () => {
     // s = 0 is the identity: the base matrix, untouched.
     applySquash(m, base, 0, -1);
     expect(Array.from(m.getArray())).toEqual(Array.from(base));
+  });
+
+  it('needs a PRIVATE base copy: every frame squashes the same fit, and an aliased base compounds', () => {
+    // What the stage (Task 13) must do: capture `new Float32Array(matrix.getArray())` once.
+    const m = new FakeMatrix44();
+    m.setMatrix(fitted(2.5, -0.4));
+    const base = new Float32Array(m.getArray());
+    for (let i = 0; i < 3; i++) applySquash(m, base, 0.18, -1);
+    const once = new FakeMatrix44();
+    applySquash(once, fitted(2.5, -0.4), 0.18, -1);
+    expect(Array.from(m.getArray())).toEqual(Array.from(once.getArray()));
+    expect(m.getArray()[5]).toBeCloseTo((1 - 0.18) * 2.5, 6); // one squash, not three
+    // The hazard that copy prevents: `base = matrix.getArray()` aliases the live `_tr`, so the
+    // first frame destroys the base in place and the y scale compounds as (1-s)^n.
+    const aliased = new FakeMatrix44();
+    aliased.setMatrix(fitted(2.5, -0.4));
+    for (let i = 0; i < 3; i++) applySquash(aliased, aliased.getArray(), 0.18, -1);
+    expect(aliased.getArray()[5]).toBeCloseTo((1 - 0.18) ** 3 * 2.5, 6);
+    expect(aliased.getArray()[5]).not.toBeCloseTo(m.getArray()[5], 4);
   });
 });

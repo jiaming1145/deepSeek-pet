@@ -39,6 +39,7 @@ export const B07_ADAPTER = {
 
 export function runDisplayUnplug(h: MotionHarness): {
   dragGenerationKept: boolean;
+  dragClampedByRebase: boolean;
   dragClamped: boolean;
   dragClampedTraced: boolean;
   flingGenerationKept: boolean;
@@ -62,6 +63,11 @@ export function runDisplayUnplug(h: MotionHarness): {
   const nTraceDrag = h.motionTraces().length;
   h.setAreas(primaryOnly);
   h.ctl.rebase();
+  // Read BEFORE any motor frame runs: §7.7's re-clamp is `rebase()`'s own obligation, and it writes
+  // the clamped position itself. Measured after `h.frame(2)` this assertion is satisfied by the
+  // NEXT frame's `writePosition()` instead, so a `rebase()` that clamped nothing would pass it
+  // (fix round 2, finding 2). The steady-state read below stays: both halves are B-07's claim.
+  const dragClampedByRebase = grabbable(h.position(), primaryOnly);
   h.setCursor(2600, 200); // the cursor is still "over there"; the pointer target is now off every display
   h.frame(2);
   const dragGenerationKept = h.ctl.generation === genBeforeUnplug && h.ctl.phase === 'drag';
@@ -114,7 +120,7 @@ export function runDisplayUnplug(h: MotionHarness): {
   h.frame(500);
   const finalGrabbable = h.ctl.phase === 'rest' && grabbable(h.persisted.at(-1)!, primaryOnly);
   return {
-    dragGenerationKept, dragClamped, dragClampedTraced,
+    dragGenerationKept, dragClampedByRebase, dragClamped, dragClampedTraced,
     flingGenerationKept, flingVelocityKept, flingGenerationTraced, finalGrabbable,
   };
 }

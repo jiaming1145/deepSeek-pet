@@ -209,12 +209,14 @@ export class WindowMotionController {
       }
       return;
     }
-    // A live episode: re-clamp, keep the velocity, keep the generation (§7.7).
-    const safe = clampDrag({ ...this.pos, w: PET_SIZE.w, h: PET_SIZE.h }, areas, MIN_GRABBABLE);
-    if (safe.x !== this.pos.x || safe.y !== this.pos.y) {
-      this.pos = { x: safe.x, y: safe.y };
-      this.clamped = true;
-    }
+    // A live episode: re-clamp, keep the velocity, keep the generation (§7.7). The re-clamp is
+    // WRITTEN here through the one clamped-write path rather than left to the next motor frame:
+    // `display-removed` arrives on the Electron event loop BETWEEN frames, and a window on a
+    // display that no longer exists must not stay there for up to another 16.7 ms. It also makes
+    // the pull attributable — B-07's fixture reads the position immediately after `rebase()`, so a
+    // rebase that clamped nothing can no longer be covered by the next frame's `writePosition()`
+    // (fix round 2, finding 2).
+    this.writePosition();
     if (this.walk) {
       const t = clampDrag({ x: this.walk.targetX, y: this.pos.y, w: PET_SIZE.w, h: PET_SIZE.h }, areas, MIN_GRABBABLE);
       this.walk.targetX = t.x;
@@ -421,7 +423,10 @@ export class WindowMotionController {
     };
   }
 
-  /** §7.7: every write goes through clampDrag(pos, workAreas(), MIN_GRABBABLE); once per frame. */
+  /**
+   * §7.7: every write goes through clampDrag(pos, workAreas(), MIN_GRABBABLE) — once per motor
+   * frame, plus once per `rebase()` of a live episode (the only two callers).
+   */
   private writePosition(): void {
     const safe = clampDrag({ ...this.pos, w: PET_SIZE.w, h: PET_SIZE.h }, this.deps.workAreas(), MIN_GRABBABLE);
     if (safe.x !== this.pos.x || safe.y !== this.pos.y) {
@@ -451,7 +456,10 @@ export class WindowMotionController {
     // §12.2 `motion`. `clamped` means "a clampDrag pull happened since the last snapshot", so it is
     // cleared HERE and not at the top of frame(): a rebase() runs between frames (display-removed
     // arrives on the Electron event loop, never inside the motor tick) and its pull must survive
-    // into the record that reports it — B-07's whole point.
+    // into the record that reports it — B-07's whole point. §7.8 snapshots every SECOND motor
+    // frame, so a rebase landing on an odd frame would otherwise be cleared before it was ever
+    // reported. Pinned by 'a clampDrag pull by rebase() is reported by the next motion record'
+    // in window-motion.test.ts (fix round 2, finding 3), which fails if this line moves back.
     this.deps.trace?.('motion', { phase: this._phase, generation: this._generation, vx, vy, lagX, lagY, clamped: this.clamped });
     this.clamped = false;
   }
