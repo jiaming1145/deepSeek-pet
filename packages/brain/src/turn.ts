@@ -127,6 +127,8 @@ interface Turn {
   interrupted: boolean;
   acknowledged: boolean;
   base: { history: ChatMessage[]; summary: string; facts: string[] } | null;
+  /** §8.8: the messages of the LAST attempt that went on the wire (a regeneration overwrites it). */
+  envelope: string | null;
 }
 
 // ---------------------------------------------------------------- the runner
@@ -242,6 +244,7 @@ export class TurnRunner {
       interrupted: false,
       acknowledged: false,
       base: null,
+      envelope: null,
     };
     this.current = turn;
     this.setState('thinking', turn);
@@ -335,6 +338,10 @@ export class TurnRunner {
       };
       if (this.abandoned(turn)) return;
 
+      // §8.6: the user's raw text IS the retrieval query. Set before window() so the facts() call
+      // below (and any trim in between) sees it.
+      this.deps.history.setQuery(turn.userText);
+
       let window = await this.deps.history.window();
       if (this.abandoned(turn)) return;
       const plan = planTrim(window);
@@ -368,7 +375,16 @@ export class TurnRunner {
       userText: turn.userText,
     };
     if (nudge !== undefined) input.nudge = nudge;
-    return assemblePrompt(input);
+    const messages = assemblePrompt(input);
+    // §8.8, audit only — never replayed. UNBOUNDED, and deliberately flagged: this is the complete
+    // assembled prompt (system profile + up to a 24 000-token history window + the state card + the
+    // user text), roughly 50-70 KB of TEXT per turn in ds.sqlite at the trim ceiling, with no cap,
+    // no retention window and no sweep anywhere in Phase 3. §8.8 mandates the column and nothing
+    // bounds it; the memory/footprint lane is §11.4's (T3-E), which owns the decision — cap what is
+    // stored, keep only the last N turns, or add a retention sweep — before scripts/phase3-cache.mjs
+    // is built on top of the column. Fix round 1, finding 7.
+    turn.envelope = JSON.stringify(messages);
+    return messages;
   }
 
   private async drive(turn: Turn): Promise<void> {
@@ -687,6 +703,7 @@ export class TurnRunner {
       sensitive: turn.ctx.sensitiveTurn,
       lint: turn.lastLint,
       errorCode,
+      envelope: turn.envelope,
     };
     try {
       await port.record(entry);

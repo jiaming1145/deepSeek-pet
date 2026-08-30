@@ -112,6 +112,8 @@ class FakeHistory implements HistoryPort {
   appendsStarted = 0;
   /** True: window() reflects the rows appended so far (G-5). */
   windowFromRows = false;
+  /** §8.6: every setQuery the runner made, in order. */
+  readonly queries: string[] = [];
 
   async window(): Promise<ChatMessage[]> {
     if (this.windowFromRows) return this.rows.map((r) => ({ role: r.role, content: r.content }));
@@ -119,6 +121,9 @@ class FakeHistory implements HistoryPort {
   }
   async summary(): Promise<string> {
     return this.summaryText;
+  }
+  setQuery(text: string): void {
+    this.queries.push(text);
   }
   async facts(): Promise<string[]> {
     return [];
@@ -1082,5 +1087,31 @@ describe('TurnRunner — settleNormal never skips finish() for a settled turn (f
     );
     expect(h.runner.state).toBe('idle');
     quiet.mockRestore();
+  });
+});
+
+describe('§8.6 / §8.8 the retrieval query and the wire envelope', () => {
+  // DEVIATION (task-2 Step 22d): the brief writes these two cases against a `h.client.script([…])`
+  // / `h.settled()` harness API that does not exist in this file. Per the brief's own instruction
+  // ("use the file's own established setup call … only the two assertions above are new") they are
+  // written against the real `harness(scripts)` / `until()` helpers. The assertions are unchanged.
+  it('setQuery is called with the user text immediately before window()', async () => {
+    const h = harness([{ chunks: GREETING }]);
+    await h.runner.send('我下周三要去杭州面试', 'chat');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.history.queries).toEqual(['我下周三要去杭州面试']);
+  });
+
+  it('the metrics record carries the exact messages that went on the wire', async () => {
+    const h = harness([{ chunks: GREETING }]);
+    await h.runner.send('在吗', 'chat');
+    await until(() => h.metrics.records.length === 1, 'the metrics record');
+    const envelope = h.metrics.records[0].envelope;
+    expect(envelope).not.toBe(null);
+    const messages = JSON.parse(envelope ?? '[]') as Array<{ role: string; content: string }>;
+    expect(messages[0].role).toBe('system');
+    expect(messages[messages.length - 1].role).toBe('user');
+    expect(messages[messages.length - 1].content).toContain('在吗');
+    expect(messages[messages.length - 1].content).toContain('【状态】');
   });
 });

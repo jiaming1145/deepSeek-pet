@@ -19,6 +19,12 @@ export interface HistoryPort {
   summary(): Promise<string>;
   /** Up to `MAX_FACTS` retrieved facts for the latest user message. Phase 2 returns []. */
   facts(): Promise<string[]>;
+  /**
+   * §8.6: the retrieval query for the NEXT `facts()` call — the user's raw text. Called by
+   * `TurnRunner.send()` immediately before `window()`. Synchronous and void by design: it stores a
+   * string, it does not touch the database. This is the ONLY HistoryPort change in Phase 3.
+   */
+  setQuery(text: string): void;
   /** The last `n` assistant contents, oldest first. Feeds LintContext.recent. */
   recentAssistant(n: number): Promise<string[]>;
   append(role: Role, content: string, meta?: MessageMeta): Promise<void>;
@@ -39,5 +45,8 @@ export interface MetricsRecord {
   promptTokens: number; cacheHit: number; cacheMiss: number; completion: number;
   complianceMiss: boolean; regenerated: boolean; sensitive: boolean;
   lint: LintResult; errorCode: ErrorCode | null;
+  /** §8.8 / R3-11: `JSON.stringify(messages)` as the request went on the wire. AUDIT ONLY — never
+   *  replayed. `null` when the turn failed before a request was assembled. */
+  envelope: string | null;
 }
 export interface MetricsPort { record(m: MetricsRecord): Promise<void> }
