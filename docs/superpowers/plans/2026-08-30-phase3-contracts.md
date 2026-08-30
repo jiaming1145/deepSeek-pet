@@ -5,12 +5,12 @@ fixture the Phase 3 tasks share. **Authors copy from this file. Nothing here is 
 nothing missing from here may be invented — if a name or a value is genuinely absent, stop and ask
 the controller.**
 
-Status: **verified against `main` @ `88b6c21`** (2026-08-30), which already carries the Phase 2 fix
-wave and its RESIDUAL-1 merge `81ffd6b`. Six of the seven interfaces §0.6 was drafted against are now
-**VERIFIED on `main`**; the seventh is corrected. A **RESIDUAL-2** lane is still in flight
-(`quit.ts`, `index.ts` second-instance, `speech.ts` hidden-cancel, `chat-window.ts`, the key-request
-path, and a `'storage'` member for `ErrorCodeSchema`); every place that depends on it is marked
-**(residual-2 — re-verify after merge)**.
+Status: **verified against `main` @ `f3185a3`** (2026-08-30), which carries the Phase 2 fix wave,
+its RESIDUAL-1 merge `81ffd6b` and its RESIDUAL-2 merge `17d3fb9`. Every Phase 2 interface §0.6 was
+drafted against is now **VERIFIED on `main`** — six directly, one (FW-3b) corrected to a verified
+negative — and **every RESIDUAL-2 item is merged**, so no section carries a
+"re-verify after merge" marker any more. §0.6 is the table; §3.11 carries the one real follow-on
+(`DRAIN_TIMEOUT_MS`).
 
 ---
 
@@ -125,7 +125,7 @@ verbatim from `docs/superpowers/specs/2026-08-29-exquisite-bar.md`.
 | **D9** | "Grounded: **floor = work area (taskbar excluded)**; optional walk-on-active-window-edge (later); **never off-screen**, restored to a visible corner at launch." | §7.7 |
 | **D11** | "Reacts to real activity: typing → glances at the screen; long streak → cheer; wiggle near her → curiosity; battery low / on charger → micro-reaction. Keystroke reactions are **opt-in** with password-field masking; **no key logging by default**." | §10 |
 | **D12** | "Personality knob: one '活泼度' slider (quiet cat in the corner → playful), **default quiet**." | §3.5 |
-| **D13** | "Escape hatches: tray, right-click menu, hidden from Alt-Tab/taskbar, `Ctrl+Alt+H`, corner snap that never triggers Windows Snap Layouts." | §7.7 (corner snap), §3.5 / §3.10.4 / §5.9 / §8.9 / §9.5 (the tray submenus). **`Ctrl+Alt+H` is NOT shipped in Phase 3** — the only global shortcut on `main` is `Control+Shift+Space` (`index.ts:398`); the panic-hide hotkey is §13.2's Phase 4 row |
+| **D13** | "Escape hatches: tray, right-click menu, hidden from Alt-Tab/taskbar, `Ctrl+Alt+H`, corner snap that never triggers Windows Snap Layouts." | §7.7 (corner snap), §3.5 / §3.10.4 / §5.9 / §8.9 / §9.5 (the tray submenus). **`Ctrl+Alt+H` is NOT shipped in Phase 3** — the only global shortcut on `main` is `Control+Shift+Space` (`index.ts:405`); the panic-hide hotkey is §13.2's Phase 4 row |
 | **D14** | "LLM drives behaviour only through the bounded vocabulary (`emotion, motion, say, look, walkTo`); the local behaviour engine keeps her alive between calls and during API failure. Arbitration: tap reaction > LLM motion > idle; **LLM expressions persist until the next ACT or 90 s**, then decay to neutral." | §2.6, §5.2, §5.4 |
 | **D16** | "Evidence gate: **60-s unattended recording** (**≥ 4 idle behaviours**, continuous breath/blink, **≥ 1 gaze break**) and **20-s interaction recording** (hover ack, **3 touch reactions**, drag-fling arc + landing)." | §12 |
 | **A11** | "Memory recall (P3): **20 facts over 5 sessions → ≥ 90 % recalled** when relevant, paraphrase-robust; callbacks woven ('你上次说的那个面试呢'), **0** '根据你之前提到的'." | §8 |
@@ -174,30 +174,31 @@ verbatim from `docs/superpowers/specs/2026-08-29-exquisite-bar.md`.
 
 ### 0.6 The Phase 2 interfaces this contract is written against
 
-`main` @ `88b6c21` (after RESIDUAL-1 `81ffd6b`) was read directly for every row below. **Six are
-VERIFIED and carry no marker; FW-3 is half-true and its false half is corrected here.** The
-RESIDUAL-2 lane is separate and is marked wherever Phase 3 depends on it.
+`main` @ `f3185a3` (after RESIDUAL-1 `81ffd6b` and RESIDUAL-2 `17d3fb9`) was read directly for
+every row below, and every line number was re-verified against that commit. **Six are VERIFIED and
+carry no marker; FW-3 is half-true and its false half is corrected here.** RESIDUAL-2 is merged, and
+its four items are verified in the second table.
 
-| # | Interface | State on `main` @ `88b6c21` | Sections that depend on it |
+| # | Interface | State on `main` @ `f3185a3` | Sections that depend on it |
 |---|---|---|---|
 | FW-1 | `TurnRunner.cancel(): Promise<void>` — resolves after `retire`'s writes | **VERIFIED** (`packages/brain/src/turn.ts`; the write chain now also carries `userCommit: CommitState` and a `persistFailed` event, `turn.ts:34`, `:110`) | §3.11 (quit drain), §7.6, §8.5, §12.7 B-04 |
-| FW-2 | `BrainService.dispose(): Promise<void>`, awaited in `before-quit` before `db.close()` | **VERIFIED** (`brain-service.ts:356-387`; `createBeforeQuit` in `quit.ts:30` races `drain()` against `DRAIN_TIMEOUT_MS = 3000`, then `closeDb`) | §1.5, §3.11, §8.5, §11.2 |
-| FW-3a | `HistoryStore` has a **closing fence** | **VERIFIED** (`history.ts:84-86` sets `closed`, checked at `:164` and `:185`) | §8.5 |
+| FW-2 | `BrainService.dispose(): Promise<void>`, awaited in `before-quit` before `db.close()` | **VERIFIED** (`brain-service.ts:421` `async dispose(): Promise<void>`; `createBeforeQuit` in `quit.ts:30` races `drain()` against `DRAIN_TIMEOUT_MS = 3000` (`quit.ts:28`), then `closeDb`) | §1.5, §3.11, §8.5, §11.2 |
+| FW-3a | `HistoryStore` has a **closing fence** | **VERIFIED** (`history.ts:73` `private closed = false`, set by `close()` at `:92-93`, checked at `:172` and `:201`) | §8.5 |
 | FW-3b | `TrimPlan` carries **row ids** | **FALSE — corrected.** `TrimPlan` is `{keep, drop, droppedTokens}` (`packages/brain/src/types.ts:23`) and carries **no ids**. RESIDUAL-1's GC-1 rewrite instead chunks the retired prefix (`history.ts:32` `TRIM_CHUNK_TOKENS = 24_000`, `:188` `chunkByTokens`, `:208` + `:333` `prefixStillMatches`) and re-validates before advancing `last_trim_id`. §8.2 and §8.5 are written against **that** shape | §8.2, §8.5 |
-| FW-4 | the single visibility-aware chat opener in `main/index.ts` | **VERIFIED, signature corrected**: it is `requestChat(source: ChatRequestSource, focusComposer: boolean): void` (`index.ts:362`), **two** parameters, the first `source` not `reason`; call sites `:381`, `:393`, `:398`. `decideChatRequest` lives in `main/chat-request.ts` | §2.4, §5.9, §11.2, §13 |
-| FW-5 | `SpeechController` has an explicit `visible` state | **VERIFIED** (`apps/desktop/src/renderer/bubble/speech.ts:173` `get visible(): boolean`) | §11.3, §13 item 4 |
+| FW-4 | the single visibility-aware chat opener in `main/index.ts` | **VERIFIED, signature corrected**: it is `requestChat(source: ChatRequestSource, focusComposer: boolean): void` (`index.ts:367`), **two** parameters, the first `source` not `reason`; bound to the pre-ready holder at `:383`, call sites `:388` (`chat:open`), `:400` (tray) and `:405` (hotkey). `decideChatRequest` lives in `main/chat-request.ts` | §2.4, §5.9, §11.2, §13 |
+| FW-5 | `SpeechController` has an explicit `visible` state | **VERIFIED** (`apps/desktop/src/renderer/bubble/speech.ts:186` `get visible(): boolean`) | §11.3, §13 item 4 |
 | FW-6 | `PAUSE_MAX_S` / `USER_TEXT_MAX` exported from `@ds/protocol` | **VERIFIED, and already used**: `PAUSE_MAX_S = 3` (`index.ts:29`) is enforced inside `SentenceEventSchema.pause` (`:37`) **and** clamped in `parseTag` (`packages/brain/src/tags.ts:12`); `USER_TEXT_MAX = 2000` (`index.ts:255`) bounds `user:text` | §2.6, §3.10, §9.4 |
 | FW-7 | `DeepSeekError.message` user-safe, redacted `detail` | **VERIFIED** (`packages/brain/src/deepseek.ts:65-77`, "`message` never carries the upstream body"). RESIDUAL-1 also made a malformed SSE frame an error rather than a silent skip | §12.2 |
 
-**RESIDUAL-2 (in flight — not on `main`).** Phase 3 depends on it in exactly four places, each marked
-inline **(residual-2 — re-verify after merge)**:
+**RESIDUAL-2, merged in `17d3fb9` — all four VERIFIED.** Every item Phase 3 depends on is on `main`;
+the inline "re-verify after merge" markers this table used to carry are deleted.
 
-| Residual-2 change | Where Phase 3 depends on it |
-|---|---|
-| `quit.ts` drain ordering | §3.11's four-await quit sequence — and `DRAIN_TIMEOUT_MS = 3000` must be re-derived once three more awaits sit inside it |
-| `index.ts` second-instance handling | §3.11's `USER_HIDDEN` dispatch on the tray/second-instance show path |
-| `speech.ts` hidden-cancel | §11.3's "no speech lease active" predicate |
-| `protocol` `ErrorCodeSchema` gains `'storage'` | §12.2's trace `code` field, and `ERROR_HINTS`'s exhaustiveness test |
+| Residual-2 item | State | Evidence on `f3185a3` | Where Phase 3 depends on it |
+|---|---|---|---|
+| `quit.ts` step guard / drain ordering | **VERIFIED** | `quit.ts:62` `const step = (name: string, fn: () => void): void`, used at `:79` `step('teardownSync', …)` — a throwing teardown no longer strands `phase` at `'draining'` | §3.11's four-await quit sequence |
+| second-instance routed through `requestChat` | **VERIFIED** | `index.ts:126` `app.on('second-instance', () => chatRequest.request('second-instance', true))`, replayed once bound at `:383` `chatRequest.bind(requestChat)` | §3.11's `USER_HIDDEN` dispatch on the tray / second-instance show path |
+| `SpeechController` hidden-cancel, and `complete()` a no-op while paused | **VERIFIED** | `speech.ts:106` (GC2-3: hidden-and-unfinished no longer wedges the controller), `:152-155` (GC2-4: `complete()` drops the request while paused rather than committing unseen text) | §11.3's "no speech lease active" predicate |
+| `ErrorCodeSchema` gains `'storage'` | **VERIFIED** | `packages/protocol/src/index.ts:49` `z.enum([… 'no-key', 'storage'])` and its `ERROR_HINTS.storage` row at `:376` | §12.2's trace `code` field, and `ERROR_HINTS`'s exhaustiveness test |
 
 If any row above changes again, the dependent section is re-verified before its owning task starts,
 and the difference is recorded as an Amendment at the top of this file (Phase 2's Amendments
@@ -328,6 +329,7 @@ apps/desktop/src/main/trace.ts                + .test.ts   CREATE  §12.2       
 apps/desktop/src/main/window-lifecycle.ts     + .test.ts   CREATE  §11.3           T3-E
 apps/desktop/src/main/fact-extractor.ts       + .test.ts   CREATE  §8.5            T3-D
 apps/desktop/src/main/index.ts                            MODIFY  §1.5 wiring     T3-A
+apps/desktop/src/main/quit.ts                             MODIFY  §3.11 (DRAIN_TIMEOUT_MS) T3-A
 apps/desktop/src/main/brain-service.ts                    MODIFY  §3.11, §9.1     T3-C
 apps/desktop/src/main/tray.ts                 + .test.ts   MODIFY  §3.5, §3.10, §9.5 T3-C
 apps/desktop/src/main/pet-window.ts                       MODIFY  §7.7 (motor owns setPosition) T3-B
@@ -819,7 +821,7 @@ Phase 2 ships `<|ACT emotion=... motion=...|>` and `<|PAUSE n|>`. Phase 3 adds *
 the same tag. **This is a real change to `packages/brain/src/tags.ts` and `types.ts`, not an
 additive one** — the preflight caught the contract claiming otherwise, and the claim was false:
 
-| What | On `main` @ `88b6c21` | Phase 3 |
+| What | On `main` @ `f3185a3` | Phase 3 |
 |---|---|---|
 | `ACT_ATTR` | `/^(emotion\|motion)=([\w-]+)$/` (`tags.ts:7`) | `/^(emotion\|motion\|look\|walkTo)=([\w.,-]+)$/` — `look=-0.75,-0.50` needs `.` and `,`, which `[\w-]` does not match |
 | unknown attribute | **the whole tag is rejected**: `parseTag` returns `null` (`tags.ts:24`), the candidate becomes a `badtag` and is dropped silently (`tags.ts:70`, `stream-parser.ts:22-34`) | **per-attribute drop**: an unrecognised or unparseable attribute is skipped and counted as a compliance miss; the ACT still yields its `emotion` and the sentence is still emitted. Only a missing/invalid `emotion` still rejects the tag |
@@ -1944,8 +1946,8 @@ immediately, un-coalesced. On `stage:ready` (renderer reload) `SimService` re-se
 snapshot unconditionally, joining the existing `visibility.resend()` + `cursorPolling.recheck()`
 block in `main/index.ts`.
 
-Quit drain, exact order in `before-quit`
-**(FW-1 and FW-2, both verified on `main` @ `88b6c21`; the surrounding `quit.ts` ordering is **residual-2 — re-verify after merge**)**:
+Quit drain, exact order in `before-quit` (FW-1 and FW-2, both verified on `main` @ `f3185a3`; the
+surrounding `quit.ts` ordering and its `step()` guard are verified too, `quit.ts:62`/`:79`):
 
 ```
 markQuitting()
@@ -1958,6 +1960,16 @@ db.close()
 
 `db.close()` moves **after** the three new awaits. Phase 2's `before-quit` already awaits
 `brain.dispose()` before `db.close()` under FW-2; Phase 3 inserts the other three between them.
+
+> **`DRAIN_TIMEOUT_MS` has to be re-derived, and this is the note that says so.**
+> `DRAIN_TIMEOUT_MS = 3000` (`apps/desktop/src/main/quit.ts:28`) was sized for **one** await
+> (`brain.dispose()`); §3.11 puts **four** inside `drain()`. Three seconds is then a budget for four
+> serialised shutdowns, not one, and a timeout does not fail loudly — it proceeds to `closeDb`,
+> which is exactly when a snapshot or a ledger row is lost. Two acceptable resolutions, and the
+> owning task picks one from a **measurement**, not from taste: re-derive the constant from the
+> observed p95 drain across the four (`trace.ts` records it as a `resource` line at quit), or make
+> it a parameter — `createBeforeQuit({…, timeoutMs})` — and pass the value from `index.ts`, which
+> already owns the composed `drain`. Owner: T3-A, `quit.ts` (§1.5).
 
 ### 3.12 The persisted snapshot — schema and version (R3-1)
 
@@ -2520,7 +2532,7 @@ Coverage check against the bar, which is a required test in
 |---|---|
 | entries | **16** (D1 needs ≥ 12; `MIN_USABLE_BEHAVIORS` = 12) |
 | entries with **no** `when` (always eligible — the LRU floor) | **5**: `idle_breathe`, `idle_settle`, `look_around`, `head_tilt`, `fidget_hands` |
-| distinct `(motion, expression, gaze, overlay)` tuples | **16** after the `wander` re-bind below. Before it there were **15** — `idle_settle` and `wander` both read `(["Idle",1], null, follow, none)` and differed only in `locomotion`, which is invisible while she stands still. `wander` now takes `gaze: "wander"` and `overlay: "leanRight"`, so the stated test is *no two behaviours share a `(motion, expression, gaze, overlay)` tuple* with **no** locomotion escape clause |
+| distinct `(motion, expression, gaze, overlay)` tuples | **16**, in the JSON below as it stands — this does **not** depend on §4.11.2's motion re-bind. The first draft had **15**: `idle_settle` and `wander` both read `(["Idle",1], null, follow, none)` and differed only in `locomotion`, which is invisible while she stands still. `wander` now takes `gaze: "wander"` and `overlay: "leanRight"`, so the stated test is *no two behaviours share a `(motion, expression, gaze, overlay)` tuple* with **no** locomotion escape clause. §4.11.2's re-bind only widens the margin |
 | every `motion` resolves against `Haru.model3.json` | `Idle` 0–1, `TapBody` 0–3 ✔ |
 | every `expression` resolves | F01, F02, F03, F04, F05, F06, F07 ✔. **F03 is shared**: the LLM expression lane uses it for `angry`, and §5.11's annoyance reaction uses it too — one face, two sources, arbitrated by the expression lane like any other pair. **F08 (`think`) is the only expression reserved exclusively for the LLM lane.** |
 | durations inside bar §0's 5–20 s | ✔; mean of the drawn midpoints = **9.4 s**, and with the §4.6 period clamp the effective cycle at `L = 0.30` is **14.0 s** → 4.28 starts / 60 s |
@@ -2649,8 +2661,10 @@ under `docs/evidence/phase3/motions/`.
    haru_g_m20, haru_g_m09`; every other `haru_g_m*.motion3.json` is a candidate.
 2. **Play each one** in the Phase 1 debug panel (`?debug=1` → `debug:motion`), which already accepts
    an arbitrary `{group, index}` once the file is registered under a scratch `extraMotions` group.
-3. **Capture three frames each**, at **0.3 s / 1.0 s / 2.0 s** into the motion, through the existing
-   `__stage.pixels()` → `page.screenshot` path in the browser lane. Frames land at
+3. **Capture three frames each**, at **0.3 s / 1.0 s / 2.0 s** into the motion, captured with
+   `page.screenshot` in the browser lane (`__stage.pixels()` returns `{opaque, hash}`, **not an
+   image** — it is the determinism hook, not a frame buffer, so it is useful only as a cheap
+   "did the pixels change" check beside the screenshots). Frames land at
    `docs/evidence/phase3/motions/<file>-{03,10,20}.png`.
 4. **Classify by viewing the frames**, on four axes, recorded per motion in `motion-labels.json`:
 
@@ -3076,7 +3090,7 @@ export const WORK_MODE_DEFAULT = false;   // "opt-in, default off"
 Work mode is a kv flag (`ui_work_mode`) toggled from the tray (`工作模式`), default off. The global
 pass-through hotkey **does not exist and is deferred**: the preflight verified that the only global
 shortcut registered anywhere is `Control+Shift+Space` → `requestChat('hotkey', true)`
-(`apps/desktop/src/main/index.ts:398`) — neither bar §0's implied toggle nor D13's `Ctrl+Alt+H` is
+(`apps/desktop/src/main/index.ts:405`) — neither bar §0's implied toggle nor D13's `Ctrl+Alt+H` is
 in the codebase. Phase 3 ships work mode as a **tray checkbox only**; a global pass-through hotkey
 and D13's `Ctrl+Alt+H` panic-hide land with the settings surface that can rebind them (Phase 4,
 §13.2). `avatar:hover` keeps its Phase 1 meaning and its
@@ -5047,7 +5061,8 @@ leases carry generations, but the *schedule* did not, and a user who wakes the m
 
 `speechLeaseActive` is `runner.state !== 'idle'` **or** `SpeechController` reports a reveal in
 flight. The renderer half of that is the fix wave's explicit `visible` state on `SpeechController`
-(FW-5, verified at `speech.ts:173`; its hidden-**cancel** half is **residual-2 — re-verify after merge**): while `visible === false` the controller
+(FW-5, verified at `speech.ts:186`, with its hidden-cancel half verified at `speech.ts:106` and
+`:152-155`): while `visible === false` the controller
 pauses acknowledgements rather than draining the queue into a window nobody can see, which is what
 makes "hidden for 10 minutes with a turn still speaking" a real, reachable state rather than a race.
 
@@ -5217,7 +5232,9 @@ negative regex over a synthetic session is exactly the test that cannot fail (pr
 2. The deny regex `/^(?!.*(sk-|apiKey|title|\.exe|content|"text")).*$/` stays as cheap defence in
    depth, and is run over a session driven by the **real** `TraceWriter` fed from recorded
    `arb:trace` / `sim:state` payloads, not from hand-built lines. `DeepSeekError.detail` is likewise never traced — only
-`code` (FW-7, verified). `ErrorCodeSchema` gains a `'storage'` member in **residual-2 — re-verify after merge**.
+`code` (FW-7, verified). `ErrorCodeSchema` already carries the `'storage'` member RESIDUAL-2 added
+(`packages/protocol/src/index.ts:49`, `ERROR_HINTS.storage` at `:376`), so §12.2's `code` field and
+`ERROR_HINTS`'s exhaustiveness test cover it today.
 
 The writer appends with a bounded buffer (flush every 200 ms or 256 lines), rotates at 32 MB, and is
 a no-op when `DS_TRACE` is unset, so production pays nothing.
@@ -5432,7 +5449,7 @@ light-dismiss guard** — that guard stays driven by `chat:composing` from the I
 | CSP on all four renderers (M-26), versioned pre-commit hook (M-27) | `final-review.md` item 5 | **Phase 4** (R3-17 says so explicitly) | — |
 | **HEAD / Range support in the `app://` handler** | R3-17 names it in the same Phase-4 sentence as CSP; the first draft dropped the row and the preflight caught it (C-30) | **Phase 4** (R3-17). It is tracked in `docs/evidence/phase2/` at commit `c77ff21`; nothing in Phase 3 serves ranged media, and §5.12's `.ogg` files are small enough that the current handler suffices | — |
 | **X4 import** | bar §4's "export/**import**" | **Phase 4 (R3-33).** Export and wipe ship in Phase 3 (§8.9); import is a memory-injection surface (research §7.8) and waits for a UI that can show the user what is about to be written | §8.9 |
-| **A global pass-through hotkey, and D13's `Ctrl+Alt+H`** | bar §0 / D13. The preflight verified neither exists: `index.ts:398` registers only `Control+Shift+Space` | **Phase 4**, with the settings surface that can rebind them. Phase 3 ships work mode and 静音 as tray checkboxes | §5.9, §0.4's D13 row |
+| **A global pass-through hotkey, and D13's `Ctrl+Alt+H`** | bar §0 / D13. The preflight verified neither exists: `index.ts:405` registers only `Control+Shift+Space` | **Phase 4**, with the settings surface that can rebind them. Phase 3 ships work mode and 静音 as tray checkboxes | §5.9, §0.4's D13 row |
 | **X13's volume slider and labelled controls** | bar §3 | **Phase 4** with the settings window. Phase 3 ships the audio path, the 静音 checkbox and a kv volume value | §5.12 |
 | **Hiyori** | D-102 / R3-31 | **Phase 4 (character import).** Unselectable in Phase 3: no `behaviors.json`, `MIN_USABLE_BEHAVIORS` not relaxed, and the loader says why on screen. One row added to `docs/evidence/phase2/deferred.md` | §4.7 |
 | `nativeTheme` handling / un-emulated dark capture (M-18) | `final-review.md` item 6 | **Phase 4** (R3-17) | — |
