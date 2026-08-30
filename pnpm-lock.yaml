@@ -58,6 +58,15 @@ importers:
         specifier: 7.3.6
         version: 7.3.6(@types/node@24.13.3)
 
+  eval:
+    dependencies:
+      '@ds/brain':
+        specifier: workspace:*
+        version: link:../packages/brain
+      '@ds/memory':
+        specifier: workspace:*
+        version: link:../packages/memory
+
   packages/brain:
     dependencies:
       '@ds/protocol':

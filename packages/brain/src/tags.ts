@@ -19,7 +19,8 @@ export class TagScanner {
     const out: ScanItem[] = [];
     for (;;) {
       const start = this.buf.indexOf(OPEN);
-      if (start < 0) { if (this.buf) out.push({ kind: 'text', text: this.buf }); this.buf = ''; break; }
+      // Hold a trailing '<': it may be the first half of an OPEN split across two chunks.
+      if (start < 0) { const hold = this.buf.endsWith('<') ? 1 : 0; const text = hold ? this.buf.slice(0, -1) : this.buf; if (text) out.push({ kind: 'text', text }); this.buf = hold ? '<' : ''; break; }
       if (start > 0) { out.push({ kind: 'text', text: this.buf.slice(0, start) }); this.buf = this.buf.slice(start); }
       const end = this.buf.indexOf(CLOSE);
       if (end < 0) {
