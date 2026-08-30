@@ -98,7 +98,7 @@ export function App({ bridge }: AppProps): JSX.Element {
 
   return (
     <div className="app" data-history={historyOpen ? 'open' : 'closed'}>
-      <History open={historyOpen} list={list} remove={remove} />
+      <History open={historyOpen} list={list} remove={remove} refresh={turnDone?.n ?? 0} />
       {!keyPresent && <p className="app__nokey">{ERROR_HINTS['no-key'].text}</p>}
       <Composer
         onSend={onSend}
