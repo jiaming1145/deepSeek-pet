@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Composer, type ComposerProps } from './Composer';
+import { Composer, type ComposerProps, type SendResult } from './Composer';
 
 // vitest runs with `globals: false`, so @testing-library/react cannot find a global `afterEach`
 // to register its auto-cleanup on. Without this the previous test's tree stays in document.body
@@ -148,5 +149,54 @@ describe('Composer', () => {
     rerender(<Composer {...p} />);
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
     expect(p.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Fix round 1, finding 4. restore() used to key its focus/select effect on `value`; when the
+  // restored text equalled what the user had already retyped, React bailed out of the re-render,
+  // the effect never ran, and restoreRef stayed loaded so the NEXT keystroke fired a stale
+  // setSelectionRange over freshly typed text.
+  it('restores and selects even when the retyped text equals the restored text', async () => {
+    let settle: (r: SendResult) => void = () => {};
+    const p = props({
+      onSend: vi.fn(
+        () =>
+          new Promise<SendResult>((res) => {
+            settle = res;
+          }),
+      ),
+    });
+    render(<Composer {...p} />);
+    const ta = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: '在吗' } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    await tick();
+    expect(ta.value).toBe('');
+    // The user retypes the same two characters while the send is still in flight.
+    fireEvent.change(ta, { target: { value: '在吗' } });
+    await act(async () => {
+      settle({ ok: false, code: 'no-key', message: '还没填 API Key' });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(ta.value).toBe('在吗');
+    expect(document.activeElement).toBe(ta);
+    expect(ta.selectionStart).toBe(0);
+    expect(ta.selectionEnd).toBe(2);
+  });
+
+  // Fix round 1, finding 3. Pins the polarity: focus/blur are the UNLATCH (2.3's recovery rule),
+  // and compositionstart is the only thing that arms the guard — which is also the only thing that
+  // now raises main's `avatar:listening` pose (6.6, narrowed by the fix-round-1 amendment).
+  it('unlatches on focus and blur; only compositionstart arms the guard', () => {
+    const p = props();
+    render(<Composer {...p} />);
+    const ta = screen.getByRole('textbox');
+    vi.mocked(p.onComposingChange).mockClear(); // autoFocus has already fired one unlatch
+    fireEvent.focus(ta);
+    fireEvent.blur(ta);
+    expect(p.onComposingChange).toHaveBeenCalledTimes(2);
+    expect(p.onComposingChange).toHaveBeenNthCalledWith(1, false);
+    expect(p.onComposingChange).toHaveBeenNthCalledWith(2, false);
+    fireEvent.compositionStart(ta);
+    expect(p.onComposingChange).toHaveBeenLastCalledWith(true);
   });
 });

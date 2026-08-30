@@ -53,6 +53,12 @@ export function Composer(props: ComposerProps): JSX.Element {
   const restoreRef = useRef<string | null>(null);
   const [value, setValue] = useState('');
   const [rows, setRows] = useState(1);
+  // Bumped by restore(). The focus/select effect keys on this counter rather than on `value`,
+  // because a restore can put back the SAME string the user has already retyped: React then bails
+  // out of the re-render, the effect never runs, the restored text is neither focused nor selected
+  // (spec 8 / 6.2 rule 6), and restoreRef stays populated so the next keystroke fires a stale
+  // setSelectionRange over freshly typed text.
+  const [restoreTick, setRestoreTick] = useState(0);
 
   // Auto-grow: newline count, raised by wrapped-line overflow, capped at CHAT_MAX_ROWS.
   useLayoutEffect(() => {
@@ -80,19 +86,23 @@ export function Composer(props: ComposerProps): JSX.Element {
   }, [rows, onRowsChange]);
 
   // Runs after the restored text is committed, so the selection covers the real value.
+  // `setValue` and `setRestoreTick` are dispatched together, so React commits both in one render
+  // and the textarea already holds the restored text by the time this runs.
   useEffect(() => {
+    if (restoreTick === 0) return;
     const text = restoreRef.current;
-    if (text === null) return;
     restoreRef.current = null;
+    if (text === null) return;
     const el = inputRef.current;
     if (el === null) return;
     el.focus();
     el.setSelectionRange(0, text.length);
-  }, [value]);
+  }, [restoreTick]);
 
   const restore = useCallback((text: string) => {
     restoreRef.current = text;
     setValue(text);
+    setRestoreTick((n) => n + 1);
   }, []);
 
   useEffect(() => {
@@ -201,6 +211,14 @@ export function Composer(props: ComposerProps): JSX.Element {
           // `{on:false}` can reach it — verified in the real app: a click on the desktop landed
           // (foreground became Progman) but the chat never dismissed. Only compositionstart arms
           // the guard, which is the "composer focused AND an IME session open" state 2.3 names.
+          //
+          // R9 side effect, recorded rather than papered over: main also derives `avatar:listening`
+          // from this channel (6.6, 250 ms falling-edge debounce). With the polarity corrected,
+          // `{on:true}` is produced by `compositionstart` only, so the listening pose now means
+          // "an IME session is open", not "the composer has focus" — typing Latin text or pasting
+          // never raises it. contracts.md 6.6 carries the same narrowing as a fix-round-1
+          // amendment; re-pinning the producer (composer focus plus keystroke activity, derived in
+          // main) is a T6/controller change and deliberately out of T8's ownership.
           onFocus={() => onComposingChange(false)}
           onBlur={() => onComposingChange(false)}
         />

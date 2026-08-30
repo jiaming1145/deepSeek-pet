@@ -4,7 +4,7 @@ import { Channels, ERROR_HINTS, InvokeChannels } from '@ds/protocol';
 import type { TurnState } from '@ds/protocol';
 import { Composer } from './Composer';
 import type { SendResult, TurnDoneSignal, TurnErrorSignal } from './Composer';
-import { History } from './History';
+import { History, HISTORY_PAGE } from './History';
 import type { DsInvokeBridge } from './bridge';
 
 export interface AppProps {
@@ -81,7 +81,7 @@ export function App({ bridge }: AppProps): JSX.Element {
 
   const list = useCallback(
     (opts: { before?: number; limit?: number }) =>
-      bridge.invoke(InvokeChannels.historyList, { before: opts.before, limit: opts.limit ?? 50 }),
+      bridge.invoke(InvokeChannels.historyList, { before: opts.before, limit: opts.limit ?? HISTORY_PAGE }),
     [bridge],
   );
   const remove = useCallback(
