@@ -2,7 +2,7 @@
 
 cwd: `D:\ds`  ·  2026-08-30T20:36:17.223Z
 
-Run directory: `D:\ds\.claude\worktrees\wf_53266240-b22-5`.
+Run directory: `D:\ds` (A-5 normalised by the integrator; the oracle run executed in this repository's task worktree for branch `worktree-wf_53266240-b22-5`, since removed).
 
 HARDWARE: Windows 10.0.26200 (Windows 11 Home 10.0.26200), CPU 12th Gen Intel(R) Core(TM) i7-12700K, GPU/driver ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver), display 3840x2160 @ 150 % (devicePixelRatio 1.5)
 
