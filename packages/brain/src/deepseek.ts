@@ -17,8 +17,11 @@ export interface ChatClient {
   stream(req: ChatRequest, signal: AbortSignal): AsyncIterable<StreamChunk>;
   /** Non-streaming single call. On the INTERFACE, not just the class — §4.4's makeSummarizer needs it. */
   complete(req: ChatRequest, signal: AbortSignal): Promise<{ text: string; usage: Usage }>;
-  testKey(signal?: AbortSignal): Promise<{ ok: true } | { ok: false; code: ErrorCode; message: string }>;
+  testKey(signal?: AbortSignal): Promise<KeyTestResult>;
 }
+
+/** testKey() returns the same shape as DeepSeekError: a user-safe message plus an optional redacted detail (G-3). */
+export type KeyTestResult = { ok: true } | { ok: false; code: ErrorCode; message: string; detail?: string };
 
 export interface DeepSeekOptions {
   apiKey: string;
@@ -42,8 +45,14 @@ export const DEEPSEEK_JUDGE_MODEL = 'deepseek-v4-pro';
 export const DEFAULT_MAX_TOKENS = 300;
 /** Headers not received within this window -> code 'timeout'. */
 export const CONNECT_TIMEOUT_MS = 15_000;
-/** No SSE bytes for this long mid-stream -> code 'timeout'. */
+/** No SSE bytes for this long mid-stream -> code 'timeout'. Also the body idle timeout of complete()/testKey() (G-1 / M-3). */
 export const IDLE_TIMEOUT_MS = 30_000;
+/** An error body is read up to this many bytes, then the body is cancelled (G-1). */
+export const MAX_ERROR_BODY_BYTES = 2048;
+/** A non-streaming JSON body larger than this is a server error, never buffered further (G-1). */
+export const MAX_JSON_BODY_BYTES = 1_048_576;
+/** `DeepSeekError.detail` — the redacted upstream body — is at most this many characters (G-3). */
+export const MAX_DETAIL_CHARS = 512;
 /** 3 retries, 4 attempts max, for stream() only. */
 export const RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 export const RETRY_JITTER = 0.3;
@@ -56,13 +65,39 @@ export const STOP_SEQUENCES = ['\n用户：', '\n用户:', '\nUser:'] as const;
 export class DeepSeekError extends Error {
   readonly code: ErrorCode;
   readonly status: number | null;
+  /**
+   * Redacted, bounded upstream detail for diagnostics (G-3). `message` never carries the upstream
+   * body: it is derived from the status/code (see `statusMessage`), so it is safe for logs and IPC.
+   */
+  readonly detail: string | undefined;
 
-  constructor(code: ErrorCode, status: number | null, message: string) {
+  constructor(code: ErrorCode, status: number | null, message: string, detail?: string) {
     super(message);
     this.name = 'DeepSeekError';
     this.code = code;
     this.status = status;
+    this.detail = detail;
   }
+}
+
+/** The one status/code -> user-safe message table (G-3; ERROR_HINTS carries the Chinese copy). */
+export function statusMessage(status: number, code: ErrorCode): string {
+  const phrase =
+    code === 'auth' ? 'the API key was rejected'
+    : code === 'balance' ? 'insufficient balance'
+    : code === 'rate' ? 'rate limited'
+    : 'upstream error';
+  return `HTTP ${status}: ${phrase}`;
+}
+
+const KEY_PATTERN = /sk-[A-Za-z0-9]{20,}/g;
+
+/** Replaces recognised key patterns and the exact active key with `sk-…`, then bounds the length. */
+export function redactDetail(body: string, activeKey: string): string | undefined {
+  if (body === '') return undefined;
+  let out = body.replace(KEY_PATTERN, 'sk-…');
+  if (activeKey !== '') out = out.split(activeKey).join('sk-…');
+  return out.length > MAX_DETAIL_CHARS ? out.slice(0, MAX_DETAIL_CHARS) : out;
 }
 
 /** User abort. Never a DeepSeekError, never retried, never an `error` event (§3.11.5). */
@@ -97,7 +132,7 @@ export function parseSseLine(line: string): StreamChunk[] {
   try {
     parsed = JSON.parse(payload);
   } catch {
-    console.warn(`[deepseek] skipped a malformed SSE frame: ${payload.slice(0, 120)}`);
+    console.warn(`[deepseek] skipped a malformed SSE frame (${payload.length} chars)`);
     return [];
   }
   if (parsed === null || typeof parsed !== 'object') return [];
@@ -179,19 +214,78 @@ function link(outer: AbortSignal, connectMs: number): Linked {
   };
 }
 
-/** Error body is read (max 2 KB) and used as the message; `HTTP <status>` when unreadable. */
-async function httpError(res: Response): Promise<DeepSeekError> {
+interface BoundedRead {
+  text: string;
+  /** True when the body was cut at `maxBytes`; the underlying body has been cancelled. */
+  truncated: boolean;
+}
+
+/**
+ * The one bounded response-body reader (G-1 / M-3), used for error bodies, complete() and
+ * testKey(): an idle timeout per read, a byte cap enforced WHILE reading, and cancellation of the
+ * body on timeout, overflow, abort or completion. Throws CancelledError when `signal` aborted,
+ * DeepSeekError('timeout') on idle, DeepSeekError('network') on any other read failure.
+ */
+export async function readBodyBounded(
+  res: Response,
+  opts: { maxBytes: number; idleMs: number; signal?: AbortSignal },
+): Promise<BoundedRead> {
+  const body = res.body;
+  if (body === null) return { text: '', truncated: false };
+  const reader = body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let text = '';
+  let bytes = 0;
+  let truncated = false;
+  try {
+    for (;;) {
+      let step: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        step = await withTimeout(
+          reader.read(),
+          opts.idleMs,
+          () => new DeepSeekError('timeout', null, `no response body data for ${opts.idleMs} ms`),
+        );
+      } catch (err) {
+        if (opts.signal?.aborted === true) throw new CancelledError('the request was cancelled');
+        if (err instanceof DeepSeekError) throw err;
+        throw new DeepSeekError('network', null, describeError(err));
+      }
+      if (step.done) break;
+      const room = opts.maxBytes - bytes;
+      if (step.value.byteLength > room) {
+        text += decoder.decode(step.value.subarray(0, Math.max(0, room)), { stream: true });
+        bytes = opts.maxBytes;
+        truncated = true;
+        break;
+      }
+      bytes += step.value.byteLength;
+      text += decoder.decode(step.value, { stream: true });
+    }
+    text += decoder.decode();
+    return { text, truncated };
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+/**
+ * Maps a non-2xx response to a DeepSeekError. The message is status/code-derived; the body (read
+ * bounded, redacted) goes to `detail` only (G-3). An unreadable body leaves `detail` undefined.
+ */
+async function httpError(res: Response, activeKey: string, signal?: AbortSignal): Promise<DeepSeekError> {
   const status = res.status;
   const code: ErrorCode =
     status === 401 ? 'auth' : status === 402 ? 'balance' : status === 429 ? 'rate' : 'server';
-  let message = `HTTP ${status}`;
+  let detail: string | undefined;
   try {
-    const body = await res.text();
-    if (body !== '') message = body.slice(0, 2048);
-  } catch {
-    message = `HTTP ${status}`;
+    const read = await readBodyBounded(res, { maxBytes: MAX_ERROR_BODY_BYTES, idleMs: IDLE_TIMEOUT_MS, signal });
+    detail = redactDetail(read.text, activeKey);
+  } catch (err) {
+    if (err instanceof CancelledError) throw err;
+    detail = undefined;
   }
-  return new DeepSeekError(code, status, message);
+  return new DeepSeekError(code, status, statusMessage(status, code), detail);
 }
 
 // ---------------------------------------------------------------- the client
@@ -339,7 +433,7 @@ export class DeepSeekClient implements ChatClient {
     const linked = link(signal, CONNECT_TIMEOUT_MS);
     try {
       const res = await this.request(this.streamBody(req), 'text/event-stream', signal, linked);
-      if (!res.ok) throw await httpError(res);
+      if (!res.ok) throw await httpError(res, this.apiKey, signal);
       const body = res.body;
       if (body === null) throw new DeepSeekError('server', res.status, 'the streaming response carried no body');
 
@@ -377,12 +471,14 @@ export class DeepSeekClient implements ChatClient {
             newline = buffered.indexOf('\n');
           }
         }
+        // G-2: EOF before [DONE]. A final complete line is parsed; a proxy truncation is never
+        // turned into a synthetic done — it is a network failure (retryable only before any delta).
         buffered += decoder.decode();
         for (const chunk of parseSseLine(buffered)) {
           yield chunk;
           if (chunk.kind === 'done') return;
         }
-        yield { kind: 'done' };
+        throw new DeepSeekError('network', null, 'the stream ended before [DONE]');
       } finally {
         await reader.cancel().catch(() => undefined);
       }
@@ -397,13 +493,16 @@ export class DeepSeekClient implements ChatClient {
     const linked = link(signal, CONNECT_TIMEOUT_MS);
     try {
       const res = await this.request(this.completeBody(req), 'application/json', signal, linked);
-      if (!res.ok) throw await httpError(res);
+      if (!res.ok) throw await httpError(res, this.apiKey, signal);
+      const read = await readBodyBounded(res, { maxBytes: MAX_JSON_BODY_BYTES, idleMs: IDLE_TIMEOUT_MS, signal });
+      if (read.truncated) {
+        throw new DeepSeekError('server', res.status, `response body exceeded ${MAX_JSON_BODY_BYTES} bytes`);
+      }
       let parsed: unknown;
       try {
-        parsed = await res.json();
-      } catch (err) {
-        if (signal.aborted) throw new CancelledError('the request was cancelled');
-        throw new DeepSeekError('server', res.status, `unreadable response body: ${describeError(err)}`);
+        parsed = JSON.parse(read.text) as unknown;
+      } catch {
+        throw new DeepSeekError('server', res.status, 'unreadable response body: invalid JSON');
       }
       const payload = (parsed ?? {}) as {
         choices?: { message?: { content?: unknown } }[];
@@ -419,20 +518,27 @@ export class DeepSeekClient implements ChatClient {
     }
   }
 
-  async testKey(signal?: AbortSignal): Promise<{ ok: true } | { ok: false; code: ErrorCode; message: string }> {
+  async testKey(signal?: AbortSignal): Promise<KeyTestResult> {
     const outer = signal ?? new AbortController().signal;
     const linked = link(outer, CONNECT_TIMEOUT_MS);
     try {
       const res = await this.request(this.testKeyBody(), 'application/json', outer, linked);
       if (!res.ok) {
-        const failure = await httpError(res);
-        return { ok: false, code: failure.code, message: failure.message };
+        const failure = await httpError(res, this.apiKey, outer);
+        return failure.detail === undefined
+          ? { ok: false, code: failure.code, message: failure.message }
+          : { ok: false, code: failure.code, message: failure.message, detail: failure.detail };
       }
-      await res.text().catch(() => '');
+      // The one-token reply is not inspected, but the body must end: bounded read with the idle timeout.
+      await readBodyBounded(res, { maxBytes: MAX_JSON_BODY_BYTES, idleMs: IDLE_TIMEOUT_MS, signal: outer });
       return { ok: true };
     } catch (err) {
       if (err instanceof CancelledError) return { ok: false, code: 'network', message: err.message };
-      if (err instanceof DeepSeekError) return { ok: false, code: err.code, message: err.message };
+      if (err instanceof DeepSeekError) {
+        return err.detail === undefined
+          ? { ok: false, code: err.code, message: err.message }
+          : { ok: false, code: err.code, message: err.message, detail: err.detail };
+      }
       return { ok: false, code: 'network', message: describeError(err) };
     } finally {
       linked.dispose();

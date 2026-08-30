@@ -10,6 +10,7 @@ import {
   LintSeveritySchema,
   MAIN_TO_PET,
   MessageKindSchema,
+  PAUSE_MAX_S,
   RoleSchema,
   SentenceEventSchema,
   SideSchema,
@@ -123,5 +124,15 @@ describe('brain-shared shapes', () => {
 
     expect(HistoryRowSchema.safeParse({ id: 1, ts: 1756400000000, role: 'assistant', content: '嗯', turnId: null, kind: 'chat', interrupted: false }).success).toBe(true);
     expect(HistoryRowSchema.safeParse({ id: 0, ts: 1756400000000, role: 'assistant', content: '嗯', turnId: null, kind: 'chat', interrupted: false }).success).toBe(false);
+  });
+});
+
+describe('SentenceEventSchema pause bound (I-5)', () => {
+  const base = { turnId: 't', seq: 0, text: '好', emotion: 'neutral' };
+  it('accepts a pause at the bound and rejects one beyond it', () => {
+    expect(PAUSE_MAX_S).toBe(3);
+    expect(SentenceEventSchema.safeParse({ ...base, pause: PAUSE_MAX_S }).success).toBe(true);
+    expect(SentenceEventSchema.safeParse({ ...base, pause: PAUSE_MAX_S + 0.001 }).success).toBe(false);
+    expect(SentenceEventSchema.safeParse({ ...base, pause: 100000 }).success).toBe(false);
   });
 });

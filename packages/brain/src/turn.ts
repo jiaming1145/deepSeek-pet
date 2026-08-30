@@ -1,4 +1,4 @@
-import type { ErrorCode, LintResult } from '@ds/protocol';
+import type { ErrorCode, LintResult, LintRule } from '@ds/protocol';
 import { CancelledError, DeepSeekError } from './deepseek.ts';
 import type { ChatClient, ChatRequest } from './deepseek.ts';
 import type { HistoryPort, MessageKind, MetricsPort, MetricsRecord } from './ports.ts';
@@ -55,12 +55,17 @@ type SentenceVerdict = 'accepted' | 'dropped' | 'regenerate';
 
 const cleanLint = (): LintResult => ({ violations: [], severity: 'none' });
 
+/** The tail rules whose violation lives in the final (pending, unpainted) sentence itself (I-3). */
+const LAST_SENTENCE_RULES: ReadonlySet<LintRule> = new Set<LintRule>(['closing-moral', 'question-streak']);
+
 interface Turn {
   id: string;
   kind: MessageKind;
   /** The text this turn will commit — already the concatenation when it superseded a pending turn. */
   userText: string;
   startedAt: number;
+  /** Stamped at the top of every runAttempt: ttftMs is dispatch-relative (M-6, §3.11.2). */
+  dispatchedAt: number;
   preamble: StatePreamble;
   ctx: LintContext;
   controller: AbortController;
@@ -77,10 +82,25 @@ interface Turn {
   usage: Usage | null;
   regenerated: boolean;
   emptyRetried: boolean;
+  /** True once any sentence of the current attempt reached consider() — gates the A23 strip (M-1). */
+  consideredAny: boolean;
+  /** One warning per turn for motions outside persona.motionKeys (M-25). */
+  motionWarned: boolean;
   lastLint: LintResult;
   commit: Promise<void> | null;
   committed: boolean;
+  /**
+   * The stream ended normally and turnDone/metrics are out — but the turn is NOT settled until
+   * the bubble has revealed it (turnShown): a send()/cancel() before that still retires it and
+   * history gets only the shown prefix, interrupted (CX-1 / R2).
+   */
+  streamFinished: boolean;
+  /** turnDone was emitted (by finish() or retire()) — exactly once per turn. */
+  reported: boolean;
+  /** Terminal for send()/cancel()/fail(): nothing left to retire — history is final for this turn. */
   settled: boolean;
+  /** Abandoned by cancel() or a superseding send() — the only reason the turn body stops early (G-4). */
+  interrupted: boolean;
   acknowledged: boolean;
   base: { history: ChatMessage[]; summary: string; facts: string[] } | null;
 }
@@ -101,6 +121,12 @@ export class TurnRunner {
   };
   private current: Turn | null = null;
   private turnState: TurnState = 'idle';
+  /**
+   * The write barrier (G-5): every history append goes through this chain, in the order it was
+   * requested, and a new turn awaits it before reading its history window. A failed append is
+   * warned about and the chain continues — it never rejects (I-8 / G-4).
+   */
+  private writes: Promise<void> = Promise.resolve();
 
   constructor(deps: TurnRunnerDeps) {
     this.deps = deps;
@@ -143,6 +169,7 @@ export class TurnRunner {
     let userText = text;
     if (previous !== null && !previous.settled) {
       previous.settled = true;
+      previous.interrupted = true;
       previous.controller.abort();
       // Nothing was written for an uncommitted turn, so its text moves to the new turn instead.
       if (!previous.committed) userText = `${previous.userText}\n${text}`;
@@ -155,6 +182,7 @@ export class TurnRunner {
       kind,
       userText,
       startedAt: this.now(),
+      dispatchedAt: 0,
       preamble: this.deps.state(),
       ctx: { recent: [], sensitiveTurn: false },
       controller: new AbortController(),
@@ -168,10 +196,15 @@ export class TurnRunner {
       usage: null,
       regenerated: false,
       emptyRetried: false,
+      consideredAny: false,
+      motionWarned: false,
       lastLint: cleanLint(),
       commit: null,
       committed: false,
+      streamFinished: false,
+      reported: false,
       settled: false,
+      interrupted: false,
       acknowledged: false,
       base: null,
     };
@@ -181,12 +214,20 @@ export class TurnRunner {
     return Promise.resolve(id);
   }
 
-  cancel(): void {
+  /**
+   * Resolves after retire()'s writes (user row, interrupted assistant row, metrics) have settled;
+   * never rejects; resolves immediately when idle. The synchronous side effects (state -> idle,
+   * turnDone) happen before it returns, exactly as before.
+   */
+  cancel(): Promise<void> {
     const turn = this.current;
-    if (turn === null || turn.settled) return;
+    if (turn === null || turn.settled) return Promise.resolve();
     turn.settled = true;
+    turn.interrupted = true;
     turn.controller.abort();
-    this.detach(this.retire(turn, true, true));
+    const work = this.retire(turn, true, true);
+    this.detach(work);
+    return work.catch(() => undefined);
   }
 
   sentenceShown(turnId: string, seq: number): void {
@@ -199,13 +240,29 @@ export class TurnRunner {
     const turn = this.current;
     if (turn === null || turn.id !== turnId) return;
     turn.acknowledged = true;
+    if (turn.streamFinished && !turn.settled) {
+      // CX-1: the bubble has revealed everything — only now is the full reply a truthful row.
+      turn.settled = true;
+      this.detach(this.commitAssistant(turn));
+      this.toIdle(turn);
+      return;
+    }
     if (turn.settled) this.toIdle(turn);
   }
 
   // -------------------------------------------------------------- the turn body
 
   private abandoned(turn: Turn): boolean {
-    return this.current !== turn || turn.settled;
+    return this.current !== turn || turn.interrupted;
+  }
+
+  /** G-5: one ordered chain for every history append; a failure is warned about, never thrown. */
+  private enqueue(label: string, work: () => Promise<void>): Promise<void> {
+    const next = this.writes.then(work).catch((err: unknown) => {
+      console.warn(`[turn] history write failed (${label})`, err);
+    });
+    this.writes = next;
+    return next;
   }
 
   private detach(work: Promise<void>): void {
@@ -216,6 +273,9 @@ export class TurnRunner {
 
   private async run(turn: Turn): Promise<void> {
     try {
+      // G-5: a superseding turn must not overtake the previous turn's appends.
+      await this.writes;
+      if (this.abandoned(turn)) return;
       turn.ctx = {
         recent: await this.deps.history.recentAssistant(5),
         sensitiveTurn: isSensitive(turn.userText),
@@ -291,7 +351,16 @@ export class TurnRunner {
             this.resetAttempt(turn);
             continue;
           }
-          turn.pending = null; // strip, never keep-and-mark (D6)
+          // I-3: only a last-sentence rule may delete the pending sentence — it is the offender.
+          // Reply-scope rules (ellipsis, ellipsis-rate, affect-rate, emoji-rate, opener-repeat,
+          // repetition) describe text that is already painted; their verdict stays in lastLint/metrics.
+          // `ellipsis` (more than one …… in the reply) strips only when the pending sentence carries
+          // one itself: removing it then repairs the violation, so it is an offender.
+          const pendingText = turn.pending.text;
+          const offender = tail.violations.some(
+            (v) => LAST_SENTENCE_RULES.has(v.rule) || (v.rule === 'ellipsis' && pendingText.includes('……')),
+          );
+          if (offender) turn.pending = null; // strip, never keep-and-mark (D6)
         }
       }
 
@@ -302,6 +371,7 @@ export class TurnRunner {
 
   private async runAttempt(turn: Turn, messages: ChatMessage[]): Promise<AttemptOutcome> {
     turn.controller = new AbortController();
+    turn.dispatchedAt = this.now();
     const request: ChatRequest = { messages };
     try {
       for await (const chunk of this.deps.client.stream(request, turn.controller.signal)) {
@@ -311,7 +381,7 @@ export class TurnRunner {
           continue;
         }
         if (chunk.kind === 'done') continue;
-        if (turn.ttftMs === null) turn.ttftMs = this.now() - turn.startedAt;
+        if (turn.ttftMs === null) turn.ttftMs = this.now() - turn.dispatchedAt;
         turn.rawStream += chunk.text;
         for (const ev of turn.parser.push(chunk.text)) {
           if (this.consider(turn, ev) === 'regenerate') {
@@ -336,7 +406,8 @@ export class TurnRunner {
 
   /** §3.11.2 steps 1-6, in order. */
   private consider(turn: Turn, ev: SentenceEvent): SentenceVerdict {
-    const display = sanitizeForDisplay(ev.text);
+    const display = sanitizeForDisplay(ev.text, { leadingNumber: !turn.consideredAny });
+    turn.consideredAny = true;
     if (display === '') return 'dropped';
 
     const result = this.lintEnabled ? lintSentence(ev.text, turn.ctx) : cleanLint();
@@ -353,7 +424,16 @@ export class TurnRunner {
     if (result.severity !== 'none') return 'dropped';
 
     if (turn.pending !== null) this.release(turn);
-    turn.pending = { ...ev, text: display };
+    const next: SentenceEvent = { ...ev, text: display };
+    // M-25: a motion the persona does not declare never reaches the stage; the emotion stays.
+    if (next.motion !== undefined && !this.deps.persona.motionKeys.includes(next.motion)) {
+      if (!turn.motionWarned) {
+        turn.motionWarned = true;
+        console.warn(`[turn] dropped unknown motion "${next.motion}" (turn ${turn.id})`);
+      }
+      delete next.motion;
+    }
+    turn.pending = next;
     turn.rawKept += ev.text;
     return 'accepted';
   }
@@ -376,14 +456,16 @@ export class TurnRunner {
   private resetAttempt(turn: Turn): void {
     turn.parser = new StreamParser(turn.id);
     turn.pending = null;
+    turn.consideredAny = false;
     turn.rawStream = '';
     turn.rawKept = '';
     turn.ttftMs = null;
     turn.usage = null;
   }
 
+  /** I-2: emptiness is a parser fact (no non-whitespace text outside tags); the sanitizer is the fallback. */
   private isEmpty(turn: Turn): boolean {
-    if (turn.rawStream === '') return true;
+    if (!turn.parser.hasText) return true;
     return sanitizeForDisplay(turn.rawStream).trim() === '';
   }
 
@@ -392,13 +474,31 @@ export class TurnRunner {
   private async settleNormal(turn: Turn): Promise<void> {
     if (turn.pending !== null) this.release(turn);
     if (this.abandoned(turn)) return;
-    turn.settled = true;
-    await this.commitUser(turn);
-    const text = turn.emitted.map((s) => s.text).join('');
-    if (text !== '') {
-      await this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind });
+    turn.streamFinished = true;
+    const writes = [this.commitUser(turn)];
+    // CX-1: the full assistant row is written only once playback is acknowledged. When turnShown
+    // already arrived (or there is nothing to show) the turn settles here; otherwise turnShown()
+    // writes the row, and a send()/cancel() before it retires the turn with the shown prefix.
+    const settleNow = turn.emitted.length === 0 || turn.acknowledged;
+    if (settleNow) {
+      turn.settled = true;
+      writes.push(this.commitAssistant(turn));
     }
+    await Promise.all(writes);
+    // A send()/cancel() during the writes retired this turn only if it was NOT settled above;
+    // retire() then already emitted turnDone + metrics. A settled turn superseded meanwhile
+    // (current !== turn, not interrupted) still owes its terminal report (§3.11) — finish()
+    // is safe there: toIdle() no-ops for a non-current turn.
+    if (turn.reported) return;
     await this.finish(turn, null);
+  }
+
+  /** The normal (un-flagged) assistant row: the whole emitted reply. Enqueued synchronously (G-5). */
+  private commitAssistant(turn: Turn): Promise<void> {
+    const text = turn.emitted.map((s) => s.text).join('');
+    if (text === '') return Promise.resolve();
+    return this.enqueue('assistant row', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind }));
   }
 
   private async settleEmpty(turn: Turn): Promise<void> {
@@ -412,37 +512,54 @@ export class TurnRunner {
     this.setState('speaking', turn);
     turn.emitted.push(ev);
     this.emit('sentence', ev);
-    await this.deps.history.append('assistant', text, { turnId: turn.id, kind: 'system' });
+    await this.enqueue('canned line', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: 'system' }));
     await this.finish(turn, 'empty');
+  }
+
+  /**
+   * The ordered "what the user actually saw" write, shared by retire() and fail() (R2 / G-6):
+   * the sentences whose sentenceShown arrived, in seq order, as one interrupted assistant row.
+   * Enqueued synchronously so a superseding turn's barrier already covers it.
+   */
+  private persistShown(turn: Turn): Promise<void> {
+    const shown = turn.emitted.filter((s) => turn.shown.has(s.seq)).sort((a, b) => a.seq - b.seq);
+    if (shown.length === 0) return Promise.resolve();
+    const text = shown.map((s) => s.text).join('');
+    return this.enqueue('interrupted assistant row', () =>
+      this.deps.history.append('assistant', text, { turnId: turn.id, kind: turn.kind, interrupted: true }));
   }
 
   /** cancel() and send()-while-busy share this path (§3.11.4). */
   private async retire(turn: Turn, commitUser: boolean, goIdle: boolean): Promise<void> {
     const totalMs = this.now() - turn.startedAt;
-    this.emitTurnDone(turn, totalMs);
+    // A stream-finished turn already reported (turnDone + metrics): retiring it during playback
+    // only rewrites history to the shown prefix (CX-1) — never a second turnDone.
+    const report = !turn.reported;
+    turn.reported = true;
+    if (report) this.emitTurnDone(turn, totalMs);
     if (goIdle) this.toIdle(turn);
-    if (commitUser) await this.commitUser(turn);
-    const shown = turn.emitted.filter((s) => turn.shown.has(s.seq)).sort((a, b) => a.seq - b.seq);
-    if (shown.length > 0) {
-      await this.deps.history.append('assistant', shown.map((s) => s.text).join(''), {
-        turnId: turn.id,
-        kind: turn.kind,
-        interrupted: true,
-      });
-    }
-    await this.record(turn, totalMs, null);
+    // Both writes are enqueued before the first await, so they precede anything a new turn does.
+    const writes: Promise<void>[] = [];
+    if (commitUser) writes.push(this.commitUser(turn));
+    writes.push(this.persistShown(turn));
+    await Promise.all(writes);
+    if (report) await this.record(turn, totalMs, null);
   }
 
   /** A DeepSeekError gets `error` + a MetricsRecord and NO turnDone (§3.11.5). */
   private async fail(turn: Turn, err: unknown): Promise<void> {
     if (err instanceof CancelledError) return;
-    if (this.abandoned(turn)) return;
+    // A turn that already reported (turnDone out, e.g. a listener threw inside finish()) is a
+    // completed turn, never an error: no `error` event, no second MetricsRecord.
+    if (turn.settled || turn.reported || this.abandoned(turn)) return;
     turn.settled = true;
     const failure =
       err instanceof DeepSeekError
         ? err
         : new DeepSeekError('network', null, err instanceof Error ? err.message : String(err));
-    await this.commitUser(turn);
+    // G-6: what the user already saw is persisted once, as interrupted, before the error goes out.
+    await Promise.all([this.commitUser(turn), this.persistShown(turn)]);
     const totalMs = this.now() - turn.startedAt;
     this.emit('error', { turnId: turn.id, code: failure.code, message: failure.message });
     this.toIdle(turn);
@@ -450,8 +567,8 @@ export class TurnRunner {
   }
 
   private async finish(turn: Turn, errorCode: ErrorCode | null): Promise<void> {
-    turn.settled = true;
     const totalMs = this.now() - turn.startedAt;
+    turn.reported = true;
     this.emitTurnDone(turn, totalMs);
     if (turn.emitted.length === 0 || turn.acknowledged) this.toIdle(turn);
     await this.record(turn, totalMs, errorCode);
@@ -472,10 +589,8 @@ export class TurnRunner {
   private commitUser(turn: Turn): Promise<void> {
     if (turn.commit === null) {
       turn.committed = true;
-      turn.commit = this.deps.history.append('user', turn.userText, {
-        turnId: turn.id,
-        kind: turn.kind,
-      });
+      turn.commit = this.enqueue('user row', () =>
+        this.deps.history.append('user', turn.userText, { turnId: turn.id, kind: turn.kind }));
     }
     return turn.commit;
   }
@@ -499,7 +614,11 @@ export class TurnRunner {
       lint: turn.lastLint,
       errorCode,
     };
-    await port.record(entry);
+    try {
+      await port.record(entry);
+    } catch (err) {
+      console.warn('[turn] metrics write failed', err);
+    }
   }
 
   private setState(state: TurnState, turn: Turn): void {
