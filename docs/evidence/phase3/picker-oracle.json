@@ -1,0 +1,267 @@
+{
+  "cwd": "D:\\ds",
+  "runDir": "D:\\ds\\.claude\\worktrees\\wf_53266240-b22-5",
+  "date": "2026-08-30T19:55:16.491Z",
+  "hardware": "Windows 10.0.26200 (Windows 11 Home 10.0.26200), CPU 12th Gen Intel(R) Core(TM) i7-12700K, GPU/driver ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver), display 3840x2160 @ 150 % (devicePixelRatio 1.5)",
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "dpr": 1.5,
+  "canvas": {
+    "w": 630,
+    "h": 1080
+  },
+  "samples": 26736,
+  "boundaryShare": 0.5004488330341114,
+  "fpRate": 0,
+  "fnRate": 0.033812088569718735,
+  "mismatchRate": 0.1874625972471574,
+  "fnInterior": 8,
+  "fnMaxRefAlpha": 126,
+  "p50Ms": 0,
+  "p95Ms": 0.09999990463256836,
+  "p99Ms": 0.10000038146972656,
+  "parts": {
+    "body": 7721,
+    "ticklish": 5833,
+    "hair": 638,
+    "arm": 201,
+    "face": 200
+  },
+  "poses": [
+    {
+      "pose": 0,
+      "samples": 2024,
+      "boundary": 1013,
+      "fp": 0,
+      "fn": 62,
+      "mismatch": 372,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 82,
+      "parts": {
+        "body": 593,
+        "ticklish": 362,
+        "hair": 56,
+        "arm": 17,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 1,
+      "samples": 2040,
+      "boundary": 1021,
+      "fp": 0,
+      "fn": 84,
+      "mismatch": 408,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 103,
+      "parts": {
+        "body": 637,
+        "ticklish": 355,
+        "hair": 55,
+        "face": 17,
+        "arm": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 2,
+      "samples": 1928,
+      "boundary": 965,
+      "fp": 0,
+      "fn": 45,
+      "mismatch": 362,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 79,
+      "parts": {
+        "body": 587,
+        "ticklish": 277,
+        "hair": 43,
+        "arm": 16,
+        "face": 16
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 3,
+      "samples": 1700,
+      "boundary": 851,
+      "fp": 0,
+      "fn": 70,
+      "mismatch": 349,
+      "fnInterior": 7,
+      "fnMaxRefAlpha": 87,
+      "parts": {
+        "ticklish": 219,
+        "hair": 34,
+        "body": 490,
+        "arm": 22,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 4,
+      "samples": 3300,
+      "boundary": 1651,
+      "fp": 0,
+      "fn": 122,
+      "mismatch": 611,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 116,
+      "parts": {
+        "ticklish": 1140,
+        "body": 884,
+        "hair": 83,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 5,
+      "samples": 2156,
+      "boundary": 1079,
+      "fp": 0,
+      "fn": 79,
+      "mismatch": 429,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 111,
+      "parts": {
+        "body": 643,
+        "hair": 58,
+        "ticklish": 432,
+        "arm": 28,
+        "face": 16
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 6,
+      "samples": 2430,
+      "boundary": 1216,
+      "fp": 0,
+      "fn": 74,
+      "mismatch": 415,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 126,
+      "parts": {
+        "body": 684,
+        "ticklish": 637,
+        "hair": 44,
+        "arm": 17,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 7,
+      "samples": 3302,
+      "boundary": 1652,
+      "fp": 0,
+      "fn": 113,
+      "mismatch": 606,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 111,
+      "parts": {
+        "ticklish": 1133,
+        "body": 889,
+        "hair": 67,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 8,
+      "samples": 2098,
+      "boundary": 1050,
+      "fp": 0,
+      "fn": 81,
+      "mismatch": 411,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 111,
+      "parts": {
+        "body": 627,
+        "ticklish": 367,
+        "hair": 58,
+        "arm": 33,
+        "face": 16
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 9,
+      "samples": 1902,
+      "boundary": 952,
+      "fp": 0,
+      "fn": 54,
+      "mismatch": 343,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 79,
+      "parts": {
+        "ticklish": 273,
+        "body": 577,
+        "hair": 43,
+        "face": 17,
+        "arm": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 10,
+      "samples": 1918,
+      "boundary": 960,
+      "fp": 0,
+      "fn": 55,
+      "mismatch": 375,
+      "fnInterior": 0,
+      "fnMaxRefAlpha": 91,
+      "parts": {
+        "body": 580,
+        "ticklish": 297,
+        "hair": 44,
+        "arm": 17,
+        "face": 17
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 11,
+      "samples": 1938,
+      "boundary": 970,
+      "fp": 0,
+      "fn": 65,
+      "mismatch": 331,
+      "fnInterior": 1,
+      "fnMaxRefAlpha": 89,
+      "parts": {
+        "body": 530,
+        "ticklish": 341,
+        "hair": 53,
+        "arm": 17,
+        "face": 16
+      },
+      "timesMs": [],
+      "pressAlphaAgrees": true
+    }
+  ],
+  "gate": {
+    "fp": 0.005,
+    "fn": 0.005,
+    "p95Ms": 0.2,
+    "samples": 20000,
+    "boundaryShare": 0.5,
+    "perPart": 200
+  },
+  "verdict": "FAIL",
+  "ships": "fbo"
+}
