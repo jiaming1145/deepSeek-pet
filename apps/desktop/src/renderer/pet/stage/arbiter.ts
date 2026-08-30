@@ -106,7 +106,11 @@ export interface ArbiterPorts {
   trace(rec: ArbTraceRecord): void;
   motion: { startMotionForced(group: string, index: number, fadeInS: number, onFinished?: () => void): boolean };
   expression: { setExpression(name: string | null): void; setExpressionWeight(name: string, w: number): void };
-  gaze: { apply(target: GazeTarget, easeMs?: number): void; release(): void };
+  /** FIX ROUND 1 (finding 4): `easeMs` is the VISUAL snap time §5.10 asks for, `ttlMs` is the lease
+   *  lifetime. They are different numbers (the return sequence eases in 120 ms and holds for 900),
+   *  and main.ts was feeding the ease to `GazeLane.touchTarget` as its ttl — so a 900 ms gaze lease
+   *  released the eyes after 120 ms while the arbiter still believed it owned the lane. */
+  gaze: { apply(target: GazeTarget, easeMs?: number, ttlMs?: number): void; release(): void };
   overlay: { set(preset: OverlayPreset): void };
   blink: { force(): void; setSleepy(on: boolean): void };
 }
@@ -141,6 +145,9 @@ export class Arbiter {
   /** True while a grant is replacing a lease on the same lane: the outgoing lease's terminal
    *  callback must not release the gaze / clear the overlay that the incoming one is about to set. */
   private granting = 0;
+  /** Behaviour ends that arrived mid-grant, waiting for the lane to settle (see `notifyBehaviourEnd`). */
+  private readonly pendingBehaviourEnds: { id: string; result: LaneResult }[] = [];
+  private flushingBehaviourEnds = false;
   private readonly behaviourListeners: ((id: string, result: LaneResult) => void)[] = [];
 
   constructor(private readonly ports: ArbiterPorts, opts: { valence?: number; liveliness?: number } = {}) {
@@ -201,7 +208,12 @@ export class Arbiter {
         const c = this.covered;
         this.covered = null;
         const restored = this.expression.restore(c, now);
-        if (restored) this.traceGrant(restored, this.idOf(restored.payload));
+        // FIX ROUND 1 (finding 7, same pairing rule): a restored lease keeps the terminal callback
+        // its FIRST grant installed, so it will report the generation it was born with — the record
+        // here must say the same thing, or `restore` leaves a grant that no result ever closes. A
+        // hand-built covered lease (llm() under a touch) was never stamped by the holder and reports
+        // `null`.
+        if (restored) this.traceGrant(restored, this.idOf(restored.payload), c.generation > 0 ? c.generation : null);
       }
     } else {
       this.expression.tick(now);
@@ -218,8 +230,19 @@ export class Arbiter {
   // ---- commands ----------------------------------------------------------------------------
   /** §5.3: three leases with source 'behaviour' and ttl = durationMs. False = refused (runner holds). */
   behaviour(cmd: BehaviourCommand, now: number): boolean {
-    if (!this.mayTake(this.body, 'behaviour') || !this.mayTake(this.expression, 'behaviour')
-      || !this.mayTake(this.gaze, 'behaviour') || this.pendingTouchBody) return false;
+    // FIX ROUND 1 (finding 5): §5.1's "refused ⇒ `preempted` reported for the INCOMING command" holds
+    // for `behaviour` exactly as it does for `llm` and `sim`; a refusal used to return silently, so
+    // the D16 trace recorded refusals for two of the three sources only. The id is the behaviour id
+    // (what `behaviourStart`/`behaviourEnd` carry), so a reader can pair the refusal with the draw.
+    const noBody = !this.mayTake(this.body, 'behaviour') || this.pendingTouchBody !== null;
+    const noExpression = !this.mayTake(this.expression, 'behaviour');
+    const noGaze = !this.mayTake(this.gaze, 'behaviour');
+    if (noBody || noExpression || noGaze) {
+      if (noBody) this.refuse('body', 'behaviour', cmd.id);
+      if (noExpression) this.refuse('expression', 'behaviour', cmd.id);
+      if (noGaze) this.refuse('gaze', 'behaviour', cmd.id);
+      return false;
+    }
     const motionId = cmd.motion ? `${cmd.motion[0]}_${cmd.motion[1]}` : cmd.id;
     this.grant(this.body, 'behaviour', cmd.durationMs, { id: motionId, motion: cmd.motion, overlay: cmd.overlay, behaviourId: cmd.id }, now);
     this.grant(this.expression, 'behaviour', cmd.durationMs, { id: cmd.expression ?? '', name: cmd.expression, weight: cmd.expressionWeight, utteranceEndAt: null }, now);
@@ -269,11 +292,24 @@ export class Arbiter {
     // Expression: newer LLM wins; under a touch cover the new lease becomes the covered one.
     if (this.expression.current?.source === 'touch') {
       if (this.covered) { const c = this.covered; this.covered = null; c.onResult('preempted'); }
-      this.covered = {
+      // FIX ROUND 1 (finding 7): this lease is built by hand because it must NOT displace the live
+      // touch cover, so no LaneHolder ever stamps it and it has no lane generation. It now announces
+      // itself with a `laneGrant` carrying the same `generation: null` its `laneResult` already
+      // carried, so §12.2's grant↔result pairing holds for it too instead of leaving Task 17's
+      // assert-trace with a result that has no grant. DECISION (ruling requested): a null generation
+      // on both records, rather than routing through `LaneHolder.request` + `detach()` — that would
+      // buy a real generation for the covered lease only by re-issuing the LIVE touch lease under a
+      // fresh one via `restore()`, whose result still reports the ORIGINAL generation, i.e. trading
+      // this asymmetry for a worse one.
+      const covered: LaneLease<ArbExpressionPayload> = {
         lane: 'expression', source: 'llm', generation: 0, ttlMs: EXPR_TOTAL_CEILING_MS, payload: exprPayload,
         issuedAt: now, deadline: now + EXPR_TOTAL_CEILING_MS,
-        onResult: once((r) => this.ports.trace(this.rec('laneResult', { lane: 'expression', source: 'llm', generation: null, result: r }))),
+        onResult: once((r) => this.ports.trace(this.rec('laneResult', { lane: 'expression', source: 'llm', generation: null, id: this.idOf(exprPayload), result: r }))),
       };
+      this.ports.trace(this.rec('laneGrant', {
+        lane: 'expression', source: 'llm', generation: null, id: this.idOf(exprPayload), ttlMs: Math.round(covered.ttlMs),
+      }));
+      this.covered = covered;
     } else {
       this.grant(this.expression, 'llm', EXPR_TOTAL_CEILING_MS, exprPayload, now);
     }
@@ -418,8 +454,11 @@ export class Arbiter {
       }
     } else if (holder === (this.gaze as unknown as LaneHolder<P>)) {
       const p = payload as unknown as ArbGazePayload;
-      this.ports.gaze.apply(p.target, p.easeMs);
+      this.ports.gaze.apply(p.target, p.easeMs, lease.ttlMs);
     }
+    // A behaviour end reported while this grant was in flight (finding 1) runs now, with the new
+    // lease fully installed — so the runner's re-entrant `behaviour()` sees the truth and holds.
+    this.flushBehaviourEnds();
   }
 
   /** Every terminal result: one trace record plus the lane's own after-effect. */
@@ -427,6 +466,15 @@ export class Arbiter {
     this.ports.trace(this.rec('laneResult', {
       lane: lease.lane, source: lease.source, generation: lease.generation, id: this.idOf(lease.payload), result,
     }));
+    // FIX ROUND 1 (finding 1): the runner MUST hear about its behaviour whatever ended it. This used
+    // to sit below the `granting` guard, so a behaviour pre-empted by a new grant (drag/touch/llm/sim
+    // — main calls `dragStart()` on every `arb:grab`, i.e. on every tap) was never reported: the
+    // runner kept `currentId`, emitted no `behaviourEnd` and refused to select again until
+    // `nextDecisionAt`. Only the gaze release and the overlay clear belong under the guard.
+    if (holder === (this.body as unknown as LaneHolder<P>)) {
+      const id = (lease.payload as unknown as BodyPayload).behaviourId;
+      if (id) this.notifyBehaviourEnd(id, result);
+    }
     if (this.granting > 0) return;   // an incoming lease on the same lane is about to set its own state
     if (holder === (this.gaze as unknown as LaneHolder<P>)) {
       if (!this.gaze.current) this.ports.gaze.release();
@@ -434,8 +482,27 @@ export class Arbiter {
     }
     if (holder === (this.body as unknown as LaneHolder<P>)) {
       if (!this.body.current && !this.pendingTouchBody) this.applyOverlay('none');
-      const id = (lease.payload as unknown as BodyPayload).behaviourId;
-      if (id) for (const cb of this.behaviourListeners) cb(id, result);
+    }
+  }
+
+  /** Behaviour-end delivery, deferred out of the middle of a grant. A listener is the BehaviourRunner,
+   *  whose `onEnd` calls `decide()` → `behaviour()` synchronously; running that while `LaneHolder.request`
+   *  is between "finished the old lease" and "installed the new one" would let the runner win a lane the
+   *  incoming command is about to overwrite silently. Queued during a grant, flushed the moment it ends. */
+  private notifyBehaviourEnd(id: string, result: LaneResult): void {
+    this.pendingBehaviourEnds.push({ id, result });
+    this.flushBehaviourEnds();
+  }
+
+  private flushBehaviourEnds(): void {
+    if (this.granting > 0 || this.flushingBehaviourEnds) return;
+    this.flushingBehaviourEnds = true;
+    try {
+      for (let next = this.pendingBehaviourEnds.shift(); next; next = this.pendingBehaviourEnds.shift()) {
+        for (const cb of this.behaviourListeners) cb(next.id, next.result);
+      }
+    } finally {
+      this.flushingBehaviourEnds = false;
     }
   }
 
@@ -479,9 +546,9 @@ export class Arbiter {
     this.appliedExpression = name; this.appliedWeight = weight;
   }
 
-  private traceGrant(lease: LaneLease<unknown>, id: string): void {
+  private traceGrant(lease: LaneLease<unknown>, id: string, generation: number | null = lease.generation): void {
     this.ports.trace(this.rec('laneGrant', {
-      lane: lease.lane, source: lease.source, generation: lease.generation, id, ttlMs: Math.round(lease.ttlMs),
+      lane: lease.lane, source: lease.source, generation, id, ttlMs: Math.round(lease.ttlMs),
     }));
   }
 

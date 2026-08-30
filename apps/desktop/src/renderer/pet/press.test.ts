@@ -110,6 +110,19 @@ describe('PressTracker — §7.2 grab / release over the 1-px GPU read', () => {
     expect(log).toEqual(['queue#2:300,300', 'grab#2:head@200,200', 'release#2:tap']);
   });
 
+  it('a new press while one is still grabbed releases the old one first, as a fling (fix round 1)', () => {
+    const { tracker, log } = harness();
+    tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.resolvePress(1, 200);
+    // The mouseup never arrives (lost outside the window) and no mousemove reports buttons === 0.
+    tracker.mousedown(ev({ clientX: 100, clientY: 100 }));
+    // Every grab is paired: without this, arb:grab#1 had no arb:release and main's motor kept the window.
+    expect(log.slice(2)).toEqual(['release#1:fling', 'queue#2:150,150']);
+    tracker.resolvePress(2, 200);
+    tracker.mouseup(ev({ clientX: 100, clientY: 100 }));
+    expect(log.slice(4)).toEqual(['grab#2:head@100,100', 'release#2:tap', 'tap#2:head:200']);
+  });
+
   it('ignores non-left buttons', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200, button: 2 }));

@@ -3,12 +3,14 @@ import type { Payload } from '@ds/protocol';
 import {
   Arbiter, BLINK_DOUBLET_P, BLINK_MEAN_FOLLOW_MS, BLINK_MEAN_REST_MS, BLINK_MIN_INTERVAL_MS,
   BLINK_SIGMA_FOLLOW_MS, BLINK_SIGMA_REST_MS, BLINK_CLOSED_SLEEPY_S, BLINK_DRAW_INTERVAL_S,
-  fadeFor, lognormalMs, type ArbiterPorts, type TouchReaction,
+  fadeFor, lognormalMs, GLANCE_MS, RETURN_GAZE_EASE_MS, RETURN_GAZE_MS,
+  type ArbiterPorts, type TouchReaction,
 } from './arbiter';
 import {
   MOTION_FADE_IDLE_S, MOTION_FADE_LLM_S, MOTION_FADE_TOUCH_S, MOTION_GROUP_COOLDOWN_MS,
   MOTION_MIN_PLAY_MS, TOUCH_EXPR_MS, TOUCH_PREEMPT_MAX_MS,
 } from '../../shared/lane-metrics';
+import { EXPR_TOTAL_CEILING_MS } from './expression-lease';
 
 type Trace = Payload<'arb:trace'>;
 
@@ -320,5 +322,87 @@ describe('Arbiter — blink draw (§5.7, D2)', () => {
     expect(h.calls.at(-1)).toBe('sleepy:true');
     h.arb.setBlinkState('rest');
     expect(h.calls.at(-1)).toBe('sleepy:false');
+  });
+});
+
+describe('Arbiter — fix round 1', () => {
+  it('reports a behaviour that a NEW grant pre-empted, not only one that expired (finding 1)', () => {
+    // main calls arbiter.dragStart() on every `arb:grab`, i.e. on every single tap. The report used
+    // to be skipped whenever `granting > 0`, so the runner kept `currentId`, emitted no
+    // `behaviourEnd`, never called `selector.finish` and refused to re-select for 4-9 s.
+    for (const preempt of [
+      (h: ReturnType<typeof harness>) => { h.arb.dragStart(h.now); },
+      (h: ReturnType<typeof harness>) => { h.arb.touch(h.touch, h.now); },
+      (h: ReturnType<typeof harness>) => { h.arb.llm({ expression: 'F01', motion: ['TapBody', 1], look: null, emotion: 'happy' }, h.now); },
+      (h: ReturnType<typeof harness>) => { h.arb.simEvent('returned', h.now); h.advance(150); },
+    ]) {
+      const h = harness();
+      const ended: string[] = [];
+      h.arb.onBehaviourResult((id, result) => ended.push(`${id}:${result}`));
+      h.behaviour('stretch');
+      preempt(h);
+      expect(ended).toEqual(['stretch:preempted']);
+    }
+  });
+
+  it('a behaviour end delivered mid-grant sees the settled lane, so the runner cannot steal it (finding 1)', () => {
+    const h = harness();
+    // The real BehaviourRunner re-enters `behaviour()` from its result callback (`onEnd → decide`).
+    let reentered: boolean | null = null;
+    h.arb.onBehaviourResult(() => { reentered = h.behaviour('yawn'); });
+    h.behaviour('stretch');
+    h.arb.dragStart(h.now);
+    expect(reentered).toBe(false);                                   // drag owns the body lane
+    expect(h.arb.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'drag' });
+  });
+
+  it('a refused behaviour reports `preempted` on the lanes that refused it (finding 5)', () => {
+    const h = harness();
+    h.arb.llm({ expression: 'F01', motion: ['TapBody', 1], look: null, emotion: 'happy' }, 0);
+    expect(h.behaviour('stretch')).toBe(false);
+    const refusals = h.traces.filter((t) => t.kind === 'laneResult' && t.source === 'behaviour');
+    expect(refusals.map((r) => `${r.lane}:${r.id}:${r.result}:${r.generation}`))
+      .toEqual(['body:stretch:preempted:null', 'expression:stretch:preempted:null']);
+    // The LLM took body + expression only, so the gaze lane was free and is not reported.
+    expect(refusals.some((r) => r.lane === 'gaze')).toBe(false);
+  });
+
+  it('the covered LLM expression lease announces itself with a laneGrant (finding 7)', () => {
+    const h = harness();
+    h.arb.touch(h.touch, 0);
+    h.arb.llm({ expression: 'F01', motion: null, look: null, emotion: 'happy' }, 10);
+    const covered = h.traces.filter((t) => t.lane === 'expression' && t.source === 'llm');
+    expect(covered.map((t) => `${t.kind}:${t.id}:${t.generation}`)).toEqual(['laneGrant:F01:null']);
+    expect(covered[0]).toMatchObject({ ttlMs: EXPR_TOTAL_CEILING_MS });
+    // ... and the record closes when the cover lifts (a restore is a second grant of the SAME lease,
+    // R3-4) and the restored lease finishes its own curve. Every record carries the same generation,
+    // so nothing is left dangling for Task 17's assert-trace.
+    h.advance(TOUCH_EXPR_MS);
+    h.advance(60_000);
+    const after = h.traces.filter((t) => t.lane === 'expression' && t.source === 'llm');
+    expect(after.map((t) => `${t.kind}:${t.generation}`))
+      .toEqual(['laneGrant:null', 'laneGrant:null', 'laneResult:null']);
+  });
+
+  it('gaze grants hand the port the lease ttl AND the ease as separate numbers (finding 4)', () => {
+    // main.ts fed `ease` to GazeLane.touchTarget as its ttl, so §5.10's 900 ms gaze lease died at 120 ms.
+    const seen: { ease: number | undefined; ttl: number | undefined }[] = [];
+    let now = 0;
+    const timers: { due: number; fn: () => void }[] = [];
+    const ports: ArbiterPorts = {
+      now: () => now,
+      schedule: (fn, ms) => { timers.push({ due: now + ms, fn }); },
+      trace: () => {},
+      motion: { startMotionForced: () => true },
+      expression: { setExpression: () => {}, setExpressionWeight: () => {} },
+      gaze: { apply: (_t, ease, ttl) => { seen.push({ ease, ttl }); }, release: () => {} },
+      overlay: { set: () => {} },
+      blink: { force: () => {}, setSleepy: () => {} },
+    };
+    const arb = new Arbiter(ports);
+    arb.simEvent('returned', 0);
+    expect(seen).toEqual([{ ease: RETURN_GAZE_EASE_MS, ttl: RETURN_GAZE_MS }]);
+    arb.simEvent('typingGlance', 0);
+    expect(seen.at(-1)).toEqual({ ease: undefined, ttl: GLANCE_MS });
   });
 });

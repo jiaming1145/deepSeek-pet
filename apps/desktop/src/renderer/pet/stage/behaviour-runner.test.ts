@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaneResult } from '@ds/protocol';
 import type { ConditionFacts, Selection } from '@ds/behaviors';
 import { BehaviourRunner, CONDITION_POLL_MS } from './behaviour-runner';
-import type { BehaviourCommand } from './arbiter';
+import { Arbiter, type ArbiterPorts, type BehaviourCommand } from './arbiter';
 
 const facts: ConditionFacts = {
   phase: 'day', present: true, presentation: 'awake', liveliness: 0.3, mood: 0.1, energy: 60,
@@ -93,5 +93,53 @@ describe('BehaviourRunner (§5.3)', () => {
     expect(h.runner.current()).toBeNull();
     h.runner.setFrozen(false);
     expect(h.log.at(-1)).toBe('behaviour:b:6000');
+  });
+});
+
+describe('BehaviourRunner + the REAL Arbiter (fix round 1, finding 1)', () => {
+  /** Everything the arbiter needs and nothing this seam cares about. */
+  function realArbiter() {
+    let now = 0;
+    const ports: ArbiterPorts = {
+      now: () => now, schedule: () => {}, trace: () => {},
+      motion: { startMotionForced: () => true },
+      expression: { setExpression: () => {}, setExpressionWeight: () => {} },
+      gaze: { apply: () => {}, release: () => {} },
+      overlay: { set: () => {} },
+      blink: { force: () => {}, setSleepy: () => {} },
+    };
+    const arbiter = new Arbiter(ports);
+    return { arbiter, at: (t: number) => { now = t; return t; } };
+  }
+
+  it('a tap (dragStart) ends the running behaviour and the runner picks a new one at the next boundary', () => {
+    // main.ts calls arbiter.dragStart() on EVERY arb:grab. Before the fix the runner never heard, so
+    // `current()` reported a behaviour with an empty body lane and no re-selection happened until
+    // `nextDecisionAt` — verified in the browser: `look_around` with all three lanes null for 7 s.
+    const { arbiter, at } = realArbiter();
+    const log: string[] = [];
+    let nextId = 'a';
+    const runner = new BehaviourRunner({
+      selector: {
+        update: () => {},
+        select: (_f: ConditionFacts, n: number) => (nextId ? selection(nextId, n) : null),
+        finish: (id, _n, r) => log.push(`finish:${id}:${r}`),
+      },
+      arbiter, facts: () => facts, now: () => at(0), trace: () => {},
+    });
+    runner.update();
+    expect(runner.current()).toBe('a');
+    expect(arbiter.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'behaviour' });
+
+    nextId = 'b';
+    arbiter.dragStart(at(2_000));
+    expect(log).toEqual(['finish:a:preempted']);      // the selector's recency/cooldown stay honest
+    expect(runner.current()).toBeNull();              // ... and `__stage.behaviour()` no longer lies
+    expect(arbiter.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'drag' });
+
+    arbiter.dragEnd(at(2_100));
+    runner.update();                                  // the next 1 Hz poll, a full 12 s before nextDecisionAt
+    expect(runner.current()).toBe('b');
+    expect(arbiter.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'behaviour' });
   });
 });
