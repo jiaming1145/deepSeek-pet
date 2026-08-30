@@ -43,6 +43,9 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 /**
  * Report the union of the band and the hint strip. Clamped renderer-side because a hidden band
  * measures 0x0 and `bubble:size` is `z.number().positive()` — main would reject a zero (§5.2).
+ *
+ * Never call this directly except for the opening handshake below: every other caller goes through
+ * `scheduleReport()`.
  */
 let lastSize = '';
 function report(): void {
@@ -57,9 +60,33 @@ function report(): void {
   bridge?.send(Channels.bubbleSize, { width, height });
 }
 
+/**
+ * Coalesce every size report to at most ONE `bubble:size` per animation frame.
+ *
+ * Main answers each `bubble:size` with `placeBubble` + `setBounds` + a `bubble:place` that lands
+ * straight back here, so a burst in one task — the place echo, a hint appearing, and the
+ * ResizeObserver callback the same mutation produces — used to cost several window resizes for a
+ * band that settles at one size. rAF is the right clock: the size only has to be truthful about a
+ * frame once that frame is laid out, and it is never more than one frame stale, so the window can
+ * never lag a band that is still growing a grapheme at a time. The bubble window sets
+ * `backgroundThrottling: false`, so its frames keep coming even while it is hidden.
+ */
+let reportHandle = 0;
+function scheduleReport(): void {
+  if (reportHandle !== 0) return;
+  reportHandle = requestAnimationFrame(() => {
+    reportHandle = 0;
+    report();
+  });
+}
+
+// The opening handshake is synchronous. Main sizes and places the window off this first message,
+// and it must not wait on a frame from a window that has never been shown.
+report();
+
 bridge?.on(Channels.bubblePlace, (p) => {
   bubble.place(p);
-  report();
+  scheduleReport();
 });
 bridge?.on(Channels.brainState, (p) => speech.onState(p));
 bridge?.on(Channels.brainSentence, (ev) => speech.onSentence(ev));
@@ -68,7 +95,7 @@ bridge?.on(Channels.brainError, (p) => speech.onError({ code: p.code, message: p
 bridge?.on(Channels.speechComplete, () => speech.complete());
 bridge?.on(Channels.hintShow, (h) => {
   hint.show({ text: h.text, level: h.level, ttlMs: h.ttlMs });
-  report();
+  scheduleReport();
 });
 // The bubble follows the pet's visibility state (§5.4 rule 5): hidden means nobody can see her.
 bridge?.on(Channels.shellVisibility, ({ hidden }) => {
@@ -94,10 +121,10 @@ bubbleEl.addEventListener('click', () => {
 });
 hintEl.addEventListener('click', () => {
   hint.dismiss();
-  report();
+  scheduleReport();
 });
 
-new ResizeObserver(() => report()).observe(contentEl);
+new ResizeObserver(() => scheduleReport()).observe(contentEl);
 
 // The plate carries her name, read from the same public character.json the pet renderer loads.
 void (async () => {
