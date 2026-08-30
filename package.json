@@ -10,6 +10,7 @@
   "scripts": {
     "fetch-sdk": "node scripts/fetch-sdk.mjs",
     "test": "vitest run",
+    "test:eval": "pnpm --filter @ds/eval test",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
     "dev": "pnpm --filter @ds/desktop dev",
