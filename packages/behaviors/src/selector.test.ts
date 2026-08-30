@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { WeightedShuffleBag } from './bag.ts';
 import { bindResources, type BoundPack } from './bind.ts';
 import type { ConditionFacts } from './conditions.ts';
 import { BehaviorSchema, parseBehaviorPack, type Behavior } from './schema.ts';
@@ -54,7 +55,17 @@ describe('BehaviorSelector', () => {
     sel.finish('only', 6000, 'completed');
     expect(sel.select(FACTS, 10_000)).toBeNull();
     expect(sel.select(FACTS, 29_999)).toBeNull();
-    expect(sel.select(FACTS, 30_000)!.behavior.id).toBe('only');   // cooled; recency relaxed by the LRU fallback
+    // Cooled at 30 000 — but `only` is also the id just started, and the LRU fallback relaxes the
+    // recency exclusion WITHOUT ever repeating the last id (D1). With nothing else base-eligible
+    // the selector holds instead (§4.4's last rule). Fix round 1, finding 3.
+    expect(sel.select(FACTS, 30_000)).toBeNull();
+  });
+  it('a cooled-down behaviour is re-admitted as soon as one other behaviour has run', () => {
+    const pack = packOf([b({ id: 'cooled', cooldownMs: 30_000 }), b({ id: 'filler' })]);
+    const sel = new BehaviorSelector({ pack, rng: mulberry32(1), map: mapAt(0.3) });
+    const ids = [0, 15_000, 31_000, 46_000].map((t) => sel.select(FACTS, t)!.behavior.id);
+    expect(new Set(ids).size).toBe(2);                       // the fallback still fills gaps
+    for (let i = 1; i < ids.length; i++) expect(ids[i], `step ${i}`).not.toBe(ids[i - 1]);
   });
   it('LRU fallback relaxes ONLY recency and never repeats the last id', () => {
     const pack = packOf([b({ id: 'p1' }), b({ id: 'q1' }), b({ id: 'gated', when: { fact: 'phase', eq: 'night' } })]);
@@ -121,6 +132,32 @@ describe('BehaviorSelector', () => {
     sel.update(FACTS, 0); const n1 = calls.length;
     sel.update(FACTS, 1000); expect(calls.length).toBe(n1);          // same set → no rng consumed
     sel.update({ ...FACTS, cursorNear: true }, 2000); expect(calls.length).toBeGreaterThan(n1);
+  });
+  it('keeps ONE deck across decisions — the bag is not rebuilt because recency rotated', () => {
+    // Fix round 1, finding 1: the bag used to be keyed on the recency-filtered list, which changes
+    // at every decision, so refill() ran before every draw and the deck never dealt past position 0.
+    // Deck = 5 ids x round(1 * 4) = 20 cards; 30 decisions consume 30 allowed cards plus the cards
+    // skipped for the <= 3 recent ids, so the only refills possible are the initial fill and the
+    // ones draw() itself does when the deck runs out.
+    const pack = packOf([b({ id: 'k1' }), b({ id: 'k2' }), b({ id: 'k3' }), b({ id: 'k4' }), b({ id: 'k5' })]);
+    const spy = vi.spyOn(WeightedShuffleBag.prototype, 'refill');
+    try {
+      const sel = new BehaviorSelector({ pack, rng: mulberry32(6), map: mapAt(0.3) });
+      const ids: string[] = [];
+      for (let t = 0; t < 30; t++) {
+        const s = sel.select(FACTS, t * 20_000)!;
+        expect(s, `t=${t}`).not.toBeNull();
+        ids.push(s.behavior.id);
+        sel.finish(s.behavior.id, t * 20_000 + s.durationMs, 'completed');
+      }
+      expect(new Set(ids).size).toBe(5);
+      // Measured: 3 refills for 30 decisions (~75 draws over a 20-card deck). Before the fix this
+      // was one refill per decision. The bound is loose on purpose — the claim is "far fewer than
+      // one per decision", not an exact deal order.
+      expect(spy.mock.calls.length, 'refills per 30 decisions').toBeLessThanOrEqual(6);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

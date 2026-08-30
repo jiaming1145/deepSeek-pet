@@ -5,6 +5,17 @@ export function bagCopies(weight: number): number {
   return Math.max(1, Math.round(weight * 4));
 }
 
+/**
+ * A draw-without-replacement bag: each entry contributes `bagCopies(weight)` cards, the deck is
+ * laid out so that no two adjacent cards share an id, and `draw()` walks it, refilling when empty.
+ *
+ * PRECONDITION for the no-adjacent-repeat guarantee: `max(bagCopies(weight)) <= ceil(n/2)` over
+ * the deck of `n` cards. A multiset admits a repeat-free arrangement only under that inequality,
+ * so outside it — reachable with schema-legal weights, e.g. `[{a, 5}, {b, 0.1}]` = 20 vs 1 cards —
+ * `refill()` deals the unavoidable repeats instead of throwing, and the SELECTOR's recency-3
+ * exclusion (§4.4) is the line of defence. Every shipped pack is inside the precondition: the §4.9
+ * Haru pack's largest entry is `doze` at 8 of 30 eligible cards.
+ */
 export class WeightedShuffleBag {
   private readonly rng: () => number;
   private entries: readonly BagEntry[] = [];
@@ -19,6 +30,9 @@ export class WeightedShuffleBag {
 
   /**
    * Rebuilds the bag from the eligible set. Called whenever the eligible set CHANGES.
+   *
+   * No two adjacent cards share an id — across the refill seam too — WHILE the class
+   * precondition holds (`max(copies) <= ceil(n/2)`); see the class doc for what happens outside it.
    *
    * The deck is laid out by a constrained shuffle rather than a plain Fisher-Yates: a plain
    * shuffle of a multiset (`doze` alone contributes 8 of 30 cards) puts two copies of the same id
