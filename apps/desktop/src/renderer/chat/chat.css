@@ -1,0 +1,325 @@
+@import '../shared/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--c-bubble-text);
+  text-autospace: normal;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes adv-appear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  height: 100%;
+  animation: adv-appear var(--dur-overlay) var(--ease-enter) both;
+}
+
+.app__nokey {
+  margin: 0 var(--sp-4);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--c-warn-text);
+}
+
+/* --- the band ------------------------------------------------------------ */
+
+.composer {
+  position: relative;
+  flex: 0 0 auto;
+  padding: var(--sp-1) var(--sp-4) var(--sp-1) var(--sp-5);
+  background: var(--c-bubble-surface);
+  border-top: 1px solid var(--c-bubble-border);
+  border-radius: var(--r-popover);
+  box-shadow: var(--shadow-popover);
+}
+
+/* The one signature device: the band's left edge, drawn at the plate's 8 degrees. */
+.composer__rail {
+  position: absolute;
+  top: var(--sp-1);
+  bottom: var(--sp-1);
+  left: var(--sp-3);
+  width: 3px;
+  background: var(--c-accent);
+  transform: skewX(var(--adv-skew));
+}
+
+.composer__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--lh-caption);
+}
+
+.plate {
+  display: inline-block;
+  padding: 0 var(--sp-2);
+  background: var(--c-plate);
+  color: var(--c-accent-text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  transform: skewX(var(--adv-skew));
+}
+
+/* Counter-skew, derived from the token so the two can never disagree (5.8 forbids hard-coded values). */
+.plate__text {
+  display: inline-block;
+  transform: skewX(calc(-1 * var(--adv-skew)));
+}
+
+.chip {
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: var(--r-tooltip);
+  background: transparent;
+  color: var(--c-text-3);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  cursor: pointer;
+  transition: opacity var(--dur-feedback) var(--ease-enter);
+}
+
+.chip:hover {
+  opacity: 0.72;
+}
+
+.chip__chevron {
+  margin-left: var(--sp-1);
+}
+
+.composer__state {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--c-text-3);
+}
+
+.composer__row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
+.composer__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-bubble-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-line);
+  resize: none;
+  overflow: hidden;
+}
+
+.composer__input::placeholder {
+  color: var(--c-text-3);
+}
+
+.composer__action {
+  flex: 0 0 auto;
+  height: var(--lh-body);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-control);
+  background: var(--c-surface-2);
+  color: var(--c-text-2);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  cursor: pointer;
+  transition: opacity var(--dur-feedback) var(--ease-enter);
+}
+
+.composer__action:hover {
+  opacity: 0.72;
+}
+
+.composer__input:focus-visible,
+.chip:focus-visible,
+.composer__action:focus-visible,
+.msg__act:focus-visible {
+  outline: 2px solid var(--c-focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- the history pane ---------------------------------------------------- */
+
+.history {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-height: 0;
+  padding: var(--sp-3) var(--sp-4);
+  overflow-y: auto;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-popover);
+  box-shadow: var(--shadow-popover);
+}
+
+.history__sentinel {
+  height: 1px;
+  flex: 0 0 auto;
+}
+
+.history__day {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: var(--sp-1) 0;
+  background: var(--c-surface);
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-medium);
+}
+
+.history__empty {
+  margin: auto;
+  color: var(--c-text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-width: 84%;
+}
+
+.msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.msg--assistant {
+  align-self: flex-start;
+}
+
+.msg__body {
+  margin: 0;
+  color: var(--c-text);
+}
+
+.msg--bubble .msg__body {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-bubble);
+}
+
+.msg--user.msg--bubble .msg__body {
+  background: var(--c-accent-weak);
+}
+
+.msg--assistant.msg--bubble .msg__body {
+  background: var(--c-surface-2);
+}
+
+.msg--system {
+  align-self: center;
+  align-items: center;
+  max-width: 100%;
+}
+
+.msg--system .msg__body {
+  color: var(--c-text-3);
+  font-style: italic;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+.msg__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* CA-11: markers are always readable; only the per-turn actions wait for hover/focus. */
+.msg__marks,
+.msg__acts {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.msg__acts {
+  opacity: 0;
+  transition: opacity var(--dur-feedback) var(--ease-enter);
+}
+
+.msg:hover .msg__acts,
+.msg:focus-within .msg__acts {
+  opacity: 1;
+}
+
+.chip--proactive,
+.chip--interrupted {
+  color: var(--c-text-3);
+  border: 1px solid var(--c-border);
+}
+
+.msg__act {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-text-3);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app {
+    animation-duration: 80ms;
+  }
+
+  .chip,
+  .composer__action,
+  .msg__acts {
+    transition-duration: 80ms;
+  }
+}
