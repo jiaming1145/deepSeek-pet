@@ -24,8 +24,12 @@ export function decideKeyRequest(vis: { hidden: boolean; get(flag: VisibilityFla
 export type KeyRequest = {
   /** Show now, or queue until the verdict clears. The latest queued reason wins. */
   request(reason: KeyWindowReason): void;
-  /** Called with every verdict `VisibilityState` applies; a clear verdict flushes the queue. */
-  onVerdict(hidden: boolean): void;
+  /**
+   * Called on every verdict `VisibilityState` applies. GC3-1: the flush decision is
+   * `decideKeyRequest` over the INDIVIDUAL flags, never the aggregate verdict — a queued prompt
+   * must open once the last system flag clears even while the user flag stays set.
+   */
+  onVerdict(): void;
   readonly pending: KeyWindowReason | null;
 };
 
@@ -47,8 +51,10 @@ export function createKeyRequest(deps: {
       pending = reason;
       log(`[key] queued reason=${reason}: shell hidden by the system; shown when the verdict clears`);
     },
-    onVerdict(hidden) {
-      if (hidden || pending === null) return;
+    onVerdict() {
+      if (pending === null) return;
+      if (decideKeyRequest({ hidden: deps.visibility.hidden(), get: deps.visibility.get }) !== 'open') return;
+      // Cleared BEFORE show: a verdict re-entered from inside show() finds nothing queued.
       const reason = pending;
       pending = null;
       deps.show(reason);
