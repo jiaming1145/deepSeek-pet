@@ -2,6 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["vite/client"],
+    // §1.2/C1: @ds/sim and @ds/behaviors carry explicit `.ts` extensions on every relative import,
+    // and this program compiles their sources (pet/main.ts and stage/arbiter.ts import both). The
+    // main program (tsconfig.json) already sets the same flag for the same reason. apps/desktop's
+    // own files keep the extensionless convention — the flag only permits, it never requires.
+    "allowImportingTsExtensions": true,
     "lib": ["ES2022", "DOM"],
     // Mirrors packages/stage/tsconfig.json: the vendored Cubism Framework src is compiled as part of
     // this program (reached through @framework/*), and it needs these three relaxations to build.

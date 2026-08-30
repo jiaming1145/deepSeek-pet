@@ -14,6 +14,7 @@
     "test:e2e:electron": "playwright test -c playwright.electron.config.ts"
   },
   "dependencies": {
+    "@ds/behaviors": "workspace:*",
     "@ds/brain": "workspace:*",
     "@ds/memory": "workspace:*",
     "@ds/protocol": "workspace:*",
