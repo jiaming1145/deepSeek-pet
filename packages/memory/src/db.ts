@@ -90,6 +90,25 @@ export function setKv(db: DatabaseSync, key: string, value: string): void {
   db.prepare('INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)').run(key, value);
 }
 
+/** G2-7: the only shape a persisted counter may have — no sign, no leading zero, no exponent. */
+const CANONICAL_NON_NEGATIVE_INT = /^(0|[1-9]\d*)$/;
+
+/**
+ * G2-7: reads a kv counter as a canonical non-negative safe integer; a missing key is 0. Anything
+ * else throws a plain Error — `Number('garbage')` is NaN, which used to sail past the newer-schema
+ * check and be overwritten, and a negative or exponent-form `last_trim_id` used to be accepted.
+ * openDb wraps the throw in MemoryOpenError (it alone knows the path).
+ */
+export function readKvInt(db: DatabaseSync, key: string): number {
+  const raw = getKv(db, key);
+  if (raw === null) return 0;
+  const n = Number(raw);
+  if (!CANONICAL_NON_NEGATIVE_INT.test(raw) || !Number.isSafeInteger(n)) {
+    throw new Error(`数据库里的 ${key} 不是合法的整数：${JSON.stringify(raw)}`);
+  }
+  return n;
+}
+
 /**
  * Idempotent. Called by openDb; safe to call again on an already-migrated database.
  * Throws a plain Error on a newer stored schema — openDb is what wraps it in a
@@ -99,7 +118,7 @@ export function migrate(db: DatabaseSync): void {
   db.exec('BEGIN');
   try {
     db.exec(DDL_V1);
-    const stored = Number(getKv(db, KV_SCHEMA_VERSION) ?? '0');
+    const stored = readKvInt(db, KV_SCHEMA_VERSION); // G2-7: malformed -> throws -> MemoryOpenError
     if (stored > SCHEMA_VERSION) {
       throw new Error(
         `这个数据库来自更新的版本（schema_version=${stored}，本版本支持 ${SCHEMA_VERSION}）`,
@@ -131,6 +150,7 @@ export function openDb(path: string): DatabaseSync {
     db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA foreign_keys = ON');
     migrate(db);
+    readKvInt(db, KV_LAST_TRIM_ID); // G2-7: validated at open; HistoryStore trusts it afterwards
     return db;
   } catch (cause) {
     if (db !== null) {
