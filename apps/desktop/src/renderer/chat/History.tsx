@@ -1,0 +1,150 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { JSX } from 'react';
+import type { HistoryRow } from '@ds/protocol';
+
+export interface HistoryProps {
+  list(opts: { before?: number; limit?: number }): Promise<{ rows: HistoryRow[]; nextBefore: number | null }>;
+  remove(turnId: string): Promise<void>;
+  open: boolean;
+  now?: () => number;
+}
+
+export const HISTORY_PAGE = 50;
+
+const DAY_MS = 86_400_000;
+const DAY_FMT = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' });
+
+function dayStart(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function dayLabel(ts: number, now: number): string {
+  const diff = Math.round((dayStart(now) - dayStart(ts)) / DAY_MS);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '昨天';
+  return DAY_FMT.format(new Date(ts));
+}
+
+export function History(props: HistoryProps): JSX.Element {
+  const { list, remove, open, now = () => Date.now() } = props;
+  const [rows, setRows] = useState<HistoryRow[]>([]);
+  const [nextBefore, setNextBefore] = useState<number | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const startedRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const loadPage = useCallback(
+    async (before?: number) => {
+      setLoading(true);
+      try {
+        const page = await list(before === undefined ? { limit: HISTORY_PAGE } : { before, limit: HISTORY_PAGE });
+        setRows((prev) => {
+          const seen = new Set(prev.map((r) => r.id));
+          const merged = prev.concat(page.rows.filter((r) => !seen.has(r.id)));
+          merged.sort((a, b) => a.id - b.id);
+          return merged;
+        });
+        setNextBefore(page.nextBefore);
+        setLoaded(true);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [list],
+  );
+
+  useEffect(() => {
+    if (!open || startedRef.current) return;
+    startedRef.current = true;
+    void loadPage();
+  }, [open, loadPage]);
+
+  // Paging: the top sentinel scrolls into view -> fetch the previous page. No virtualization (6.3).
+  useEffect(() => {
+    if (!open || nextBefore === null || loading) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const el = sentinelRef.current;
+    if (el === null) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) void loadPage(nextBefore);
+    });
+    io.observe(el);
+    return () => {
+      io.disconnect();
+    };
+  }, [open, nextBefore, loading, loadPage]);
+
+  const onDelete = useCallback(
+    async (turnId: string) => {
+      setRows((prev) => prev.filter((r) => r.turnId !== turnId));
+      await remove(turnId);
+    },
+    [remove],
+  );
+
+  if (!open) return <></>;
+
+  const clock = now();
+  const items: JSX.Element[] = [];
+  let lastLabel = '';
+  for (const r of rows) {
+    const label = dayLabel(r.ts, clock);
+    if (label !== lastLabel) {
+      lastLabel = label;
+      items.push(
+        <h2 className="history__day" key={`day-${r.id}`}>{label}</h2>,
+      );
+    }
+    const turnId = r.turnId;
+    const bubble = r.kind !== 'system';
+    items.push(
+      <article
+        key={r.id}
+        data-testid={`msg-${r.id}`}
+        className={`msg msg--${r.role} msg--${r.kind}${bubble ? ' msg--bubble' : ''}`}
+      >
+        <p className="msg__body">{r.content}</p>
+        <div className="msg__meta">
+          {/* CA-11: markers are row content and stay visible; only the two actions hide until hover. */}
+          <span className="msg__marks">
+            {r.kind === 'proactive' && <span className="chip chip--proactive">主动</span>}
+            {r.interrupted && <span className="chip chip--interrupted">[中断]</span>}
+          </span>
+          <span className="msg__acts">
+            <button
+              type="button"
+              className="msg__act"
+              onClick={() => {
+                void navigator.clipboard?.writeText(r.content);
+              }}
+            >
+              复制
+            </button>
+            {turnId !== null && (
+              <button
+                type="button"
+                className="msg__act"
+                onClick={() => {
+                  void onDelete(turnId);
+                }}
+              >
+                删除
+              </button>
+            )}
+          </span>
+        </div>
+      </article>,
+    );
+  }
+
+  return (
+    <div className="history" role="log" aria-label="聊天记录">
+      <div className="history__sentinel" ref={sentinelRef} />
+      {items}
+      {loaded && rows.length === 0 && <p className="history__empty">还没聊过。说点什么吧。</p>}
+    </div>
+  );
+}
