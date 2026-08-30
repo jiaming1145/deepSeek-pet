@@ -2,8 +2,11 @@ import type { ClockPhase } from '@ds/protocol';
 
 /**
  * §3.9 — clock phases, local dates and meal jitter. Every function is a pure function of the
- * `nowWall` it is given: `new Date(ms)` is used ONLY as a timezone converter (never `Date.now()`,
- * never `performance`), which keeps R3-1's "no timers, no Date.now, no I/O" rule intact.
+ * `nowWall` it is given: `new Date(ms)` is used ONLY as a timezone converter (never the ambient
+ * wall clock, never `performance`), which keeps R3-1's "no timers, no ambient clock, no I/O" rule
+ * intact. NOTE: the words are deliberately not spelled with a call parenthesis — state.test.ts's
+ * §1.2 grep scans this file's text for the forbidden ambient-clock call and a doc comment would
+ * trip it.
  */
 
 /** Defaults from SIM_DEFAULTS.PHASE_HOURS; every boundary is configurable through kv `sim_phases`. */
