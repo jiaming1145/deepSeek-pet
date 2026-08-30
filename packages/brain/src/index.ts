@@ -9,3 +9,4 @@ export * from './prompt.ts';
 export * from './deepseek.ts';
 export * from './turn.ts';
 export * from './ports.ts';
+export * from './extract-prompt.ts';
