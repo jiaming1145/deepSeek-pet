@@ -41,12 +41,11 @@ const CLOSING_MORAL: RegExp[] = [
 ];
 
 // A2 — rhetorical templates. Tested per sentence (see the scope table).
+// M-2: exquisite-bar A2 names only 难道…吗 / 你觉得呢. The tag questions 对吧 / 不是吗 / 你说是不是
+// are ordinary spoken Chinese for this persona and no longer strip (contract §3.6 amendment proposed).
 const RHETORICAL: RegExp[] = [
   /难道[\s\S]{0,20}吗[？?]/,
   /你觉得呢[？?]\s*$/,
-  /不是吗[？?]\s*$/,
-  /你说是不是[？?]\s*$/,
-  /对吧[？?]\s*$/,
 ];
 
 // A6 — webnovel beats. Substring match, not regex.
@@ -213,7 +212,8 @@ export function lintReply(reply: string, ctx: LintContext): LintResult {
 const SENSITIVE: RegExp[] = [
   /自杀|自残|想死|不想活|结束(自己的)?生命/,
   /抑郁|焦虑症|惊恐发作|心理医生|精神科/,
-  /被(打|骚扰|霸凌|欺负|家暴)|家暴/,
+  // M-4: 被打 only as the verb itself — 被打开 / 被打断 / 被打印 / 被打回 / 被打扰 / 被打脸 are ordinary prose.
+  /被(打(?![开断印字扮包回扰脸])|骚扰|霸凌|欺负|家暴)|家暴/,
   /生病|住院|癌|化疗|手术|去世|过世|葬礼|离世/,
   /离婚|分手|失业|被裁|破产|欠债/,
   /性侵|强奸|违法|犯罪|毒品/,

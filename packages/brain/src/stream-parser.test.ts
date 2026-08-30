@@ -64,3 +64,23 @@ describe('StreamParser', () => {
     expect(events[1]).toEqual({ turnId: 't1', seq: 1, text: '算了。', emotion: 'sad', pause: 0.5 });
   });
 });
+
+describe('StreamParser — compliance bookkeeping (G-13)', () => {
+  it('leading whitespace before the ACT does not count as text', () => {
+    const { events, miss } = run(['\n', '<|ACT emotion=happy|>你好。']);
+    expect(miss).toBe(false);
+    expect(events[0]).toMatchObject({ text: '你好。', emotion: 'happy' });
+  });
+  it('text that only arrives via flush still flags the compliance miss', () => {
+    const { miss } = run(['嗯<|AC']);
+    expect(miss).toBe(true);
+  });
+  it('an unclosed tag at end of stream is never painted as text', () => {
+    const { events } = run(['<|ACT emotion=happy|>好。<|ACT emotion=sad']);
+    expect(events.map((e) => e.text)).toEqual(['好。']);
+  });
+  it('a PAUSE beyond the bound is clamped on the event (I-5)', () => {
+    const { events } = run(['<|ACT emotion=think|>让我想想。<|PAUSE 100000|>好吧。']);
+    expect(events[1]).toMatchObject({ text: '好吧。', pause: 3 });
+  });
+});

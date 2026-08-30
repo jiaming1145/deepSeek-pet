@@ -16,16 +16,18 @@ export class StreamParser {
   public complianceMiss = false;
   constructor(turnId: string) { this.turnId = turnId; }
 
+  /** True once any non-whitespace text was seen — the parser fact behind the §3.9.4 empty test (I-2). */
+  get hasText(): boolean { return this.sawText; }
+
   push(chunk: string): SentenceEvent[] {
     const out: SentenceEvent[] = [];
     for (const item of this.tags.push(chunk)) {
       if (item.kind === 'tag') {
+        for (const s of this.sentences.settle()) out.push(this.emit(s));
         if (item.tag.kind === 'act') { this.emotion = item.tag.emotion; this.motion = item.tag.motion; this.motionUsed = false; this.sawAct = true; }
         else this.pendingPause = item.tag.seconds;
       } else if (item.kind === 'text') {
-        if (!this.sawAct && !this.sawText && item.text.trim()) this.complianceMiss = true;
-        this.sawText = true;
-        for (const s of this.sentences.push(item.text)) out.push(this.emit(s));
+        this.onText(item.text, out);
       }
     }
     return out;
@@ -33,9 +35,18 @@ export class StreamParser {
 
   flush(): SentenceEvent[] {
     const out: SentenceEvent[] = [];
-    for (const item of this.tags.flush()) if (item.kind === 'text') for (const s of this.sentences.push(item.text)) out.push(this.emit(s));
+    for (const item of this.tags.flush()) if (item.kind === 'text') this.onText(item.text, out);
     for (const s of this.sentences.flush()) out.push(this.emit(s));
     return out;
+  }
+
+  /** G-13: the one text handler for push and flush; whitespace-only text is not "text seen". */
+  private onText(text: string, out: SentenceEvent[]): void {
+    if (text.trim() !== '') {
+      if (!this.sawAct && !this.sawText) this.complianceMiss = true;
+      this.sawText = true;
+    }
+    for (const s of this.sentences.push(text)) out.push(this.emit(s));
   }
 
   private emit(text: string): SentenceEvent {
