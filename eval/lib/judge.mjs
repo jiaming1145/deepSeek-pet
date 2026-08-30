@@ -2,6 +2,7 @@
 // It uses its own fetch on purpose: the judge must keep thinking ON, while
 // DeepSeekClient hard-codes {"thinking":{"type":"disabled"}} (contracts.md §3.9.1).
 import { readFileSync } from 'node:fs';
+import { boundedFetch } from './bounded-fetch.mjs';
 
 const SCORE_AXES = new Set(['in_character', 'nativeness']);
 
@@ -82,8 +83,13 @@ export function validateJudgement(obj, axes) {
   return { ok: true, value: out };
 }
 
-export async function judgeOnce({ baseUrl, apiKey, model, system, user, fetchImpl = fetch }) {
-  const res = await fetchImpl(`${baseUrl}/chat/completions`, {
+/**
+ * One judge call. Bounded on purpose (CX-11): AbortSignal.timeout on the request, a size/idle-capped
+ * body read, and a fetchImpl that never settles is still cut off by the same deadline. Every failure
+ * is a thrown Error so judgeTurn can turn it into `{ ok: false, message }` -> judgeError.
+ */
+export async function judgeOnce({ baseUrl, apiKey, model, system, user, fetchImpl = fetch, timeoutMs, idleMs, maxBytes }) {
+  const res = await boundedFetch(fetchImpl, `${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -93,17 +99,18 @@ export async function judgeOnce({ baseUrl, apiKey, model, system, user, fetchImp
       temperature: 0,
       max_tokens: 800,
     }),
-  });
+  }, { timeoutMs, idleMs, maxBytes });
   if (!res.ok) throw new Error(`judge HTTP ${res.status}`);
-  const body = await res.json();
+  let body;
+  try { body = JSON.parse(res.text); } catch { throw new Error('judge returned non-JSON body'); }
   return body?.choices?.[0]?.message?.content ?? '';
 }
 
 /** One turn, one retry, then give up and mark judgeError. */
-export async function judgeTurn({ baseUrl, apiKey, model, system, user, axes, fetchImpl = fetch }) {
+export async function judgeTurn({ baseUrl, apiKey, model, system, user, axes, fetchImpl = fetch, timeoutMs, idleMs, maxBytes }) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const text = await judgeOnce({ baseUrl, apiKey, model, system, user, fetchImpl });
+      const text = await judgeOnce({ baseUrl, apiKey, model, system, user, fetchImpl, timeoutMs, idleMs, maxBytes });
       const parsed = extractJson(text);
       const v = validateJudgement(parsed, axes);
       if (v.ok) return { ok: true, value: v.value };

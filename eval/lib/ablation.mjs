@@ -2,6 +2,7 @@
 // Four raw deepseek-v4-flash calls, same user turn, differing only in the system message.
 import { DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, sanitizeForDisplay } from '@ds/brain';
 import { shapeOf } from './shape.mjs';
+import { boundedFetch } from './bounded-fetch.mjs';
 
 export const ABLATION_USER_TEXT = '你好呀';
 export const MARKER_PREFIX = '【PERSONA_LOAD】';
@@ -56,26 +57,33 @@ export function probeTraits(reply) {
   return out;
 }
 
-export async function runAblation({ apiKey, model = DEEPSEEK_MODEL, baseUrl = DEEPSEEK_BASE_URL, staticSystem, fetchImpl = fetch }) {
+export async function runAblation({ apiKey, model = DEEPSEEK_MODEL, baseUrl = DEEPSEEK_BASE_URL, staticSystem, fetchImpl = fetch, timeoutMs, idleMs, maxBytes }) {
   const built = buildArms(staticSystem);
   if (!built.ok) return built;
   const results = [];
   for (const arm of built.arms) {
-    const res = await fetchImpl(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'system', content: arm.system }, { role: 'user', content: ABLATION_USER_TEXT }],
-        stream: false,
-        thinking: { type: 'disabled' },
-        temperature: 0.7,
-        top_p: 0.95,
-        max_tokens: 300,
-      }),
-    });
+    // Bounded like the judge (CX-11): a stalled arm fails the experiment, it does not hang it.
+    let res;
+    try {
+      res = await boundedFetch(fetchImpl, `${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'system', content: arm.system }, { role: 'user', content: ABLATION_USER_TEXT }],
+          stream: false,
+          thinking: { type: 'disabled' },
+          temperature: 0.7,
+          top_p: 0.95,
+          max_tokens: 300,
+        }),
+      }, { timeoutMs, idleMs, maxBytes });
+    } catch (err) {
+      return { ok: false, message: `${arm.id}: ${String(err && err.message ? err.message : err)}` };
+    }
     if (!res.ok) return { ok: false, message: `${arm.id}: HTTP ${res.status}` };
-    const body = await res.json();
+    let body;
+    try { body = JSON.parse(res.text); } catch { return { ok: false, message: `${arm.id}: non-JSON body` }; }
     const raw = body?.choices?.[0]?.message?.content ?? '';
     const reply = sanitizeForDisplay(raw);
     results.push({ id: arm.id, label: arm.label, systemChars: arm.system.length, raw, reply, shape: shapeOf(reply), traits: probeTraits(reply) });
