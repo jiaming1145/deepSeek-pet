@@ -445,7 +445,7 @@ describe('BrainService', () => {
     await service.dispose();
   });
 
-  it('GC-3: a persistFailed from the runner warns and shows the storage hint; idle -> the hint owns the hide', async () => {
+  it('GC-3 / A-38: a persistFailed from the runner warns, sends brain:error{code:storage} to the chat and shows the storage hint; idle -> the hint owns the hide', async () => {
     vi.useFakeTimers();
     setKv(db, KV_FIRST_RUN_DONE, '1');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -464,6 +464,13 @@ describe('BrainService', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0])).not.toContain(secret);
     expect(String(warn.mock.calls[0])).toContain('assistant row');
+    // A-38: the chat window gets the error code; the payload carries the hint copy, never the raw error.
+    const errs = chat.payloads(Channels.brainError) as Array<{ turnId?: string; code: string; message: string }>;
+    expect(errs).toEqual([{ turnId: 't1', code: 'storage', message: STORAGE_HINT_TEXT }]);
+    expect(JSON.stringify(errs)).not.toContain('SQLITE_FULL');
+    // The bubble renderer's brain:error handler drops the live reveal; a storage failure must not.
+    expect(bubble.payloads(Channels.brainError)).toHaveLength(0);
+    expect(openKeyWindow).not.toHaveBeenCalled();
     vi.advanceTimersByTime(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
     expect(bubbleVisible.at(-1)).toBe(false);
     // Mid-turn (speaking): the hint is shown, but the turn's own playback keeps the hide.

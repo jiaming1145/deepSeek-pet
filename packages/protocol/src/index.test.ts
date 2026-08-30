@@ -108,7 +108,7 @@ describe('brain-shared shapes', () => {
   it('pins every §2.2 vocabulary and record shape', () => {
     expect(TurnStateSchema.options).toEqual(['idle', 'thinking', 'speaking']);
     expect(ErrorCodeSchema.options).toEqual([
-      'auth', 'balance', 'rate', 'server', 'network', 'timeout', 'empty', 'no-key',
+      'auth', 'balance', 'rate', 'server', 'network', 'timeout', 'empty', 'no-key', 'storage',
     ]);
     expect(LintSeveritySchema.options).toEqual(['none', 'strip', 'regenerate']);
     expect(LintRuleSchema.options).toHaveLength(15);
