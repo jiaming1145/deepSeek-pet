@@ -1,0 +1,12 @@
+# Copy reviewed settings to .codex/config.toml only in a trusted repository.
+# The CLI remains sufficient through Phase 6; project MCP is optional.
+
+[mcp_servers.live2dTools]
+command = "uv"
+args = ["run", "python", "-m", "live2d_pipeline.mcp_server.server"]
+cwd = "."
+env_vars = ["OPENAI_API_KEY", "LIVE2D_WORKSPACE_ROOT"]
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+enabled = false
+default_tools_approval_mode = "prompt"

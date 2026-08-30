@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/part_manifest.schema.json",
+  "title": "Live2D Part Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "profile",
+    "side_convention",
+    "canvas",
+    "parts",
+    "review"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "profile": {
+      "enum": [
+        "bust_standard",
+        "full_body_standard",
+        "full_body_deluxe"
+      ]
+    },
+    "side_convention": {
+      "const": "character_perspective"
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "origin"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "origin": {
+          "const": "top_left"
+        }
+      }
+    },
+    "parts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "id",
+          "group",
+          "category",
+          "side",
+          "imported",
+          "required_if",
+          "needs_hidden_reconstruction",
+          "motion_role",
+          "z_index",
+          "overlap_px"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "l",
+              "r",
+              "center",
+              "none"
+            ]
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "required_if": {
+            "type": "string"
+          },
+          "needs_hidden_reconstruction": {
+            "type": "boolean"
+          },
+          "motion_role": {
+            "type": "string"
+          },
+          "clipped_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "z_index": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "occludes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "occluded_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "motion_envelope": {
+            "type": "object"
+          },
+          "overlap_px": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2048
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "masked",
+              "reconstructed",
+              "final",
+              "rejected"
+            ]
+          }
+        }
+      }
+    },
+    "draw_order_status": {
+      "type": "string"
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "approved",
+            "rejected"
+          ]
+        }
+      }
+    }
+  }
+}
