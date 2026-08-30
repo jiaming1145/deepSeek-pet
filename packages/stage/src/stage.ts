@@ -11,6 +11,7 @@ import {
 import { CompanionModel, Priority } from './companion-model';
 import { ViewportFit, withOffscreenFrame } from './frame';
 import { TextMouthDriver, type MouthDriver } from './mouth';
+import { FboPicker, GpuPressReader, type PressRead } from './picker-gpu';
 import type { Rng } from './rng';
 import { Ticker } from './ticker';
 import { ViewTransform } from './view';
@@ -48,6 +49,12 @@ export class Live2DStage {
   private readonly ticker: Ticker;
   private readonly fit = new ViewportFit();
   private disposed = false;
+  /** §6.3: the press queue; serviced by frame() right after model.draw(). Task 13's press.ts queues into it. */
+  readonly pressReader = new GpuPressReader();
+  /** Receives every serviced press read on the frame after the pointer-down (§6.3, §7.2 step 1). */
+  onPressRead: ((r: PressRead) => void) | null = null;
+  /** §6.6: set by the pet renderer when the CPU predicate misses the §6.5 gate; null keeps frame() unchanged. */
+  fboPicker: FboPicker | null = null;
   /** §5.14 item 5: the matrix the last drawn frame used; resize()'s matrix before the first frame. */
   private lastProjection = new CubismMatrix44();
 
@@ -143,6 +150,7 @@ export class Live2DStage {
     this.applyFit(w, h);
     this.model.setRenderTargetSize(w, h);
     this.lastProjection = this.projection(w, h);
+    this.fboPicker?.invalidate();
   }
 
   /**
@@ -192,7 +200,11 @@ export class Live2DStage {
     return p;
   }
 
-  private frame(dt: number): void {
+  /**
+   * One render step. Public so the §6.5 oracle can freeze a pose with "stop() after a manual
+   * frame(dt)"; production code never calls it directly — the Ticker does.
+   */
+  frame(dt: number): void {
     const gl = this.gl;
     if (gl.isContextLost()) return;
     const w = this.canvas.width;
@@ -214,6 +226,16 @@ export class Live2DStage {
       this.lastProjection = projection; // stored BEFORE draw, never half-built (§5.14 item 5)
       this.model.tick(dt);
       this.model.draw(projection, null, [0, 0, w, h]);
+      // §6.3: the 1-px read happens inside this same RAF callback, after the draw, so the backbuffer
+      // is the frame just drawn and preserveDrawingBuffer stays off.
+      const read = this.pressReader.service(gl);
+      if (read && this.onPressRead) this.onPressRead(read);
+      // §6.6: the quarter-scale hover mask, refreshed behind an async fence.
+      if (this.fboPicker) {
+        const now = performance.now();
+        this.fboPicker.capture(gl, projection, now);
+        this.fboPicker.poll(gl, now);
+      }
     });
   }
 
@@ -285,6 +307,10 @@ export class Live2DStage {
     if (this.disposed) return;
     this.disposed = true;
     this.stop();
+    // The FBO picker owns a framebuffer, an RGBA8 texture, a PIXEL_PACK buffer and possibly an
+    // outstanding fence; nothing else frees them, and a character swap builds a fresh stage.
+    this.fboPicker?.dispose(this.gl);
+    this.fboPicker = null;
     this.model.release();
     CubismWebGLOffscreenManager.getInstance().removeContext(this.gl);
   }
