@@ -23,6 +23,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@ds/behaviors':
+        specifier: workspace:*
+        version: link:../../packages/behaviors
       '@ds/brain':
         specifier: workspace:*
         version: link:../../packages/brain
