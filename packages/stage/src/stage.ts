@@ -48,6 +48,8 @@ export class Live2DStage {
   private readonly ticker: Ticker;
   private readonly fit = new ViewportFit();
   private disposed = false;
+  /** §5.14 item 5: the matrix the last drawn frame used; resize()'s matrix before the first frame. */
+  private lastProjection = new CubismMatrix44();
 
   private constructor(
     canvas: HTMLCanvasElement,
@@ -139,6 +141,7 @@ export class Live2DStage {
     // Same call frame() makes, so a hit test before the first frame sees the same model matrix.
     this.applyFit(w, h);
     this.model.setRenderTargetSize(w, h);
+    this.lastProjection = this.projection(w, h);
   }
 
   /**
@@ -207,6 +210,7 @@ export class Live2DStage {
     withOffscreenFrame(CubismWebGLOffscreenManager.getInstance(), gl, () => {
       this.applyFit(w, h);
       const projection = this.projection(w, h);
+      this.lastProjection = projection; // stored BEFORE draw, never half-built (§5.14 item 5)
       this.model.tick(dt);
       this.model.draw(projection, null, [0, 0, w, h]);
     });
@@ -240,6 +244,15 @@ export class Live2DStage {
     const ndcY = 1 - (d.y / h) * 2;
     const p = this.projection(w, h);
     return this.model.hitAny(p.invertTransformX(ndcX), p.invertTransformY(ndcY));
+  }
+
+  /**
+   * §5.14 item 5: a CLONE of the projection the last drawn frame used (view -> NDC), so a picker can
+   * never mutate the renderer's matrix. Before the first frame this is the matrix resize() computed —
+   * the same one hitTestClient uses.
+   */
+  currentProjection(): CubismMatrix44 {
+    return this.lastProjection.clone();
   }
 
   /** client px (may be outside the canvas) -> gaze target; ViewTransform.toGaze clamps to [-1, 1]. */
