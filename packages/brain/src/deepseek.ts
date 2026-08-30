@@ -100,6 +100,14 @@ export function redactDetail(body: string, activeKey: string): string | undefine
   return out.length > MAX_DETAIL_CHARS ? out.slice(0, MAX_DETAIL_CHARS) : out;
 }
 
+/** GC-4: a data frame that is not a JSON object. `code` is `server`; at EOF the stream reader reads it as a truncation. */
+export class MalformedFrameError extends DeepSeekError {
+  constructor(chars: number) {
+    super('server', null, `malformed SSE frame (${chars} chars)`);
+    this.name = 'MalformedFrameError';
+  }
+}
+
 /** User abort. Never a DeepSeekError, never retried, never an `error` event (§3.11.5). */
 export class CancelledError extends Error {
   constructor(message = 'the request was cancelled') {
@@ -118,6 +126,12 @@ const describeError = (err: unknown): string => (err instanceof Error ? err.mess
 /**
  * One SSE line in, zero or more chunks out. A single frame can legally carry both a delta and a
  * `usage` object, hence the array return; the delta always comes first.
+ *
+ * GC-4: a NON-EMPTY data frame that is not a JSON object is a `DeepSeekError('server')` — never
+ * skipped, because a skipped frame is text silently missing from a reply that then ends with a
+ * clean `[DONE]`. So is a frame carrying the provider's `error` object inside a 200 stream. The
+ * warning and the error carry the frame's length only, never its bytes (CX-8 / G-3). Whether the
+ * failure is retried is the caller's gate (no delta seen yet).
  */
 export function parseSseLine(line: string): StreamChunk[] {
   const text = line.endsWith('\r') ? line.slice(0, -1) : line;
@@ -126,21 +140,29 @@ export function parseSseLine(line: string): StreamChunk[] {
 
   let payload = text.slice('data:'.length);
   if (payload.startsWith(' ')) payload = payload.slice(1);
+  if (payload === '') return [];
   if (payload === '[DONE]') return [{ kind: 'done' }];
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(payload);
   } catch {
-    console.warn(`[deepseek] skipped a malformed SSE frame (${payload.length} chars)`);
-    return [];
+    parsed = undefined;
   }
-  if (parsed === null || typeof parsed !== 'object') return [];
+  if (parsed === null || parsed === undefined || typeof parsed !== 'object') {
+    console.warn(`[deepseek] malformed SSE frame (${payload.length} chars)`);
+    throw new MalformedFrameError(payload.length);
+  }
 
   const frame = parsed as {
     choices?: { delta?: { content?: unknown } }[];
     usage?: Record<string, unknown> | null;
+    error?: unknown;
   };
+  if (frame.error !== undefined && frame.error !== null) {
+    console.warn(`[deepseek] upstream error frame inside the stream (${payload.length} chars)`);
+    throw new DeepSeekError('server', null, 'upstream error frame inside the stream');
+  }
   const out: StreamChunk[] = [];
 
   const content = frame.choices?.[0]?.delta?.content;
@@ -474,7 +496,15 @@ export class DeepSeekClient implements ChatClient {
         // G-2: EOF before [DONE]. A final complete line is parsed; a proxy truncation is never
         // turned into a synthetic done — it is a network failure (retryable only before any delta).
         buffered += decoder.decode();
-        for (const chunk of parseSseLine(buffered)) {
+        let tail: StreamChunk[];
+        try {
+          tail = parseSseLine(buffered);
+        } catch (err) {
+          // Half a frame at EOF is the truncation G-2 describes, not a malformed frame (GC-4).
+          if (err instanceof MalformedFrameError) tail = [];
+          else throw err;
+        }
+        for (const chunk of tail) {
           yield chunk;
           if (chunk.kind === 'done') return;
         }

@@ -171,22 +171,50 @@ describe('parseSseLine', () => {
     ]);
   });
 
-  it('skips a malformed frame with exactly one console.warn', () => {
+  it('GC-4: a malformed non-empty data frame is a server error with exactly one console.warn, never skipped', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    expect(parseSseLine('data: {"choices":[{"delta"')).toEqual([]);
+    expect(() => parseSseLine('data: {"choices":[{"delta"')).toThrowError(DeepSeekError);
     expect(warn).toHaveBeenCalledTimes(1);
+    let err: unknown;
+    try { parseSseLine('data: 42'); } catch (e) { err = e; }
+    expect((err as DeepSeekError).code).toBe('server'); // valid JSON that is not an object is malformed too
   });
 
-  it('CX-8: the malformed-frame warning carries the frame length, never the payload bytes', () => {
+  it('GC-4: an empty data frame is still ignored', () => {
+    expect(parseSseLine('data:')).toEqual([]);
+    expect(parseSseLine('data: ')).toEqual([]);
+  });
+
+  it('CX-8 / GC-4: the malformed-frame warning and error carry the frame length, never the payload bytes', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const secret = '{"choices":[{"delta":{"content":"我昨天跟老板吵架了"';
-    expect(parseSseLine(`data: ${secret}`)).toEqual([]);
+    let err: unknown;
+    try { parseSseLine(`data: ${secret}`); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(DeepSeekError);
+    expect((err as DeepSeekError).code).toBe('server');
+    expect((err as DeepSeekError).message).not.toContain('我昨天跟老板吵架了');
+    expect((err as DeepSeekError).message).not.toContain('choices');
+    expect((err as DeepSeekError).detail).toBeUndefined();
     expect(warn).toHaveBeenCalledTimes(1);
     const logged = warn.mock.calls.flat().map((a) => String(a)).join(' ');
     expect(logged).not.toContain('我昨天跟老板吵架了');
     expect(logged).not.toContain('choices');
     expect(logged).toContain(`${secret.length} chars`);
     expect(logged).toContain('malformed SSE frame');
+  });
+
+  it('GC-4: a provider error object inside a data frame is a server error that never carries the payload', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const secret = 'sk-' + 'q'.repeat(32);
+    let err: unknown;
+    try { parseSseLine(`data: {"error":{"message":"bad key ${secret}","type":"invalid_request_error"}}`); } catch (e) { err = e; }
+    expect(err).toBeInstanceOf(DeepSeekError);
+    expect((err as DeepSeekError).code).toBe('server');
+    expect((err as DeepSeekError).message).not.toContain(secret);
+    expect((err as DeepSeekError).message).not.toContain('bad key');
+    expect((err as DeepSeekError).detail).toBeUndefined();
+    const logged = warn.mock.calls.flat().map((a) => String(a)).join(' ');
+    expect(logged).not.toContain(secret);
   });
 
   it('accepts a frame with no space after the colon', () => {
@@ -372,6 +400,46 @@ describe('DeepSeekClient.stream', () => {
       { kind: 'delta', text: '世界。' },
       { kind: 'done' },
     ]);
+  });
+
+  it('GC-4: delta + malformed frame + [DONE] rejects with server instead of completing with content missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const broken = 'data: {"choices":[{"delta":{"content":"，主人"\n\n';
+    const stub = stubFetch(() => fakeResponse({ text: DELTA_1 + broken + DONE_FRAME }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const got: StreamChunk[] = [];
+    const err = await caught(async () => {
+      for await (const chunk of client.stream(REQ, freshSignal())) got.push(chunk);
+    });
+    expect(got).toEqual([{ kind: 'delta', text: '你好' }]);
+    expect((err as DeepSeekError).code).toBe('server');
+    expect(stub.calls).toHaveLength(1); // a delta was seen: the existing gate forbids a retry
+    const logged = warn.mock.calls.flat().map((a) => String(a)).join(' ');
+    expect(logged).not.toContain('主人');
+    expect(logged).toContain('chars');
+  });
+
+  it('GC-4: a malformed frame before any delta is retried through the existing gate', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const stub = stubFetch((_call, index) =>
+      index === 0
+        ? fakeResponse({ text: 'data: {"choices":[\n\n' + DONE_FRAME })
+        : fakeResponse({ text: DELTA_1 + USAGE_FRAME + DONE_FRAME }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const chunks = await drain(client.stream(REQ, freshSignal()));
+    expect(chunks[0]).toEqual({ kind: 'delta', text: '你好' });
+    expect(stub.calls).toHaveLength(2);
+  });
+
+  it('GC-4: an explicit provider error frame in a 200 stream after a delta is a server error', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const stub = stubFetch(() =>
+      fakeResponse({ text: DELTA_1 + 'data: {"error":{"message":"overloaded","code":"server_busy"}}\n\n' + DONE_FRAME }));
+    const client = new DeepSeekClient({ apiKey: 'k', fetch: stub.fetch, sleep: async () => undefined });
+    const err = await caught(() => drain(client.stream(REQ, freshSignal())));
+    expect((err as DeepSeekError).code).toBe('server');
+    expect((err as DeepSeekError).message).not.toContain('overloaded');
+    expect(stub.calls).toHaveLength(1);
   });
 
   it('rejects with CancelledError when the caller aborts mid-stream', async () => {
