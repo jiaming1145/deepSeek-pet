@@ -7,3 +7,5 @@ export * from './companion-model';
 export * from './ticker';
 export * from './stage';
 export * from './overlay';
+export * from './picker';
+export * from './picker-gpu';
