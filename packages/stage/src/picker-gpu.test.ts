@@ -56,3 +56,15 @@ describe('FBO constants (§6.6)', () => {
     expect(FBO_REFRESH_MS).toBe(150);
   });
 });
+
+describe('FboPicker (§6.6, conditional)', () => {
+  it('returns the mesh result until the first readback completes, then the FBO alpha', async () => {
+    const { FboPicker } = await import('./picker-gpu');
+    const mesh = { pick: () => ({ alpha: 255, part: 'face', modelX: 0, modelY: 0 }), map: { hitPartDefault: 'body' } } as never;
+    const surface = { width: 400, height: 400, getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 400 }) };
+    const f = new FboPicker({ draw: () => {} }, mesh, surface);
+    expect(f.pick(10, 10, {} as never).alpha).toBe(255);
+    (f as unknown as { mask: { data: Uint8Array; w: number; h: number } }).mask = { data: new Uint8Array(100 * 100 * 4), w: 100, h: 100 };
+    expect(f.pick(10, 10, {} as never)).toEqual({ alpha: 0, part: null, modelX: 0, modelY: 0 });
+  });
+});

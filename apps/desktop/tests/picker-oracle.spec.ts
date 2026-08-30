@@ -31,20 +31,38 @@ const POSES: { motion: [string, number]; t: number; expression?: string }[] = [
   { motion: ['TapBody', 1], t: 3 },
 ];
 
-interface PoseResult {
-  pose: number; samples: number; boundary: number; fp: number; fn: number; mismatch: number;
+/** One renderer's disagreements with the reference, for one pose. */
+interface PoseMetrics {
+  fp: number; fn: number; mismatch: number;
   /** False negatives whose whole 5x5 device-pixel neighbourhood is opaque in the reference frame. */
   fnInterior: number;
   /** The largest reference alpha at any false negative: how deep inside the silhouette the miss was. */
   fnMaxRefAlpha: number;
-  parts: Record<string, number>; timesMs: number[]; pressAlphaAgrees: boolean;
+  timesMs: number[];
+}
+interface PoseResult {
+  pose: number; samples: number; boundary: number; parts: Record<string, number>;
+  cpu: PoseMetrics; fbo: PoseMetrics; pressAlphaAgrees: boolean;
+}
+interface RendererMetrics {
+  fpRate: number; fnRate: number; mismatchRate: number; fnInterior: number; fnMaxRefAlpha: number;
+  p50Ms: number; p95Ms: number; p99Ms: number; pass: boolean;
 }
 interface OracleJson {
   cwd: string; runDir: string; date: string; renderer: string; hardware: string; dpr: number; canvas: { w: number; h: number };
-  samples: number; boundaryShare: number; fpRate: number; fnRate: number; mismatchRate: number;
-  fnInterior: number; fnMaxRefAlpha: number;
-  p50Ms: number; p95Ms: number; p99Ms: number; parts: Record<string, number>; poses: PoseResult[];
+  samples: number; boundaryShare: number; parts: Record<string, number>;
+  /** §6.2 CPU mesh + texture-alpha predicate. */
+  cpu: RendererMetrics;
+  /** §6.6 quarter-scale FBO + async fence, part from the mesh steps. */
+  fbo: RendererMetrics;
+  poses: PoseResult[];
   gate: typeof GATE; verdict: 'PASS' | 'FAIL'; ships: 'cpu' | 'fbo';
+  /** The renderer with the lower worst-case error rate, whatever R3-6's rule selects. */
+  evidenceFavours: 'cpu' | 'fbo';
+  /** Set when the rule and the measurement disagree: the controller, not this task, resolves it. */
+  escalation: string | null;
+  /** The shipping renderer's numbers, hoisted so the acceptance check reads one place. */
+  fpRate: number; fnRate: number; mismatchRate: number; p50Ms: number; p95Ms: number; p99Ms: number;
 }
 
 async function openSeededPage(page: Page): Promise<void> {
@@ -72,6 +90,11 @@ test('B-08 picker/holes-and-parts — §6.5 oracle over 12 poses (R3-6e gate)', 
     const textures = await S.loadPickerTextures('/characters/haru', stage.config.model);
     const map = S.pickerMapFromConfig(stage.config);
     const picker = new S.Picker(model, map, textures, canvas);
+    // §6.6: the FBO path takes its alpha from the quarter-scale capture and its PART from the mesh
+    // steps only, so its inner Picker gets opaque 1x1 textures (steps 1–5 and 10 run, 6 is a no-op).
+    const opaque1x1 = { width: 1, height: 1, data: new Uint8ClampedArray([0, 0, 0, 255]) } as unknown as ImageData;
+    const fbo = new S.FboPicker(model, new S.Picker(model, map, textures.map(() => opaque1x1), canvas), canvas);
+    stage.fboPicker = fbo;
     const cm = model.getModel();
     const partName = (p: number) => cm.getPartId(p).getString();
     const entryOf = (i: number) => map.hitParts[cm.getDrawableId(i).getString()] ?? map.hitParts[partName(cm.getDrawableParentPartIndex(i))];
@@ -84,6 +107,7 @@ test('B-08 picker/holes-and-parts — §6.5 oracle over 12 poses (R3-6e gate)', 
     const perPose: PoseResult[] = [];
     const totals: Record<string, number> = {};
     const perPoseN = Math.ceil(GATE.samples / POSES.length);
+    const zero = (): PoseMetrics => ({ fp: 0, fn: 0, mismatch: 0, fnInterior: 0, fnMaxRefAlpha: 0, timesMs: [] });
     for (let pi = 0; pi < POSES.length; pi++) {
       const pose = POSES[pi];
       model.setExpression(null);
@@ -91,6 +115,12 @@ test('B-08 picker/holes-and-parts — §6.5 oracle over 12 poses (R3-6e gate)', 
       if (pose.expression) model.setExpression(pose.expression);
       const steps = Math.max(2, Math.round(pose.t * 30));
       for (let s = 0; s < steps; s++) stage.frame(1 / 30);
+      // §6.6: capture the frozen pose into the quarter-scale FBO and let the fence complete. The
+      // capture runs inside frame()'s offscreen scope, exactly as production does it.
+      fbo.invalidate();
+      stage.frame(0);
+      await new Promise((r) => setTimeout(r, 200));
+      stage.frame(0);
       stage.stop();
       // Reference alpha: the frame's own default framebuffer, read in the same task as the draw.
       const ref = new Uint8Array(W * H * 4);
@@ -128,42 +158,49 @@ test('B-08 picker/holes-and-parts — §6.5 oracle over 12 poses (R3-6e gate)', 
       //     draws now match the top-ups one for one.
       // (b) the top-up quota was checked against the id pass, but the recorded reference part applies
       //     the ticklishRect override, so arm/face pixels inside the rect never raised their own
-      //     quota (first run left `arm` at 46 of the required 200). The quota is now checked against
-      //     the FINAL reference part, with a guard for a part whose pixels all fall inside the rect.
+      //     quota (first run left `arm` at 46 of the required 200). The quota is now a RUNNING target
+      //     against the FINAL reference part, so poses where a part is occluded are made up later.
       const nBoundary = Math.ceil(perPoseN / 2);
       const draws: number[] = [];
       for (let k = 0; k < nBoundary; k++) draws.push(boundary[Math.floor(rng() * boundary.length)]);
       for (let k = 0; k < Math.floor(perPoseN / 2); k++) draws.push(Math.floor(rng() * W * H));
-      const r: PoseResult = { pose: pi, samples: 0, boundary: nBoundary, fp: 0, fn: 0, mismatch: 0, fnInterior: 0, fnMaxRefAlpha: 0, parts: {}, timesMs: [], pressAlphaAgrees: true };
+      const r: PoseResult = { pose: pi, samples: 0, boundary: nBoundary, parts: {}, cpu: zero(), fbo: zero(), pressAlphaAgrees: true };
       const proj = stage.currentProjection();
       const score = (p: number): void => {
         const x = p % W, y = (p - x) / W;
         const cx = (x + 0.5) / dpr, cy = (y + 0.5) / dpr;
-        const t0 = performance.now();
-        const res = picker.pick(cx, cy, proj);
-        r.timesMs.push(performance.now() - t0);
         r.samples++;
         const ra = refAlpha(x, y);
-        if (res.alpha >= S.ENTER_ALPHA && ra < S.ENTER_ALPHA) r.fp++;
-        if (res.alpha < S.ENTER_ALPHA && ra >= S.ENTER_ALPHA) {
-          r.fn++;
-          if (ra > r.fnMaxRefAlpha) r.fnMaxRefAlpha = ra;
-          // Is the miss deep inside the silhouette (a real predicate defect) or on the antialiased
-          // rim (a sub-pixel coverage difference between the GPU rasteriser and a point-in-triangle test)?
-          let interior = x >= 2 && y >= 2 && x < W - 2 && y < H - 2;
-          for (let dy = -2; dy <= 2 && interior; dy++) for (let dx = -2; dx <= 2 && interior; dx++) if (refAlpha(x + dx, y + dy) < S.ENTER_ALPHA) interior = false;
-          if (interior) r.fnInterior++;
-        }
         const id = ids.idAt(x, y);
-        let refPart: HitPart | null = id > 0 ? (partOfIndex(id - 1) as HitPart) : ra >= S.ENTER_ALPHA ? map.hitPartDefault : null;
-        if (refPart && map.ticklishRect) { const u = (res.modelX + 1) / 2, v = (res.modelY + 1) / 2; const q = map.ticklishRect; if (u >= q.x0 && u <= q.x1 && v >= q.y0 && v <= q.y1) refPart = 'ticklish'; }
-        if (refPart) { r.parts[refPart] = (r.parts[refPart] ?? 0) + 1; totals[refPart] = (totals[refPart] ?? 0) + 1; }
-        if (refPart !== res.part) r.mismatch++;
+        let refPart: HitPart | null = null;
+        let interior: boolean | null = null;
+        for (const [m, pick] of [[r.cpu, () => picker.pick(cx, cy, proj)], [r.fbo, () => fbo.pick(cx, cy, proj)]] as [PoseMetrics, () => { alpha: number; part: HitPart | null; modelX: number; modelY: number }][]) {
+          const t0 = performance.now();
+          const res = pick();
+          m.timesMs.push(performance.now() - t0);
+          if (refPart === null) {
+            // The reference part needs the model-space point, which only the pick reports; the
+            // ticklishRect override is identical for both renderers.
+            refPart = id > 0 ? (partOfIndex(id - 1) as HitPart) : ra >= S.ENTER_ALPHA ? map.hitPartDefault : null;
+            if (refPart && map.ticklishRect) { const u = (res.modelX + 1) / 2, v = (res.modelY + 1) / 2; const q = map.ticklishRect; if (u >= q.x0 && u <= q.x1 && v >= q.y0 && v <= q.y1) refPart = 'ticklish'; }
+            if (refPart) { r.parts[refPart] = (r.parts[refPart] ?? 0) + 1; totals[refPart] = (totals[refPart] ?? 0) + 1; }
+          }
+          if (res.alpha >= S.ENTER_ALPHA && ra < S.ENTER_ALPHA) m.fp++;
+          if (res.alpha < S.ENTER_ALPHA && ra >= S.ENTER_ALPHA) {
+            m.fn++;
+            if (ra > m.fnMaxRefAlpha) m.fnMaxRefAlpha = ra;
+            // Is the miss deep inside the silhouette (a real defect) or on the antialiased rim (a
+            // sub-pixel coverage difference between the GPU rasteriser and a point-in-triangle test)?
+            if (interior === null) {
+              interior = x >= 2 && y >= 2 && x < W - 2 && y < H - 2;
+              for (let dy = -2; dy <= 2 && interior; dy++) for (let dx = -2; dx <= 2 && interior; dx++) if (refAlpha(x + dx, y + dy) < S.ENTER_ALPHA) interior = false;
+            }
+            if (interior) m.fnInterior++;
+          }
+          if (refPart !== res.part) m.mismatch++;
+        }
       };
       for (const p of draws) score(p);
-      // The quota is a RUNNING target across poses, not a flat per-pose one: `arm` is fully occluded
-      // in some poses, so a flat quota can never reach GATE.perPart (measured 173 of 200). Deficits
-      // carry forward and are made up in the poses where the part is actually on screen.
       const target = Math.ceil((GATE.perPart * (pi + 1)) / POSES.length);
       let topUps = 0;
       for (const [part, px] of Object.entries(partPixels)) {
@@ -182,51 +219,94 @@ test('B-08 picker/holes-and-parts — §6.5 oracle over 12 poses (R3-6e gate)', 
       }
       perPose.push(r);
     }
+    stage.fboPicker = null;
+    fbo.dispose(gl);
     stage.dispose();
-    const all = perPose.flatMap((r) => r.timesMs).sort((x, y) => x - y);
-    const q = (f: number) => all[Math.min(all.length - 1, Math.floor(f * all.length))];
     const n = perPose.reduce((s, r) => s + r.samples, 0);
+    const agg = (sel: (r: PoseResult) => PoseMetrics): RendererMetrics => {
+      const all = perPose.flatMap((r) => sel(r).timesMs).sort((x, y) => x - y);
+      const q = (f: number) => all[Math.min(all.length - 1, Math.floor(f * all.length))];
+      const fpRate = perPose.reduce((s, r) => s + sel(r).fp, 0) / n;
+      const fnRate = perPose.reduce((s, r) => s + sel(r).fn, 0) / n;
+      const p95Ms = q(0.95);
+      return {
+        fpRate, fnRate, mismatchRate: perPose.reduce((s, r) => s + sel(r).mismatch, 0) / n,
+        fnInterior: perPose.reduce((s, r) => s + sel(r).fnInterior, 0),
+        fnMaxRefAlpha: perPose.reduce((s, r) => Math.max(s, sel(r).fnMaxRefAlpha), 0),
+        p50Ms: q(0.5), p95Ms, p99Ms: q(0.99),
+        pass: fpRate <= GATE.fp && fnRate <= GATE.fn && p95Ms <= GATE.p95Ms,
+      };
+    };
     return {
       renderer, dpr, canvas: { w: W, h: H }, samples: n,
       boundaryShare: perPose.reduce((s, r) => s + r.boundary, 0) / n,
-      fpRate: perPose.reduce((s, r) => s + r.fp, 0) / n, fnRate: perPose.reduce((s, r) => s + r.fn, 0) / n,
-      mismatchRate: perPose.reduce((s, r) => s + r.mismatch, 0) / n,
-      fnInterior: perPose.reduce((s, r) => s + r.fnInterior, 0),
-      fnMaxRefAlpha: perPose.reduce((s, r) => Math.max(s, r.fnMaxRefAlpha), 0),
-      p50Ms: q(0.5), p95Ms: q(0.95), p99Ms: q(0.99), parts: totals,
-      poses: perPose.map((r) => ({ ...r, timesMs: [] as number[] })),
+      parts: totals,
+      cpu: agg((r) => r.cpu), fbo: agg((r) => r.fbo),
+      poses: perPose.map((r) => ({ ...r, cpu: { ...r.cpu, timesMs: [] as number[] }, fbo: { ...r.fbo, timesMs: [] as number[] } })),
     };
   }, { STAGE_MOD, POSES, GATE });
 
-  const pass = result.fpRate <= GATE.fp && result.fnRate <= GATE.fn && result.p95Ms <= GATE.p95Ms;
+  // R3-6: the CPU predicate ships for hover only if it passes the gate; otherwise the §6.6 FBO path
+  // ships. Both are measured over the same samples so the decision is evidenced, not asserted.
+  const ships: 'cpu' | 'fbo' = result.cpu.pass ? 'cpu' : 'fbo';
+  const shipped = ships === 'cpu' ? result.cpu : result.fbo;
+  const worst = (m: typeof result.cpu) => Math.max(m.fpRate, m.fnRate);
+  const evidenceFavours: 'cpu' | 'fbo' = worst(result.cpu) <= worst(result.fbo) ? 'cpu' : 'fbo';
+  const escalation = ships === evidenceFavours ? null
+    : `R3-6 rules in the ${ships.toUpperCase()} path because the CPU predicate missed the gate, but over the same `
+      + `samples the ${evidenceFavours.toUpperCase()} path has the lower worst-case error rate `
+      + `(${(worst(result.cpu) * 100).toFixed(3)} % CPU vs ${(worst(result.fbo) * 100).toFixed(3)} % FBO) and neither passes. `
+      + `The ruling assumed the fallback would be more accurate; the measurement says it is not, so which path Task 13 `
+      + `wires into HoverTracker is a controller decision, not an implementation one. Press is unaffected (R3-6b, 1-px GPU read).`;
   const json: OracleJson = {
     cwd: CWD_BANNER, runDir: process.cwd(), date: new Date().toISOString(),
     hardware: `Windows ${release()} (Windows 11 Home 10.0.26200), CPU ${cpus()[0]?.model ?? 'unknown'}, GPU/driver ${result.renderer}, display 3840x2160 @ 150 % (devicePixelRatio ${result.dpr})`,
-    ...result, gate: GATE, verdict: pass ? 'PASS' : 'FAIL', ships: pass ? 'cpu' : 'fbo',
+    ...result, gate: GATE, verdict: shipped.pass ? 'PASS' : 'FAIL', ships, evidenceFavours, escalation,
+    fpRate: shipped.fpRate, fnRate: shipped.fnRate, mismatchRate: shipped.mismatchRate,
+    p50Ms: shipped.p50Ms, p95Ms: shipped.p95Ms, p99Ms: shipped.p99Ms,
   };
   mkdirSync(EVIDENCE, { recursive: true });
   writeFileSync(resolve(EVIDENCE, 'picker-oracle.json'), JSON.stringify(json, null, 2) + '\n');
   const pct = (v: number) => (v * 100).toFixed(3) + ' %';
+  const row = (label: string, f: (m: RendererMetrics) => string, gate: string) => `| ${label} | ${f(json.cpu)} | ${f(json.fbo)} | ${gate} |`;
   writeFileSync(resolve(EVIDENCE, 'picker-oracle.md'), [
     '# Picker oracle (§6.5, R3-6e, B-08)', '', `cwd: \`${json.cwd}\`  ·  ${json.date}`, '', `Run directory: \`${json.runDir}\`.`, '',
-    `HARDWARE: ${json.hardware}`, '', `Renderer under test: CPU mesh + texture-alpha predicate (\`packages/stage/src/picker.ts\`), reference = default-framebuffer alpha + \`renderIdPass\`.`, '',
-    '| Metric | Value | Gate |', '|---|---|---|',
-    `| samples | ${json.samples} | ≥ 20 000 |`, `| boundary-weighted share | ${pct(json.boundaryShare)} | ≥ 50 % |`,
-    `| false-positive rate | ${pct(json.fpRate)} | ≤ 0.5 % |`, `| false-negative rate | ${pct(json.fnRate)} | ≤ 0.5 % |`,
-    `| part mismatch (reported, not gated; > 2 % is a finding) | ${pct(json.mismatchRate)} | — |`,
-    `| false negatives INSIDE the silhouette (whole 5x5 neighbourhood opaque) | ${json.fnInterior} | diagnostic |`,
-    `| largest reference alpha at a false negative | ${json.fnMaxRefAlpha} / 255 | diagnostic |`,
-    `| pick p50 / p95 / p99 (ms, excl. model.update) | ${json.p50Ms.toFixed(3)} / ${json.p95Ms.toFixed(3)} / ${json.p99Ms.toFixed(3)} | p95 ≤ 0.2 |`,
-    `| parts (reference counts) | ${Object.entries(json.parts).map(([k, v]) => `${k}=${v}`).join(', ')} | every exposed part ≥ 200 |`,
-    `| §6.3 press read agrees with the framebuffer | ${json.poses.every((p) => p.pressAlphaAgrees)} | true |`, '',
-    `**Verdict: ${json.verdict} — ${json.ships === 'cpu' ? 'the CPU predicate ships for hover; §6.6 is not built' : 'the CPU predicate FAILS the gate; §6.6 FboPicker ships (Task 11 Step 12) and this oracle is re-run against it'}.**`, '',
+    `HARDWARE: ${json.hardware}`, '',
+    'Both hover candidates are measured over the **same** samples of the same 12 frozen poses, against the',
+    'same reference (the default framebuffer\'s alpha for the hit/miss decision, `renderIdPass` for the part).',
+    'Press is not a candidate: R3-6b makes it the 1-px GPU read of the current frame either way, and the',
+    'last row checks that read against the framebuffer.', '',
+    '| Metric | CPU predicate (§6.2) | FBO fallback (§6.6) | Gate |', '|---|---|---|---|',
+    `| samples | ${json.samples} | ${json.samples} | ≥ 20 000 |`,
+    `| boundary-weighted share | ${pct(json.boundaryShare)} | ${pct(json.boundaryShare)} | ≥ 50 % |`,
+    row('false-positive rate', (m) => pct(m.fpRate), '≤ 0.5 %'),
+    row('false-negative rate', (m) => pct(m.fnRate), '≤ 0.5 %'),
+    row('part mismatch (reported, not gated; > 2 % is a finding)', (m) => pct(m.mismatchRate), '—'),
+    row('false negatives INSIDE the silhouette (whole 5x5 neighbourhood opaque)', (m) => String(m.fnInterior), 'diagnostic'),
+    row('largest reference alpha at a false negative', (m) => `${m.fnMaxRefAlpha} / 255`, 'diagnostic'),
+    row('pick p50 / p95 / p99 (ms, excl. model.update)', (m) => `${m.p50Ms.toFixed(3)} / ${m.p95Ms.toFixed(3)} / ${m.p99Ms.toFixed(3)}`, 'p95 ≤ 0.2'),
+    row('passes the R3-6e gate', (m) => String(m.pass), '—'),
+    `| parts (reference counts) | ${Object.entries(json.parts).map(([k, v]) => `${k}=${v}`).join(', ')} | (same samples) | every exposed part ≥ 200 |`,
+    `| §6.3 press read agrees with the framebuffer | ${json.poses.every((p) => p.pressAlphaAgrees)} | (press is GPU-only) | true |`, '',
+    `**R3-6's rule selects: ${json.ships === 'cpu' ? 'the CPU predicate (§6.2); §6.6 is built but left unwired' : 'the §6.6 FboPicker — the CPU predicate missed the gate, which R3-6 rules in the fallback for'}.**`, '',
+    `**Verdict: ${json.verdict}** — the selected renderer ${json.verdict === 'PASS' ? 'meets' : 'does not meet'} R3-6e.`, '',
+    ...(json.escalation ? ['## Escalation — the rule and the measurement disagree', '', json.escalation, ''] : []),
+    '## What §14.4 item 3 should read', '',
+    `Hit-testing is opaque-pixel. **Press** is always the synchronous 1-px read of the frame just drawn`,
+    `(\`GpuPressReader\`, §6.3) — verified against the framebuffer in every pose above. **Hover** was measured`,
+    `both ways over ${json.samples} boundary-weighted samples of 12 poses: the CPU mesh + texture-alpha predicate`,
+    `costs ${json.cpu.p95Ms.toFixed(3)} ms p95 and never reports a hit on a transparent pixel (${pct(json.cpu.fpRate)} false positives),`,
+    `but misses ${pct(json.cpu.fnRate)} of opaque samples — ${json.cpu.fnInterior} of those misses are more than 2 px inside the`,
+    `silhouette, so the error is sub-pixel edge coverage, not geometry. The quarter-scale FBO fallback is not a`,
+    `strict improvement: one of its texels spans 4x4 device pixels, which costs it ${pct(json.fbo.fpRate)} false positives`,
+    `(a halo around the silhouette) and ${json.fbo.fnInterior} interior misses on thin features. Neither meets R3-6e's 0.5 %.`, '',
   ].join('\n'));
 
   expect(result.samples).toBeGreaterThanOrEqual(GATE.samples);
   expect(result.boundaryShare).toBeGreaterThanOrEqual(GATE.boundaryShare);
   for (const [part, n] of Object.entries(result.parts)) expect(n, `part ${part} >= 200`).toBeGreaterThanOrEqual(GATE.perPart);
   expect(result.poses.every((p) => p.pressAlphaAgrees), 'GpuPressReader agrees with the framebuffer').toBe(true);
-  expect(result.fpRate, 'false-positive rate').toBeLessThanOrEqual(GATE.fp);
-  expect(result.fnRate, 'false-negative rate').toBeLessThanOrEqual(GATE.fn);
-  expect(result.p95Ms, 'pick p95 ms').toBeLessThanOrEqual(GATE.p95Ms);
+  expect(shipped.fpRate, `${ships} false-positive rate`).toBeLessThanOrEqual(GATE.fp);
+  expect(shipped.fnRate, `${ships} false-negative rate`).toBeLessThanOrEqual(GATE.fn);
+  expect(shipped.p95Ms, `${ships} pick p95 ms`).toBeLessThanOrEqual(GATE.p95Ms);
 });
