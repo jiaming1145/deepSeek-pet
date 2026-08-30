@@ -65,7 +65,10 @@ describe('§3.10.2 layers in order', () => {
     expect(shouldSpeak(input(base(so), io))).toEqual({ verdict: 'suppressed', reason, nextEligibleAt: null });
   });
   it('layer 4 order: plain-mode is reported before typing', () => {
-    expect(shouldSpeak(input(base({ mode: 'plain', probableTyping: true }))).reason).toBe('plain-mode');
+    // DEVIATION: the plan reads `.reason` straight off the verdict, but `{ verdict: 'eligible' }`
+    // carries no `reason` — TS2339. Asserting the whole verdict keeps the intent and typechecks.
+    expect(shouldSpeak(input(base({ mode: 'plain', probableTyping: true }))))
+      .toEqual({ verdict: 'suppressed', reason: 'plain-mode', nextEligibleAt: null });
   });
   it('night + awake is NOT asleep', () => {
     expect(shouldSpeak(input(base({ phase: 'night', presentationMode: 'awake' })))).toEqual({ verdict: 'eligible' });
