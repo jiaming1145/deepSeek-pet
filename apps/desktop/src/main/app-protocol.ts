@@ -63,16 +63,43 @@ function originKey(url: URL): string | null {
   return `${url.protocol}//${url.hostname}${url.port === '' ? '' : `:${url.port}`}`;
 }
 
-/** The exact origins the pet document is allowed to have: production `app://local`, plus dev. */
+/** G2-1: the only hosts a dev server may answer from. Node's URL keeps the brackets on IPv6. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+let warnedDevUrl: string | null = null;
+
+/**
+ * G2-1: the origin key a dev URL contributes, or null. Only an `http:`/`https:` URL on a loopback
+ * host qualifies — `file:///a` used to yield the key `file://`, which made EVERY file: document an
+ * IPC-trusted pet origin, and any parseable scheme or remote host was accepted the same way. A
+ * rejected value is logged once (per value) and grants nothing.
+ */
+function devOriginKey(devUrl: string): string | null {
+  let key: string | null = null;
+  try {
+    const url = new URL(devUrl);
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && LOOPBACK_HOSTS.has(url.hostname)) {
+      key = originKey(url);
+    }
+  } catch {
+    /* unparseable: handled as rejected below */
+  }
+  if (key === null && warnedDevUrl !== devUrl) {
+    warnedDevUrl = devUrl;
+    console.warn('[app] ELECTRON_RENDERER_URL ignored: not an http(s) loopback URL without credentials');
+  }
+  return key;
+}
+
+/**
+ * The exact origins the pet document is allowed to have: production `app://local`, plus — in an
+ * unpackaged run only (M-9) — an explicit HTTP(S) loopback dev server (G2-1). `file:` is never a key.
+ */
 export function allowedPetOrigins(devUrl = devRendererUrl()): string[] {
   const origins = [APP_ORIGIN];
   if (devUrl) {
-    try {
-      const key = originKey(new URL(devUrl));
-      if (key) origins.push(key);
-    } catch {
-      /* an unparseable ELECTRON_RENDERER_URL simply grants nothing */
-    }
+    const key = devOriginKey(devUrl);
+    if (key) origins.push(key);
   }
   return origins;
 }
