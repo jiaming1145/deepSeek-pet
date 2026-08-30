@@ -8,6 +8,19 @@ export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 export const PET_URL = `${APP_ORIGIN}/pet.html`;
 
 /**
+ * The URL for one renderer page: electron-vite's dev server while `pnpm dev` is running, the
+ * app:// scheme in a built app. One helper so the four windows cannot drift apart.
+ *
+ * `resolveRendererRequest` needs no change for the three new pages: bubble.html, chat.html and
+ * key.html are ordinary paths under the same root and the same authority as pet.html.
+ */
+export function rendererUrl(page: 'pet' | 'bubble' | 'chat' | 'key'): string {
+  return process.env.ELECTRON_RENDERER_URL
+    ? `${process.env.ELECTRON_RENDERER_URL}/${page}.html`
+    : `${APP_ORIGIN}/${page}.html`;
+}
+
+/**
  * Declares the scheme. Must run before `app.whenReady()`.
  *
  * The built renderer cannot be loaded with `loadFile`: `fetch()` is disabled on `file://` in

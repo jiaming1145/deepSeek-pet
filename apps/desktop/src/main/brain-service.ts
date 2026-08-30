@@ -1,0 +1,448 @@
+import { app, ipcMain, type BrowserWindow } from 'electron';
+import type { DatabaseSync } from 'node:sqlite';
+import {
+  Channels, ERROR_HINTS, InvokeChannels,
+  type ErrorCode, type SentenceEvent,
+} from '@ds/protocol';
+import {
+  DeepSeekClient, TurnRunner, renderStaticSystem, sanitizeForDisplay,
+  type ChatClient, type CharacterBundle, type StatePreamble,
+} from '@ds/brain';
+import { KV_FIRST_RUN_DONE, getKv, setKv } from '@ds/memory';
+import type { HistoryStore } from '@ds/memory';
+import { BUBBLE_MAX } from './bubble-place';
+import {
+  BUBBLE_HIDE_DELAY_MS, BUBBLE_LINGER_MS,
+  placeBubbleWindow, repositionBubble, setBubbleClickThrough,
+} from './bubble-window';
+import { resizeChat, setChatComposing } from './chat-window';
+import { createFakeClient, useFakeBrain } from './fake-client';
+import { humanizeGap } from './humanize';
+import { handleInvoke } from './invoke';
+import { onFromAny, sendTo } from './ipc';
+import type { KeyStore } from './key-store';
+import type { KeyWindowReason } from './key-window';
+
+/** Mirrors the renderer's HINT_DEFAULT_TTL_MS (contracts.md §5.5); `hint:show` requires a ttl. */
+const HINT_TTL_MS = 6000;
+/** §6.6: a pause between characters must not flicker the listening pose. */
+const LISTENING_OFF_DEBOUNCE_MS = 250;
+/** §6.6's first message uses a turnId no TurnRunner ever issues; its playback echoes are dropped. */
+const FIRST_MES_TURN_ID = 'first-mes';
+
+const TIME_FMT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+const WEEKDAY_FMT = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' });
+
+/** Every send channel this service registers, so `dispose()` can unregister exactly those. */
+const OWNED_SEND_CHANNELS = [
+  Channels.userCancel, Channels.chatClose, Channels.chatComposing, Channels.chatResize,
+  Channels.speechComplete, Channels.playbackSentenceDone, Channels.playbackTurnDone,
+  Channels.speechMouth, Channels.bubbleSize, Channels.bubbleHover,
+] as const;
+
+export interface BrainServiceDeps {
+  pet: BrowserWindow;
+  bubble: BrowserWindow;
+  chat: BrowserWindow;
+  key: BrowserWindow;
+  store: HistoryStore;
+  keyStore: KeyStore;
+  bundle: CharacterBundle;
+  /** The raw handle, for the `kv` table only (§4.1's getKv/setKv). §4.3 exposes no kv accessor. */
+  db: DatabaseSync;
+  /** index.ts owns show/hide because bubble visibility must lose to VisibilityState (§5.4 rule 5). */
+  setBubbleVisible(on: boolean): void;
+  openKeyWindow(reason: KeyWindowReason): void;
+}
+
+export class BrainService {
+  private readonly deps: BrainServiceDeps;
+  private readonly staticSystem: string;
+  private client: ChatClient | null = null;
+  private runner: TurnRunner | null = null;
+  private offRunner: Array<() => void> = [];
+  private offKey: (() => void) | null = null;
+  private lastTest: { ok: boolean; code?: ErrorCode; at: number } | null = null;
+  private listeningTimer: NodeJS.Timeout | null = null;
+  private bubbleTimer: NodeJS.Timeout | null = null;
+  /** The last `bubble:hover` value: pointer inside the bubble/hint DOM (§5.4 rule 4, §5.2's box). */
+  private bubblePinned = false;
+  /** True while a window-level hide is owed for this turn but has not happened yet. */
+  private hideOwed = false;
+  private emittedThisTurn = 0;
+
+  constructor(deps: BrainServiceDeps) {
+    this.deps = deps;
+    // Built once and cached: byte stability of this string IS the prefix-cache contract (X1).
+    // The third parameter defaults to 'character'; P3's 'plain' mode is a Phase 3 tray toggle.
+    this.staticSystem = renderStaticSystem(deps.bundle.card, Object.keys(deps.bundle.motionMap));
+  }
+
+  start(): void {
+    const { pet, bubble, chat, key, store, keyStore } = this.deps;
+
+    this.offKey = keyStore.onChange(() => this.rebuildClient());
+    this.rebuildClient();
+
+    // ---- invoke handlers: window-scoped, exactly per contracts.md §2.7 -------------------
+    handleInvoke(InvokeChannels.userText, [chat], async ({ text }) => {
+      if (!this.runner) {
+        this.reportError({ code: 'no-key', message: ERROR_HINTS['no-key'].text });
+        return { ok: false as const, code: 'no-key' as const, message: ERROR_HINTS['no-key'].text };
+      }
+      try {
+        const turnId = await this.runner.send(text, 'chat');
+        return { ok: true as const, turnId };
+      } catch (err) {
+        // §3.11.5 delivers real failures through the `error` event, so a throw here is an
+        // unexpected one. The composer restores its text on `{ok:false}` (§6.2 rule 6); a bare
+        // invoke rejection would leave the user's sentence lost.
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[brain] user:text failed', err);
+        return { ok: false as const, code: 'server' as const, message };
+      }
+    });
+
+    handleInvoke(InvokeChannels.keySet, [key], async ({ apiKey }) => {
+      try {
+        keyStore.set(apiKey);
+        return { ok: true as const };
+      } catch (err) {
+        return { ok: false as const, message: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
+    handleInvoke(InvokeChannels.keyTest, [key], async ({ apiKey }) => {
+      // With an apiKey: test that literal key. Without: test the stored one (contracts.md §2.4).
+      const probe: ChatClient | null = apiKey ? new DeepSeekClient({ apiKey }) : this.client;
+      if (!probe) {
+        this.lastTest = { ok: false, code: 'no-key', at: Date.now() };
+        this.refreshKeyStatus();
+        return { ok: false as const, code: 'no-key' as const, message: ERROR_HINTS['no-key'].text };
+      }
+      const res = await probe.testKey();
+      this.lastTest = res.ok ? { ok: true, at: Date.now() } : { ok: false, code: res.code, at: Date.now() };
+      this.refreshKeyStatus();
+      return res;
+    });
+
+    handleInvoke(InvokeChannels.keyClear, [key], async () => {
+      keyStore.clear();
+      return { ok: true as const };
+    });
+
+    handleInvoke(InvokeChannels.historyList, [chat], async ({ before, limit }) => {
+      const rows = store.list({ before, limit });
+      // Rows come back newest-first, so the smallest id is the last one; null once the page is
+      // short, which is also the empty case.
+      const nextBefore = rows.length < limit ? null : rows[rows.length - 1].id;
+      return { rows, nextBefore };
+    });
+
+    handleInvoke(InvokeChannels.historyDelete, [chat], async ({ turnId }) => ({
+      ok: true as const,
+      deleted: store.deleteTurn(turnId),
+    }));
+
+    // ---- send channels: one `onFromAny` per producing window (§2.5 + §2.7) ---------------
+    onFromAny([chat], Channels.userCancel, () => this.runner?.cancel());
+    onFromAny([chat], Channels.chatClose, () => {
+      if (!chat.isDestroyed()) chat.hide();
+    });
+    onFromAny([chat], Channels.chatComposing, ({ on }) => {
+      setChatComposing(on);
+      this.setListening(on);
+    });
+    onFromAny([chat], Channels.chatResize, ({ rows, historyOpen }) => resizeChat(chat, pet, rows, historyOpen));
+    // Two relays, because the mouth lives in the pet window while the reveal lives in the bubble.
+    onFromAny([chat], Channels.speechComplete, (p) => sendTo(bubble, Channels.speechComplete, p));
+    onFromAny([bubble], Channels.speechMouth, (p) => sendTo(pet, Channels.speechMouth, p));
+
+    onFromAny([bubble], Channels.playbackSentenceDone, ({ turnId, seq }) => {
+      if (turnId === FIRST_MES_TURN_ID) return;
+      this.runner?.sentenceShown(turnId, seq);
+    });
+    onFromAny([bubble], Channels.playbackTurnDone, ({ turnId }) => {
+      if (turnId !== FIRST_MES_TURN_ID) this.runner?.turnShown(turnId);
+      this.scheduleBubbleHide(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
+    });
+
+    onFromAny([bubble], Channels.bubbleSize, (size) => {
+      const placement = placeBubbleWindow(bubble, pet, size);
+      sendTo(bubble, Channels.bubblePlace, {
+        // The renderer lays out inside the maxima and reports what it actually needs (§5.4 rule 2).
+        maxWidth: BUBBLE_MAX.width,
+        maxHeight: BUBBLE_MAX.height,
+        side: placement.side,
+        arrowOffset: placement.arrowOffset,
+      });
+    });
+    // One channel, two effects (contracts.md §5.4 rule 4 as extended by §5.2's box): it flips the
+    // window's click-through AND gates main's window-level hide timer. Without the second effect the
+    // WINDOW disappears BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS after `playback:turnDone` even while
+    // the pointer rests on a band the renderer is still holding up — so §5.2's "pinned defers the
+    // turn-level auto-hide" and "pointerleave re-arms a full LINGER_MS" would be true in jsdom and
+    // false end to end, and T7's hover acceptance would be unprovable in the Electron lane.
+    onFromAny([bubble], Channels.bubbleHover, ({ inside }) => {
+      setBubbleClickThrough(bubble, !inside);
+      this.bubblePinned = inside;
+      if (inside) {
+        // Defer, do not forget: clear the timer but leave the debt, so the leave can re-arm it.
+        this.clearBubbleTimer();
+        return;
+      }
+      // pointerleave re-arms a FULL delay, and only when this turn already asked for a hide.
+      if (this.hideOwed) this.scheduleBubbleHide(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
+    });
+
+    // ---- first message (§6.6) ------------------------------------------------------------
+    if (bubble.webContents.isLoading()) {
+      bubble.webContents.once('did-finish-load', () => this.maybeFirstMessage());
+    } else {
+      this.maybeFirstMessage();
+    }
+  }
+
+  /** The live client, rebuilt on every key change. The summarizer closure reads it through this. */
+  currentClient(): ChatClient | null {
+    return this.client;
+  }
+
+  /** §5.4 rule 3: re-place the bubble at its current size — pet drag, drag end, display change. */
+  reposition(): void {
+    const { bubble, pet } = this.deps;
+    if (bubble.isDestroyed() || pet.isDestroyed() || !bubble.isVisible()) return;
+    const placement = repositionBubble(bubble, pet);
+    sendTo(bubble, Channels.bubblePlace, {
+      maxWidth: BUBBLE_MAX.width,
+      maxHeight: BUBBLE_MAX.height,
+      side: placement.side,
+      arrowOffset: placement.arrowOffset,
+    });
+  }
+
+  /** `key:status`'s only producer (R9): KeyStore changes, key:test results, key-window open. */
+  refreshKeyStatus(): void {
+    const { keyStore, key, chat } = this.deps;
+    const payload = {
+      present: keyStore.get() !== null,
+      source: keyStore.source(),
+      lastTest: this.lastTest,
+    };
+    sendTo(key, Channels.keyStatus, payload);
+    sendTo(chat, Channels.keyStatus, payload);
+  }
+
+  dispose(): void {
+    this.runner?.cancel();
+    for (const off of this.offRunner) off();
+    this.offRunner = [];
+    this.offKey?.();
+    this.offKey = null;
+    if (this.listeningTimer) clearTimeout(this.listeningTimer);
+    if (this.bubbleTimer) clearTimeout(this.bubbleTimer);
+    for (const channel of Object.values(InvokeChannels)) ipcMain.removeHandler(channel);
+    for (const channel of OWNED_SEND_CHANNELS) ipcMain.removeAllListeners(channel);
+  }
+
+  // ---------------------------------------------------------------------------------------
+
+  private rebuildClient(): void {
+    // A22: no turn in flight survives a key change — it is cancelled first.
+    this.runner?.cancel();
+    for (const off of this.offRunner) off();
+    this.offRunner = [];
+    this.runner = null;
+
+    // §6.7: this is the single construction site for a ChatClient, and key rotation runs through
+    // it, so the DS_FAKE_BRAIN choice is made here rather than once at startup in index.ts.
+    if (useFakeBrain(app.isPackaged, process.env)) {
+      this.client = createFakeClient();
+      console.log('[brain] DS_FAKE_BRAIN=1 -> echo brain (no network, no key)');
+    } else {
+      const apiKey = this.deps.keyStore.get();
+      this.client = apiKey ? new DeepSeekClient({ apiKey }) : null;
+    }
+
+    if (this.client) {
+      const runner = new TurnRunner({
+        client: this.client,
+        history: this.deps.store,
+        // A25 / §3.11.2: the metrics row is written by TurnRunner through this port — it is the
+        // only place that knows `sensitive` and `errorCode`. BrainService must not fabricate them.
+        metrics: this.deps.store,
+        persona: {
+          staticSystem: this.staticSystem,
+          postHistoryInstructions: this.deps.bundle.card.post_history_instructions,
+          motionKeys: Object.keys(this.deps.bundle.motionMap),
+          cannedLines: this.deps.bundle.cannedLines,
+        },
+        state: () => this.state(),
+      });
+      this.attachRunner(runner);
+      this.runner = runner;
+    }
+    this.refreshKeyStatus();
+  }
+
+  private attachRunner(runner: TurnRunner): void {
+    const { pet, bubble, chat } = this.deps;
+
+    this.offRunner.push(
+      runner.on('state', (p) => {
+        sendTo(pet, Channels.brainState, p);
+        sendTo(bubble, Channels.brainState, p);
+        sendTo(chat, Channels.brainState, p);
+        if (p.state === 'thinking') {
+          this.emittedThisTurn = 0;
+          this.cancelBubbleHide();
+          this.deps.setBubbleVisible(true);
+        }
+        // A turn where every sentence was stripped (§3.11.2 step 4) emits no sentence, so no
+        // `playback:turnDone` will ever come back and §5.4's only hide trigger would never fire.
+        if (p.state === 'idle' && this.emittedThisTurn === 0) this.scheduleBubbleHide(BUBBLE_HIDE_DELAY_MS);
+      }),
+    );
+
+    this.offRunner.push(
+      runner.on('sentence', (ev) => {
+        this.emittedThisTurn++;
+        console.log('[brain] sentence seq=%d emotion=%s %s', ev.seq, ev.emotion, ev.text);
+        sendTo(pet, Channels.brainSentence, ev);
+        sendTo(bubble, Channels.brainSentence, ev);
+      }),
+    );
+
+    this.offRunner.push(
+      runner.on('turnDone', (p) => {
+        console.log('[brain] turnDone turn=%s totalMs=%d regenerated=%s', p.turnId, p.totalMs, p.regenerated);
+        sendTo(pet, Channels.brainTurnDone, p);
+        sendTo(bubble, Channels.brainTurnDone, p);
+        sendTo(chat, Channels.brainTurnDone, p);
+      }),
+    );
+
+    this.offRunner.push(runner.on('error', (p) => this.reportError(p)));
+  }
+
+  private reportError(p: { turnId?: string; code: ErrorCode; message: string }): void {
+    const { bubble, chat } = this.deps;
+    const payload = p.turnId
+      ? { turnId: p.turnId, code: p.code, message: p.message }
+      : { code: p.code, message: p.message };
+    console.error('[brain] error %s %s', p.code, p.message);
+    sendTo(bubble, Channels.brainError, payload);
+    sendTo(chat, Channels.brainError, payload);
+
+    const hint = ERROR_HINTS[p.code];
+    // §2.8: `empty` carries text '' on purpose — §3.9.4 speaks a canned line instead, so no hint.
+    if (hint.text) {
+      // The hint surface is a separate layer (C10): an app error never speaks in her voice.
+      this.cancelBubbleHide();
+      this.deps.setBubbleVisible(true);
+      sendTo(bubble, Channels.hintShow, { text: hint.text, level: hint.level, ttlMs: HINT_TTL_MS });
+      this.scheduleBubbleHide(HINT_TTL_MS + BUBBLE_HIDE_DELAY_MS);
+    }
+    if (hint.opensKeyWindow) this.deps.openKeyWindow(p.code);
+  }
+
+  private state(): StatePreamble {
+    const now = new Date();
+    const last = this.deps.store.lastMessageTs();
+    return {
+      localTime: TIME_FMT.format(now),
+      weekday: WEEKDAY_FMT.format(now),
+      // Constants in Phase 2; @ds/sim replaces them in Phase 3 without touching this signature.
+      // They never reach the prompt as numbers — prompt.ts turns them into phrases (C-5).
+      mood: 0.1,
+      energy: 70,
+      affection: 50,
+      sinceLastChat: humanizeGap(last === null ? 0 : now.getTime() - last),
+    };
+  }
+
+  /** R9's pinned producer: `avatar:listening` is derived by main from `chat:composing`. */
+  private setListening(on: boolean): void {
+    if (this.listeningTimer) {
+      clearTimeout(this.listeningTimer);
+      this.listeningTimer = null;
+    }
+    if (on) {
+      sendTo(this.deps.pet, Channels.avatarListening, { on: true });
+      return;
+    }
+    this.listeningTimer = setTimeout(() => {
+      this.listeningTimer = null;
+      sendTo(this.deps.pet, Channels.avatarListening, { on: false });
+    }, LISTENING_OFF_DEBOUNCE_MS);
+  }
+
+  /** Clears only the pending timer. The hide stays *owed* — used while the pointer pins the bubble. */
+  private clearBubbleTimer(): void {
+    if (this.bubbleTimer) {
+      clearTimeout(this.bubbleTimer);
+      this.bubbleTimer = null;
+    }
+  }
+
+  /** Clears the timer AND the debt: a new turn started, or the window is already on its way down. */
+  private cancelBubbleHide(): void {
+    this.clearBubbleTimer();
+    this.hideOwed = false;
+  }
+
+  private scheduleBubbleHide(ms: number): void {
+    this.clearBubbleTimer();
+    this.hideOwed = true;
+    // Pinned right now: arm nothing. `bubble:hover {inside:false}` re-arms the full delay.
+    if (this.bubblePinned) return;
+    this.bubbleTimer = setTimeout(() => {
+      this.bubbleTimer = null;
+      // The pointer can arrive between arming and firing; re-check, and let the leave re-arm.
+      if (this.bubblePinned) return;
+      this.hideOwed = false;
+      this.deps.setBubbleVisible(false);
+    }, ms);
+  }
+
+  private maybeFirstMessage(): void {
+    const { db, pet, bubble, chat, store, bundle } = this.deps;
+    if (getKv(db, KV_FIRST_RUN_DONE) === '1') return;
+    const text = sanitizeForDisplay(bundle.card.first_mes);
+    if (!text) return;
+
+    const turnId = FIRST_MES_TURN_ID;
+    const sentence: SentenceEvent = { turnId, seq: 0, text, emotion: 'happy' };
+    const done = {
+      turnId,
+      usage: null,
+      ttftMs: null,
+      totalMs: 0,
+      complianceMiss: false,
+      regenerated: false,
+      lint: { violations: [], severity: 'none' as const },
+    };
+
+    this.cancelBubbleHide();
+    this.deps.setBubbleVisible(true);
+    // NO `brain:state` is sent for 'first-mes' — not `thinking`, and above all not a trailing
+    // `idle` (contracts.md §6.6's pinned first-run broadcast set). §5.2 gives the bubble's
+    // `onState({state:'idle'})` the meaning "drop the queue and finish the turn", and by the time
+    // such an `idle` arrived `SpeechController` would already have run `beginTurn('first-mes')`
+    // from the sentence below — so the trailing `idle` would cancel the reveal timer at grapheme
+    // 0 and `first_mes` would never paint. (§5.2's "an `idle` for a turnId the controller never
+    // saw is ignored" does not save it: the controller HAS seen 'first-mes'.) The pet loses
+    // nothing — `brain:sentence` carries the emotion and §5.7's `brainSentence` handler sets the
+    // pose; `fpsState.speaking` stays false for this one synthetic turn because §5.6 drives it
+    // from `brain:state`, which does not exist here. The window comes back down on the bubble's
+    // own `playback:turnDone` (§5.4 hide trigger 2), which the handler above turns into a
+    // `scheduleBubbleHide` while dropping the 'first-mes' id before any `TurnRunner` sees it.
+    // `brain:sentence` is not in MAIN_TO_CHAT — the chat window never receives sentences (§2.5).
+    for (const win of [pet, bubble]) sendTo(win, Channels.brainSentence, sentence);
+    for (const win of [pet, bubble, chat]) sendTo(win, Channels.brainTurnDone, done);
+
+    // The user saw it, so it belongs in history — as `system`, not as a chat turn (R10.3).
+    void store.append('assistant', text, { turnId, kind: 'system' });
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+  }
+}
