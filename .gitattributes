@@ -1,1 +1,2 @@
 docs/evidence/** -text
+.githooks/** text eol=lf

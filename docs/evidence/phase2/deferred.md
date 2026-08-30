@@ -23,8 +23,17 @@ later be mistaken for an oversight. Sources: `.superpowers/sdd/2026-08-29-phase2
 | CDP `Input.imeSetComposition` Playwright smoke | Not done | R6 made the IME test a jsdom unit test (`isComposing` is constructor-settable); the CDP smoke was optional and was not attempted. The abandoned-composition case IS exercised end to end in the Electron lane, with synthetic `compositionstart`/`compositionend` events — see `app-inapp-checks.md`. |
 | P3 — the `mode: 'character' \| 'plain'` tray toggle and hotkey | Phase 3 | `renderStaticSystem(card, motionKeys, 'plain')` exists and is measured (184 tokens), so the second cache lineage is real from day one; only the switch that reaches it is deferred. |
 | P4 — the commissioned whale-girl model | Later | Haru (a uniformed schoolgirl sample) is a stand-in. The card's 尾鳍 / 拍水 lines are spoken, not animated. |
-| E-3 `trait` probes and the `trait_hit ≥ 0.80` threshold | Phase 3 | The axis ships wired but with **zero** prompts (`SKIP, n = 0`). Authoring probes against card text that Task 10's tuning loop is simultaneously rewriting is the "one file, two owners" defect the plan avoids; the threshold stays *proposed* until real probes exist. |
+| E-3 `trait` probes and the `trait_hit ≥ 0.80` threshold | Phase 3 | The axis ships wired but with **zero** prompts (`SKIP, n = 0`). Authoring probes against card text that Task 10's tuning loop is simultaneously rewriting is the "one file, two owners" defect the plan avoids; the threshold stays *proposed* until real probes exist. Since final-review **M-19** the fixture schema carries an optional `condition` string that `buildJudgeUser` renders as `【判定条件】`, and `validateFixture` rejects a `trait_hit` prompt without one — so the first real probe cannot fail by construction. |
+| A10 — self-fact consistency, 30 probes × 3 sessions (final-review **M-21**) | Phase 3, with A8 | The harness has **no** A10 probe, axis or test; the sample is zero, not small, so A10 is not "directional" and is listed as not measured (`eval/README.md`, the report footer). Probes need the Phase 3 memory `facts()` surface to be worth writing. |
+| A22 — the listening pose while the user types (final-review **I-14**, contract amendment **A-9**) | Phase 3 behaviour engine | Phase 2 pins `avatar:listening` = "an IME session is open": `{on:true}` comes from `compositionstart` only, focus and blur both send `{on:false}`. Latin typing, digits and paste never raise the pose. The richer meaning needs a **focus + keystroke producer in main that does not arm the light-dismiss guard** — putting `{on:true}` back on the composer's `focus` re-breaks light dismiss (T8 fix round 1). That producer belongs with the behaviour engine's pose system. |
+| A12 — distinct greetings: first-open-of-day, late-night, long-gap (final-review **M-28**) | Phase 3, with the proactive scheduler / D4 night state | Only the fixed `first_mes` on first run exists. The state preamble already carries `localTime` and `sinceLastChat`, but nothing produces a greeting variant and no eval probe measures one. |
+| Content-Security-Policy on the four renderers (final-review **M-26**) | Phase 4 packaging | No `onHeadersReceived` and no `<meta>` CSP anywhere; every sink is `textContent` / React text and sandbox + contextIsolation are on, so this is defence-in-depth. Lands with the ship-it hardening: `default-src 'self' app://local; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'`, relaxed for `ELECTRON_RENDERER_URL` in dev. |
+| `nativeTheme` handling and an un-emulated Windows-dark capture (final-review **M-18**) | Phase 4 settings (theme toggle) | Every `app-*-dark.png` is a `page.emulateMedia({ colorScheme: 'dark' })` capture; main never touches `nativeTheme`, and T10 recorded that `themeSource = 'dark'` did not flip `matchMedia` in the renderer. The captures prove the stylesheet, not Windows dark mode. |
+| Lazy key window (final-review carry 7) | Phase 4 packaging / perf | The key window's renderer process lives for the whole session although it is needed only on first run and key rotation; creating it on demand is one fewer process at no user cost. Part of the 750 MB working-set question below. |
+| Bubble inside the pet window (final-review carry 7) | Phase 3/4 architecture decision | R3 gave the band its own `BrowserWindow`; one window with three surfaces (or `backgroundThrottling` on the hidden ones) is the alternative the 750 MB shortfall row names. Decide with the resource budget, not as a tuning knob. |
+| `metrics` table retention (final-review carry 8) | Phase 4 metrics tab | The spec names no retention for `MetricsRecord` rows; `usage` is logged per turn and nothing prunes it. Decide when the metrics tab lands. |
 | Typechecking `apps/desktop/tests-e2e/**` | Not done | That directory sits outside every tsconfig `include`, like the Phase 1 `tests/` directory: `apps/desktop/tsconfig.json` is `"lib": ["ES2022"]` with no `DOM`, and the specs call `page.evaluate(() => document…)`. Playwright transpiles them itself. A second tsconfig with `"lib": ["ES2022","DOM"]` would fix it and was not added. |
+| `app://local` `serveRenderer` does not preserve HEAD / Range (gpt-review-2 **G2-8**) | Phase 4 packaging | `app-protocol.ts`'s `serveRenderer` answers a HEAD or `Range:` request with the plain GET body and status; no consumer needs ranges today (the renderers are small static files and `<audio>`/`<video>` are not used), so nothing breaks, but the handler is not a faithful static server. Fix with the packaging pass: 204-style empty body for HEAD, `206` + `Content-Range` for a single byte range. |
 
 ## Recorded deviations from the addendum
 
@@ -79,24 +88,35 @@ open.
   the verification and the exact command list that produces all of it once the balance is topped up.
 - **Task 9's committed baseline `eval-report.{json,md}` is a `--dry` run** (`config.dry === true`),
   not the "pre-tuning online baseline" the plan describes. It exercises the fixture, the lint pass,
-  the aggregation and the 24 gate rows against `eval/recorded/`, and its `pass: true` says the
+  the aggregation and the 27 gate rows against `eval/recorded/`, and its `pass: true` says the
   harness works — not that DeepSeek's output clears the bar. Phase 2 therefore ships **no** live
   judged number at all.
 - The eval fixture is **46 prompts × 3 runs = 138 turns** — R8's mix (8 bland · 8 adversarial ·
   6 sensitive · 6 flawed · 6 memory · 6 humour = 40) plus P2's 6-prompt `valid` control set. The
-  addendum's denominators for A3 (200 turns), A4 (500 turns), A5 (200 turns), A9 (50 adversarial
-  turns) and A10 (30 probes × 3 sessions) are **not** met at this size, and the per-axis
-  denominators are smaller still: 24 bland turns behind A13, 18 each behind A15, A16, A19 and P2,
-  9 behind A17. Every axis number the harness can produce is therefore **directional**. The
-  full-denominator run is the Phase 4 nightly job (X12).
+  addendum's denominators for A3 (200 turns), A4 (500 turns), A5 (200 turns) and A9 (50
+  adversarial turns) are **not** met at this size, and the per-axis denominators are smaller
+  still: 24 bland turns behind A13, 18 each behind A15, A16, A19 and P2, 9 behind A17. Every axis
+  number the harness can produce is therefore **directional**. The full-denominator run is the
+  Phase 4 nightly job (X12).
+- A10 (self-fact consistency, 30 probes × 3 sessions) is **not measured at all**, not
+  "directional": the harness has no A10 probe, axis or test, so the sample is zero (final-review
+  M-21). It sits with A8 in the "Deferred by ruling" table above.
 - A8 (persona bleed across 3 personas, blind attribution ≥ 85 %) is **out of Phase 2** — only one
   persona exists, so the criterion is unsatisfiable rather than unmet. It moves to Phase 3.
-- The report gates **24 rows**: 16 axes (the 14 in `AXIS_SPECS` plus `emoji_discipline_sensitive`
-  and `judge_error_rate`) and 8 shape metrics. `trait_hit` is one of the 16 and reports
-  `SKIP (n = 0)`; a skipped row counts as passed and proves nothing. Opener-repeat, affect-rate,
-  lint-severity counts and the judge/shape emoji disagreement count are **reported, not gated**.
-- The harness measures **raw** model output: it never regenerates and never strips. The shipped
-  `TurnRunner` does both on top (R4), so live quality is **≥** these numbers.
+- The report gates **27 rows**: 17 axes (the 14 in `AXIS_SPECS` plus `emoji_discipline_sensitive`,
+  `in_character_flips` and `judge_error_rate`) and 10 shape metrics (the original 8 plus
+  `emojiMultiCount` and `markdownLintCount`). `in_character_flips = 0` is A9's second half — a judge
+  score of 0 is by the rubric's definition the therapist/assistant flip, and the mean/pct2 pair alone
+  let 13 of 138 through (final-review I-13). `emojiMultiCount = 0` is A18's per-reply half (M-20).
+  `trait_hit` is one of the 17 and reports `SKIP (n = 0)`; a skipped row counts as passed and proves
+  nothing. Opener-repeat, affect-rate, the other lint-rule counts and the judge/shape emoji
+  disagreement count are **reported, not gated**.
+- What each pass reads (final-review I-12). The **judge** reads `raw` — the reply with the
+  `<|ACT …|>` tags stripped by `StreamParser` but **before** `sanitizeForDisplay` — so the rubric's
+  markdown / stage-direction clauses can actually fire. The **linter** also reads `raw`, and its
+  `markdown` rule count is gated (`markdownLintCount = 0`). The **shape metrics** read `reply`
+  (sanitized), i.e. the text the user sees. The harness never regenerates and never strips; the
+  shipped `TurnRunner` does both on top (R4), so live quality is **≥** these numbers.
 - Persona tuning is bounded to **three iterations** (R8). [`tuning-log.md`](tuning-log.md) records
   that **zero** ran and why. `characters/haru/character.json` is byte-identical to its Task 3 state.
 - `session-20-turns.md` would measure R4's amended bar — *the first sentence closes ≤ 1.2 s p50* —
@@ -125,7 +145,7 @@ open.
 | speaking working set | 742.2 MB | ≤ 250 MB | Same, while she was mid-reply. |
 | idle CPU, whole Electron tree | 1.27 % | ≤ 4 % | **within bar** |
 | speaking CPU | 3.36 % | ≤ 4 % | **within bar** (30 Hz pet + reveal timer + mouth sync) |
-| cold-profile first message | 391–476 ms over four launches | ≤ 3 s (controller ruling) | **within bar**, on a virgin `--user-data-dir` every time. aa0e9df's replay fix holds. |
+| cold-profile first message | **382 ms (light) / 720 ms (dark)** — the two launches in the committed `e2e-report.json` | ≤ 3 s (controller ruling) | **within bar**, on a virgin `--user-data-dir` every time. aa0e9df's replay fix holds. The 391–476 ms (round 1) and 688–721 ms (fix round 1) figures quoted in `README.md` came from earlier lane runs whose `e2e-report.json` was overwritten by fix round 2; the only surviving run record is the 382 / 720 pair (final-review M-23). |
 | composer / band top edge vs the pet | 68.6 % of the pet window's height | ≥ 55 % (controller ruling) | **within bar, with one documented exception.** 68.6 % is the composer in the running app, both themes; 24 unit tests pin the rule across the whole band size range. The exception is the work-area yield — a window too tall to fit between the floor and the work-area bottom is placed against the work area, C14 outranking the floor (the 360 × 468 row below). Fix round 2 closed a hole the other way: round 1's composer dodge was gated on the work area alone, so with the history pane open every band flipped **above** the floor onto her face (460 × 320 landed at −10 % of the pet). The floor now outranks the dodge too, pinned by a sweep over every band size × three composer heights × three work areas. |
 | band rect vs composer rect, both visible | disjoint whenever there is anywhere legal to dodge to | no shared pixel | **within bar for the shapes the app ships.** Fixed in review round 1: the band dodges the visible composer (`placeBubble`'s `avoid`). Pinned by seven unit tests over three work areas × four pet positions × three composer heights × the whole band size range, and asserted in the Electron lane while both windows are up (one-row composer, mid-reply, both themes). Two cases deliberately still overlap, both because somewhere else outranks the dodge: no room either side inside the work area (C14), and — added in fix round 2 — room only *above* the 55 % floor, which the history-open composer produces for every band. Her line then sits on her lower third under the composer's edge, which is the lesser of the two defects. |
 | A9/A19 and the other 14 judged axes | NOT MEASURED | — | Insufficient balance. Neither passed nor failed. |

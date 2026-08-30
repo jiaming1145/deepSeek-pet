@@ -102,9 +102,10 @@ export function renderMarkdown(report) {
   L.push('## 诚实声明（R8）');
   L.push('');
   L.push('- A8（3 个人格盲评归属）不在 Phase 2 范围内：现在只有一个人格，已挪到 Phase 3。');
-  L.push('- A3/A4/A5/A9/A10/A15/A16 在这个样本量上是**方向性**结论，不是附录里 200/500 轮的分母；全分母跑在 Phase 4 的 nightly（X12）。');
+  L.push('- A10（自述事实一致性，30 个探针 × 3 个会话）**没有测**：fixture 里没有 A10 探针、没有对应的轴，样本是零，不是"小"。和 A8 一样挪到 Phase 3。');
+  L.push('- A3/A4/A5/A9/A15/A16 在这个样本量上是**方向性**结论，不是附录里 200/500 轮的分母；全分母跑在 Phase 4 的 nightly（X12）。');
   L.push('- 调参循环上限 3 轮；第三轮之后的数字原样上报。');
-  L.push('- 本工具测的是模型的**原始**输出：不 strip，也不 regenerate。线上应用还会再过一遍 TurnRunner 的 lint，所以实际观感只会更好。');
+  L.push('- **判官看的是原始输出**（`raw`：StreamParser 去掉 `<|ACT|>` 标记之后、`sanitizeForDisplay` 之前的文本），所以 markdown 列点 / 加粗 / 舞台提示这些 rubric 条款能真的命中；**lint 看的也是原始输出**，其中 `markdown` 规则的命中数单独设门槛（`markdownLintCount = 0`）。形状指标（A1/A2/A6/A7/A18 emoji 计数）算在 sanitize 之后的文本上，也就是用户实际看到的那份。本工具不 strip、不 regenerate；线上 TurnRunner 还会再过一遍 lint（R4），所以实际观感只会比这里更好。');
   L.push('');
   return L.join('\n');
 }

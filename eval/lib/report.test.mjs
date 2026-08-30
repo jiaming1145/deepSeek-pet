@@ -45,6 +45,13 @@ test('renderMarkdown marks a dry run, every gate, and the worst replies', () => 
   assert.ok(md.includes('| `cacheHitPct` | — | ≥ 70.0% | SKIP |'));
   assert.ok(md.includes('作为一个AI助手，我……'));
   assert.ok(md.includes('A8（3 个人格盲评归属）不在 Phase 2 范围内'));
+  // I-12 / M-21: the honesty footer says exactly what is judged, what is linted, and that A10 has no probe.
+  assert.ok(md.includes('判官看的是原始输出'));
+  assert.ok(md.includes('lint 看的也是原始输出'));
+  assert.ok(md.includes('A10'));
+  assert.ok(md.includes('没有测'));
+  assert.ok(!md.includes('A9/A10/A15'));
+  assert.ok(!md.includes('本工具测的是模型的**原始**输出'));
 });
 
 test('writeReports writes both files under the stamp', () => {
