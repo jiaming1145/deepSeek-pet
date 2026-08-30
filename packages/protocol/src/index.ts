@@ -46,7 +46,7 @@ export const UsageSchema = z.object({
 });
 export type Usage = z.infer<typeof UsageSchema>;
 
-export const ErrorCodeSchema = z.enum(['auth', 'balance', 'rate', 'server', 'network', 'timeout', 'empty', 'no-key']);
+export const ErrorCodeSchema = z.enum(['auth', 'balance', 'rate', 'server', 'network', 'timeout', 'empty', 'no-key', 'storage']);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
 export const LintRuleSchema = z.enum([
@@ -370,4 +370,8 @@ export const ERROR_HINTS = {
   timeout: { text: '等太久了，先歇一会儿', level: 'warn', opensKeyWindow: false },
   empty: { text: '', level: 'info', opensKeyWindow: false },
   'no-key': { text: '还没填 API Key', level: 'error', opensKeyWindow: true },
+  // A-38: a history append failed (disk full, a closed handle). The reply was spoken; the user is
+  // told the line was not remembered. Sent to the chat window as brain:error and to the bubble as
+  // a hint only (the bubble's brain:error handler would cut a reply that is still revealing).
+  storage: { text: '刚才那句没记住，硬盘好像写不进去', level: 'warn', opensKeyWindow: false },
 } as const satisfies Record<ErrorCode, { text: string; level: 'info' | 'warn' | 'error'; opensKeyWindow: boolean }>;
