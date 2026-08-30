@@ -25,6 +25,9 @@ const JUDGE_PATH = fileURLToPath(new URL('judge.md', HERE));
 const RECORDED_REPLIES = fileURLToPath(new URL('recorded/replies.zh.json', HERE));
 const RECORDED_JUDGEMENTS = fileURLToPath(new URL('recorded/judgements.json', HERE));
 
+/** Hard deadline per judge call (thinking stays ON for the judge, so this is generous). */
+const JUDGE_TIMEOUT_MS = 120_000;
+
 const NO_KEY_MESSAGE = 'DEEPSEEK_API_KEY 没设置。加 --dry 跑离线检查，或者设置环境变量后重跑。';
 
 function fail(message, code) {
@@ -82,19 +85,23 @@ async function main() {
   if (prompts.length === 0) fail('没有可跑的 prompt。', 2);
 
   // ---- client ----
-  let client;
+  // clientFor(runIndex): --dry builds one RecordedClient per run so its PRNG is seeded from
+  // (seed, runIndex) and concurrency cannot move chunk boundaries (CX-13); live shares one client.
+  let clientFor;
   let recordedJudgements = null;
   if (opts.dry) {
     const recorded = JSON.parse(readFileSync(RECORDED_REPLIES, 'utf8'));
-    client = new RecordedClient({ replies: recorded.replies, seed: opts.seed });
+    const probe = new RecordedClient({ replies: recorded.replies, seed: opts.seed });
     for (const p of prompts) {
-      if (!client.has(p.id)) fail(`--dry 缺 ${p.id} 的录制回复（eval/recorded/replies.zh.json）`, 2);
+      if (!probe.has(p.id)) fail(`--dry 缺 ${p.id} 的录制回复（eval/recorded/replies.zh.json）`, 2);
     }
     recordedJudgements = JSON.parse(readFileSync(RECORDED_JUDGEMENTS, 'utf8'));
+    clientFor = (runIndex) => new RecordedClient({ replies: recorded.replies, seed: opts.seed, runIndex });
   } else {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) fail(NO_KEY_MESSAGE, 2);
-    client = new DeepSeekClient({ apiKey, model: opts.model, baseUrl: DEEPSEEK_BASE_URL });
+    const client = new DeepSeekClient({ apiKey, model: opts.model, baseUrl: DEEPSEEK_BASE_URL });
+    clientFor = () => client;
   }
 
   // ---- model pass: runs in parallel, each run sequential so `recent` is well-defined ----
@@ -102,7 +109,7 @@ async function main() {
   const perRun = await pool(runIndices, opts.concurrency, async (runIndex) => {
     const ctx = {
       dry: opts.dry,
-      client,
+      client: clientFor(runIndex),
       staticSystem,
       postHistoryInstructions: bundle.card.post_history_instructions,
       recent: [],
@@ -142,7 +149,8 @@ async function main() {
         const prompt = byId.get(t.promptId);
         const axes = axesFor(prompt);
         const user = buildJudgeUser(prompt, judgeInput(t), axes, bundle.card.name);
-        const r = await judgeTurn({ baseUrl: DEEPSEEK_BASE_URL, apiKey, model: opts.judge, system, user, axes });
+        // Bounded (CX-11): a stalled judge fails this turn with judgeError instead of hanging the run.
+        const r = await judgeTurn({ baseUrl: DEEPSEEK_BASE_URL, apiKey, model: opts.judge, system, user, axes, timeoutMs: JUDGE_TIMEOUT_MS });
         if (r.ok) t.judge = r.value;
         else { t.judge = null; t.judgeError = true; console.error(`\n评审失败 ${t.promptId} run ${t.run}：${r.message}`); }
         done++;

@@ -48,7 +48,9 @@ harness 不 strip、不 regenerate。三条流水线各看什么，说清楚（I
 
 线上 `TurnRunner` 还会再过一遍 lint（R4），所以实际观感只会比这里的数字好。
 
-`LintContext.recent` = 同一轮里前面最多 5 条已 sanitize 的回复，按 fixture 顺序。fixture **不打乱**：`recent`、`question-streak`、`opener-repeat`、`consecutiveQuestionPairs` 全是顺序相关的，固定顺序才能让两次跑可比。`--seed` 只喂 `--dry` 的分块。
+`LintContext.recent` = 同一轮里前面最多 5 条已 sanitize 的回复，按 fixture 顺序。fixture **不打乱**：`recent`、`question-streak`、`opener-repeat`、`consecutiveQuestionPairs` 全是顺序相关的，固定顺序才能让两次跑可比。`--seed` 只喂 `--dry` 的分块；每个 run 用自己的 PRNG（由 `(seed, runIndex)` 派生，CX-13），所以 `--concurrency 1` 和 `4` 切出来的块完全一样。
+
+判官请求有硬上限（CX-11）：每次调用 `AbortSignal.timeout`（120 s），响应体限 256 KiB、块间空闲限 30 s；超时的那一轮记 `judgeError`，整个跑不会挂住。`--ablation` 的四路请求同样受限。
 
 ## 诚实声明（R8）
 
