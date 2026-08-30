@@ -1,11 +1,12 @@
 import { join, sep } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Neither `net` nor `protocol` is touched by the pure resolver under test; mocking keeps the real
 // electron package (which prints to stdout when required outside Electron) out of the run.
-vi.mock('electron', () => ({ net: {}, protocol: {} }));
+const electronApp = { isPackaged: false };
+vi.mock('electron', () => ({ app: electronApp, net: {}, protocol: {} }));
 
-const { allowedPetOrigins, isAllowedPetUrl, PET_URL, resolveRendererRequest } = await import('./app-protocol');
+const { allowedPetOrigins, devDebugEnabled, devRendererUrl, isAllowedPetUrl, PET_URL, rendererUrl, resolveRendererRequest } = await import('./app-protocol');
 
 const root = `${sep}app${sep}out${sep}renderer`;
 
@@ -110,5 +111,40 @@ describe('isAllowedPetUrl', () => {
 
   it('grants nothing extra when ELECTRON_RENDERER_URL is unparseable', () => {
     expect(allowedPetOrigins('::::')).toEqual(['app://local']);
+  });
+});
+
+describe('M-9: dev hooks are gated on !app.isPackaged', () => {
+  afterEach(() => {
+    electronApp.isPackaged = false;
+    delete process.env.ELECTRON_RENDERER_URL;
+    delete process.env.DS_DEBUG;
+  });
+
+  it('honours ELECTRON_RENDERER_URL and DS_DEBUG in an unpackaged run', () => {
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    process.env.DS_DEBUG = '1';
+    expect(devRendererUrl()).toBe('http://localhost:5173');
+    expect(rendererUrl('bubble')).toBe('http://localhost:5173/bubble.html');
+    expect(allowedPetOrigins()).toEqual(['app://local', 'http://localhost:5173']);
+    expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(true);
+    expect(devDebugEnabled()).toBe(true);
+  });
+
+  it('ignores both in a packaged build: the IPC trust origin stays app://local', () => {
+    electronApp.isPackaged = true;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    process.env.DS_DEBUG = '1';
+    expect(devRendererUrl()).toBeUndefined();
+    expect(rendererUrl('pet')).toBe(PET_URL);
+    expect(allowedPetOrigins()).toEqual(['app://local']);
+    expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(false);
+    expect(devDebugEnabled()).toBe(false);
+  });
+
+  it('treats an empty ELECTRON_RENDERER_URL as unset', () => {
+    process.env.ELECTRON_RENDERER_URL = '';
+    expect(devRendererUrl()).toBeUndefined();
+    expect(rendererUrl('chat')).toBe('app://local/chat.html');
   });
 });

@@ -1,4 +1,4 @@
-import { net, protocol } from 'electron';
+import { app, net, protocol } from 'electron';
 import { join, normalize, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -8,6 +8,24 @@ export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 export const PET_URL = `${APP_ORIGIN}/pet.html`;
 
 /**
+ * M-9: the ONE place `ELECTRON_RENDERER_URL` is read. It is a dev hook — electron-vite sets it for
+ * `pnpm dev` — and it widens the IPC trust origin (`allowedPetOrigins`) to whatever it names, so a
+ * packaged build must never honour it: an environment variable is not a trusted input there. Same
+ * gate shape as `useFakeBrain` and the D5 dev key. Gated per call rather than cached at module
+ * load so the value cannot be captured before `app` is meaningful; the env cannot change under a
+ * running process, so every call agrees.
+ */
+export function devRendererUrl(): string | undefined {
+  if (app.isPackaged) return undefined;
+  return process.env.ELECTRON_RENDERER_URL || undefined;
+}
+
+/** M-9: `DS_DEBUG=1` opens the pet's debug panel; a dev hook, so unpackaged only. */
+export function devDebugEnabled(): boolean {
+  return !app.isPackaged && process.env.DS_DEBUG === '1';
+}
+
+/**
  * The URL for one renderer page: electron-vite's dev server while `pnpm dev` is running, the
  * app:// scheme in a built app. One helper so the four windows cannot drift apart.
  *
@@ -15,9 +33,8 @@ export const PET_URL = `${APP_ORIGIN}/pet.html`;
  * key.html are ordinary paths under the same root and the same authority as pet.html.
  */
 export function rendererUrl(page: 'pet' | 'bubble' | 'chat' | 'key'): string {
-  return process.env.ELECTRON_RENDERER_URL
-    ? `${process.env.ELECTRON_RENDERER_URL}/${page}.html`
-    : `${APP_ORIGIN}/${page}.html`;
+  const dev = devRendererUrl();
+  return dev ? `${dev}/${page}.html` : `${APP_ORIGIN}/${page}.html`;
 }
 
 /**
@@ -47,7 +64,7 @@ function originKey(url: URL): string | null {
 }
 
 /** The exact origins the pet document is allowed to have: production `app://local`, plus dev. */
-export function allowedPetOrigins(devUrl = process.env.ELECTRON_RENDERER_URL): string[] {
+export function allowedPetOrigins(devUrl = devRendererUrl()): string[] {
   const origins = [APP_ORIGIN];
   if (devUrl) {
     try {
@@ -64,7 +81,7 @@ export function allowedPetOrigins(devUrl = process.env.ELECTRON_RENDERER_URL): s
  * Whether `url` may be the pet's top-level document. Used both to reject IPC from a navigated-away
  * page and to deny the navigation in the first place.
  */
-export function isAllowedPetUrl(url: string, devUrl = process.env.ELECTRON_RENDERER_URL): boolean {
+export function isAllowedPetUrl(url: string, devUrl = devRendererUrl()): boolean {
   try {
     const key = originKey(new URL(url));
     return key !== null && allowedPetOrigins(devUrl).includes(key);
