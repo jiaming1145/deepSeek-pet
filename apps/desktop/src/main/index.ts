@@ -61,7 +61,10 @@ const visibility = createVisibilityController({
     if (pet) sendToPet(pet, Channels.shellVisibility, verdict);
     if (bubble && !bubble.isDestroyed()) {
       sendTo(bubble, Channels.shellVisibility, verdict);
-      if (verdict.hidden) hideBubble(bubble);
+      // Both edges: hide on hidden, and re-show on the hidden→shown edge when the brain still wants
+      // her speaking. Without the second half a first message that landed while the verdict was
+      // hidden painted into a window that never became visible (found by T7 on a cold profile).
+      applyBubbleVisibility();
     }
     if (verdict.hidden && chat) closeChat(chat);
   },
@@ -82,10 +85,19 @@ const visibility = createVisibilityController({
  * VisibilityState by construction: nothing she has to say outranks a locked screen or a fullscreen
  * game, so a `true` while hidden is a no-op rather than a show.
  */
+let bubbleWanted = false;
 function setBubbleVisible(on: boolean): void {
+  // Remember the brain's wish even when it cannot be honoured right now (window not created yet,
+  // or the shell verdict hidden); applyBubbleVisibility() replays it on every edge that matters.
+  bubbleWanted = on;
+  applyBubbleVisibility();
+}
+
+/** Idempotent: derives the bubble window's visibility from (brain wants it) AND (shell allows it). */
+function applyBubbleVisibility(): void {
   if (!bubble || bubble.isDestroyed()) return;
-  if (!on) hideBubble(bubble);
-  else if (!visibility.verdict.hidden) showBubble(bubble);
+  if (bubbleWanted && !visibility.verdict.hidden) showBubble(bubble);
+  else hideBubble(bubble);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -151,6 +163,8 @@ if (!app.requestSingleInstanceLock()) {
     // being present on every one of them.
     const bubbleWin = createBubbleWindow();
     bubble = bubbleWin;
+    // A first message can be requested before the window exists (brain service starts on db open).
+    applyBubbleVisibility();
     const chatWin = createChatWindow();
     chat = chatWin;
     const keyWindow = createKeyWindow();
