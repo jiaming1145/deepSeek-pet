@@ -1,93 +1,119 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { HitPart } from '@ds/protocol';
 import { PressTracker, tapCandidates, type PressEvent } from './press';
 
+// The real @ds/stage BARREL pulls in the vendored Cubism Framework (`@framework/*`), which only
+// electron.vite.config.ts aliases — the same reason debug-panel.test.ts mocks it. press.ts needs a
+// single constant from that package, so the mock hands back the REAL picker module (its one
+// @framework import is type-only, so it transforms cleanly) rather than a re-declared 10.
+vi.mock('@ds/stage', async () => await vi.importActual('../../../../../packages/stage/src/picker'));
+
 /** Records everything the tracker emits, so each test asserts on the whole emission log. */
-function harness(opts: { hit?: (x: number, y: number) => string | null; rejected?: (t: EventTarget | null) => boolean } = {}) {
+function harness(opts: { rejected?: (t: EventTarget | null) => boolean; part?: HitPart | null } = {}) {
   const log: string[] = [];
   const tracker = new PressTracker({
-    hitTest: opts.hit ?? ((x, y) => (x >= 100 && x < 300 && y >= 100 && y < 300 ? 'Head' : null)),
     slopPx: 4,
-    onTap: (hit) => log.push(`tap:${hit}`),
-    onDragStart: () => log.push('dragStart'),
-    onDragMove: (dx, dy) => log.push(`dragMove:${dx},${dy}`),
-    onDragEnd: () => log.push('dragEnd'),
+    toDevice: (x, y) => ({ x: x * 1.5, y: y * 1.5 }),
+    queuePress: (p) => log.push(`queue#${p.pressId}:${p.deviceX},${p.deviceY}`),
+    pick: (x, y) => ({ alpha: opts.part === null ? 0 : 200, part: opts.part === undefined ? 'head' : opts.part, modelX: x / 400, modelY: y / 400 }),
+    hitPartDefault: 'body',
+    onGrab: (g) => log.push(`grab#${g.pressId}:${g.part}@${g.screenX},${g.screenY}`),
+    onRelease: (r) => log.push(`release#${r.pressId}:${r.wasTap ? 'tap' : 'fling'}`),
+    onTap: (t) => log.push(`tap#${t.pressId}:${t.part}:${t.alpha}`),
+    onDisagreement: (d) => log.push(`disagree:${d}`),
     isRejected: opts.rejected ?? (() => false),
   });
   return { tracker, log };
 }
 
-/** A left-button event at one point; screen coordinates default to the client ones. */
 function ev(p: Partial<PressEvent> & { clientX: number; clientY: number }): PressEvent {
-  return {
-    button: 0,
-    buttons: 1,
-    screenX: p.screenX ?? p.clientX,
-    screenY: p.screenY ?? p.clientY,
-    target: null,
-    ...p,
-  };
+  return { button: 0, buttons: 1, screenX: p.screenX ?? p.clientX, screenY: p.screenY ?? p.clientY, target: null, ...p };
 }
 
-describe('PressTracker', () => {
-  it('taps when a press on the model is released without moving', () => {
+describe('PressTracker — §7.2 grab / release over the 1-px GPU read', () => {
+  it('queues the press on pointer-down, grabs on alpha >= ENTER_ALPHA, taps on a still release', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    expect(log).toEqual(['queue#1:300,300']);
+    tracker.resolvePress(1, 42);
+    expect(log).toEqual(['queue#1:300,300', 'grab#1:head@200,200']);
     tracker.mouseup(ev({ clientX: 200, clientY: 200 }));
-    expect(log).toEqual(['dragStart', 'tap:Head']);
+    expect(log.slice(2)).toEqual(['release#1:tap', 'tap#1:head:42']);
   });
 
-  it('still taps for jitter below the slop', () => {
+  it('sends nothing for alpha below ENTER_ALPHA (off-model), and a release over her later is not a tap', () => {
+    const { tracker, log } = harness();
+    tracker.mousedown(ev({ clientX: 10, clientY: 10 }));
+    tracker.resolvePress(1, 3);
+    tracker.mousemove(ev({ clientX: 150, clientY: 150 }));
+    tracker.mouseup(ev({ clientX: 150, clientY: 150 }));
+    expect(log).toEqual(['queue#1:15,15']);
+  });
+
+  it('a tap that ends before the GPU read resolves still grabs, releases as a tap, and taps — in that order', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
-    tracker.mousemove(ev({ clientX: 201, clientY: 200 }));
     tracker.mouseup(ev({ clientX: 201, clientY: 200 }));
-    expect(log).toEqual(['dragStart', 'dragMove:1,0', 'dragEnd', 'tap:Head']);
+    expect(log).toEqual(['queue#1:300,300']);
+    tracker.resolvePress(1, 255);
+    expect(log.slice(1)).toEqual(['grab#1:head@200,200', 'release#1:tap', 'tap#1:head:255']);
   });
 
-  it('does not tap when a drag past the slop is released (the drag-release defect)', () => {
+  it('travel >= TAP_SLOP_DIP releases as a fling and never taps (the drag-release defect)', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.resolvePress(1, 200);
     tracker.mousemove(ev({ clientX: 210, clientY: 200 }));
-    tracker.mousemove(ev({ clientX: 220, clientY: 205 }));
     tracker.mouseup(ev({ clientX: 220, clientY: 205 }));
-    expect(log).toEqual(['dragStart', 'dragMove:10,0', 'dragMove:10,5', 'dragEnd']);
-    expect(log).not.toContain('tap:Head');
+    expect(log.slice(2)).toEqual(['release#1:fling']);
   });
 
-  it('clears the drag on a mousemove with buttons === 0 (mouseup off-window)', () => {
+  it('a mousemove with buttons === 0 ends the press (mouseup off-window); the late mouseup is consumed', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.resolvePress(1, 200);
     tracker.mousemove(ev({ clientX: 260, clientY: 200 }));
-    // Button released where we never saw the mouseup: the next move reports buttons === 0.
     tracker.mousemove(ev({ clientX: 400, clientY: 400, buttons: 0 }));
-    expect(log).toEqual(['dragStart', 'dragMove:60,0', 'dragEnd']);
-    // The drag really is gone: further motion must not move the window again.
+    expect(log.slice(2)).toEqual(['release#1:fling']);
     tracker.mousemove(ev({ clientX: 500, clientY: 500 }));
-    expect(log).toEqual(['dragStart', 'dragMove:60,0', 'dragEnd']);
-    // ...and the late mouseup must not fire a second terminator or a tap.
     tracker.mouseup(ev({ clientX: 200, clientY: 200 }));
-    expect(log).toEqual(['dragStart', 'dragMove:60,0', 'dragEnd']);
+    expect(log.slice(2)).toEqual(['release#1:fling']);
   });
 
-  it('does not tap for a press that started on a rejected target, wherever it is released', () => {
+  it('a stale GPU result for a superseded press is ignored', () => {
+    const { tracker, log } = harness();
+    tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.mouseup(ev({ clientX: 200, clientY: 200 }));
+    tracker.mousedown(ev({ clientX: 100, clientY: 100 }));
+    tracker.resolvePress(1, 255);
+    expect(log).toEqual(['queue#1:300,300', 'queue#2:150,150']);
+    tracker.resolvePress(2, 255);
+    expect(log.at(-1)).toBe('grab#2:head@100,100');
+  });
+
+  it('GPU on-model but CPU off-model: the GPU wins, the part falls back to hitPartDefault and the delta is reported', () => {
+    const { tracker, log } = harness({ part: null });
+    tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.resolvePress(1, 30);
+    expect(log.slice(1)).toEqual(['disagree:30', 'grab#1:body@200,200']);
+  });
+
+  it('a press on a rejected target neither queues nor taps, wherever it is released', () => {
     const panel = { panel: true } as unknown as EventTarget;
     const { tracker, log } = harness({ rejected: (t) => t === panel });
-    // Press the debug panel, release over the model (the panel can overlap her silhouette).
     tracker.mousedown(ev({ clientX: 200, clientY: 200, target: panel }));
-    tracker.mouseup(ev({ clientX: 200, clientY: 200, target: null }));
+    tracker.mouseup(ev({ clientX: 200, clientY: 200 }));
     expect(log).toEqual([]);
-    // Releasing over the panel after pressing the model must not tap either.
-    tracker.mousedown(ev({ clientX: 200, clientY: 200, target: null }));
+    tracker.mousedown(ev({ clientX: 200, clientY: 200 }));
+    tracker.resolvePress(2, 200);
     tracker.mouseup(ev({ clientX: 200, clientY: 200, target: panel }));
-    expect(log).toEqual(['dragStart']);
+    expect(log).toEqual(['queue#2:300,300', 'grab#2:head@200,200', 'release#2:tap']);
   });
 
-  it('ignores non-left buttons and presses that miss the model', () => {
+  it('ignores non-left buttons', () => {
     const { tracker, log } = harness();
     tracker.mousedown(ev({ clientX: 200, clientY: 200, button: 2 }));
     tracker.mouseup(ev({ clientX: 200, clientY: 200, button: 2 }));
-    tracker.mousedown(ev({ clientX: 10, clientY: 10 }));
-    tracker.mousemove(ev({ clientX: 90, clientY: 10 }));
     expect(log).toEqual([]);
   });
 });
@@ -109,24 +135,5 @@ describe('tapCandidates', () => {
 
   it('drops groups with an empty index list', () => {
     expect(tapCandidates({ TapBody: [], TapHead: [3] })).toEqual([['TapHead', 3]]);
-  });
-});
-
-describe('PressTracker — press that starts off the model', () => {
-  it('does not tap when the button is released over her', () => {
-    const { tracker, log } = harness();
-    tracker.mousedown(ev({ clientX: 10, clientY: 10 })); // transparent corner
-    tracker.mousemove(ev({ clientX: 150, clientY: 150 }));
-    tracker.mouseup(ev({ clientX: 150, clientY: 150 })); // over Head
-    expect(log).toEqual([]);
-  });
-
-  it('still taps on the next clean press on her', () => {
-    const { tracker, log } = harness();
-    tracker.mousedown(ev({ clientX: 10, clientY: 10 }));
-    tracker.mouseup(ev({ clientX: 150, clientY: 150 }));
-    tracker.mousedown(ev({ clientX: 150, clientY: 150 }));
-    tracker.mouseup(ev({ clientX: 150, clientY: 150 }));
-    expect(log).toEqual(['dragStart', 'tap:Head']);
   });
 });

@@ -1,24 +1,17 @@
 /**
- * Press → tap / drag discrimination for the pet window.
+ * Press → tap / drag discrimination for the pet window, rewired for §7.2.
  *
- * Extracted out of `main.ts`'s three `window.addEventListener` closures so the four behaviours that
- * were fixed by hand during Task 6/7 (drag release must not tap, a mouseup we never see must not
- * leave the drag stuck, every `tapMotions` group must be reachable, a press on the debug panel must
- * not tap) can be unit-tested without a browser or a loaded Live2D model.
- *
- * The tracker deliberately owns *only* the button state machine. Hover sampling and gaze forwarding
- * stay in `main.ts` because they also run for pointer streams that never produce a press
- * (`gaze:cursor` forwarded from main once the window is click-through).
+ * The tracker still owns only the button state machine (hover sampling and gaze forwarding stay in
+ * `main.ts`). What changed in Phase 3: a pointer-down no longer hit-tests on the CPU — it queues a
+ * 1-px GPU read (§6.3) and the press is decided when `resolvePress` delivers the framebuffer alpha
+ * on the next frame. `alpha >= ENTER_ALPHA` → `arb:grab` (main's motor owns the window from here,
+ * R3-5); `alpha < ENTER_ALPHA` → nothing (off-model). Pointer-up / lost button → `arb:release`.
+ * The Phase 1 recovery paths (buttons === 0 mid-move ends the press; the late mouseup is consumed)
+ * are kept verbatim in behaviour. `avatar:drag` / `avatar:dragEnd` have no sender any more (§2.9).
  */
+import type { HitPart } from '@ds/protocol';
+import { ENTER_ALPHA, type PendingPress, type PickResult } from '@ds/stage';
 
-/**
- * The subset of `MouseEvent` the tracker reads. `MouseEvent` satisfies it structurally, so `main.ts`
- * hands the DOM event straight through while tests can pass object literals.
- *
- * `client*` are viewport pixels (what the hit test consumes); `screen*` are desktop pixels, which is
- * what a window move has to be expressed in — the window itself moves under the cursor, so client
- * coordinates stop advancing mid-drag while screen coordinates keep tracking the real pointer.
- */
 export interface PressEvent {
   button: number;
   buttons: number;
@@ -29,45 +22,47 @@ export interface PressEvent {
   target: EventTarget | null;
 }
 
+export interface PressGrab { pressId: number; part: HitPart; modelX: number; modelY: number; screenX: number; screenY: number }
+export interface PressRelease { pressId: number; wasTap: boolean }
+export interface PressTap { pressId: number; part: HitPart; alpha: number; clientX: number; clientY: number }
+export type PressPick = Pick<PickResult, 'alpha' | 'part' | 'modelX' | 'modelY'>;
+
 export interface PressTrackerOptions {
-  /** Name of the hit area under a viewport point, or null where the model is not drawn. */
-  hitTest(x: number, y: number): string | null;
-  /** Accumulated pointer travel a press may have and still count as a tap rather than a drag. */
+  /** Accumulated pointer travel (DIP) a press may have and still count as a tap. TAP_SLOP_DIP. */
   slopPx: number;
-  onTap(hit: string): void;
-  /**
-   * A press was accepted and the window is now being dragged. Optional: today's protocol has no
-   * "drag started" message (main infers the drag from the first delta), so `main.ts` leaves it
-   * unwired. It exists because the accept decision is only visible in here.
-   */
-  onDragStart?(): void;
-  /** One drag step, in desktop pixels. */
-  onDragMove(dx: number, dy: number): void;
-  /** The drag terminator. Sent exactly once per drag that actually moved. */
-  onDragEnd(): void;
-  /**
-   * True for event targets that must swallow the press entirely — the debug panel, whose buttons
-   * would otherwise drag the window out from under the pointer and then also fire a tap motion.
-   */
+  /** client px -> device px, exactly Live2DStage.toDevice (the GPU read wants device pixels). */
+  toDevice(clientX: number, clientY: number): { x: number; y: number };
+  /** GpuPressReader.queue — serviced inside the next frame (§6.3). */
+  queuePress(p: PendingPress): void;
+  /** The CPU predicate at the same point, for the part and the model-local anchor (R3-22). */
+  pick(clientX: number, clientY: number): PressPick;
+  hitPartDefault: HitPart;
+  onGrab(g: PressGrab): void;
+  onRelease(r: PressRelease): void;
+  onTap(t: PressTap): void;
+  /** GPU says on-model, CPU says off: reported so §6.5's error rate is measured in production. */
+  onDisagreement(alphaDelta: number): void;
+  /** True for event targets that must swallow the press entirely (the debug panel). */
   isRejected(target: EventTarget | null): boolean;
 }
 
+interface Press {
+  pressId: number;
+  clientX: number; clientY: number;
+  screenX: number; screenY: number;
+  moved: number;
+  /** pending: GPU read not back yet; grabbed: arb:grab sent. */
+  phase: 'pending' | 'grabbed';
+  part: HitPart; alpha: number;
+  /** The button went up before the GPU read returned: replay the release once it does. */
+  endedEarly: { clientX: number; clientY: number; rejected: boolean } | null;
+}
+
 export class PressTracker {
-  private drag: { x: number; y: number; moved: number } | null = null;
-  /** A press that started on a rejected target: it must not tap wherever it is released. */
+  private press: Press | null = null;
+  private seq = 0;
   private rejected = false;
-  /**
-   * The current press already ended through the `buttons === 0` recovery below. A mouseup that
-   * *does* still arrive afterwards is the tail of that same release, not a new click, so it must not
-   * tap — otherwise a long drag whose mouseup lands back inside the window taps on release, which is
-   * the defect the slop check exists to prevent.
-   */
   private consumed = false;
-  /**
-   * The press began on a transparent pixel (the window is not click-through while hovered, so main
-   * does receive it). Releasing over her after sliding across must not read as a tap on her.
-   */
-  private offModel = false;
 
   constructor(private readonly opts: PressTrackerOptions) {}
 
@@ -75,58 +70,74 @@ export class PressTracker {
     if (e.button !== 0) return;
     this.rejected = false;
     this.consumed = false;
-    this.offModel = false;
-    // Pressing a debug-panel control must not grab the window: the panel would run away from the
-    // pointer and the click would never reach the button.
-    if (this.opts.isRejected(e.target)) {
-      this.rejected = true;
-      return;
+    this.press = null;
+    // The id is stamped for every left press, rejected or not: a pressId names a GESTURE, and main
+    // correlates `arb:grab`/`arb:release` by it — reusing an id a swallowed press already had would
+    // make a later grab indistinguishable from a replay of that one.
+    const pressId = ++this.seq;
+    if (this.opts.isRejected(e.target)) { this.rejected = true; return; }
+    const d = this.opts.toDevice(e.clientX, e.clientY);
+    this.press = {
+      pressId, clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY, moved: 0,
+      phase: 'pending', part: this.opts.hitPartDefault, alpha: 0, endedEarly: null,
+    };
+    this.opts.queuePress({ pressId, deviceX: Math.round(d.x), deviceY: Math.round(d.y) });
+  }
+
+  /** GpuPressReader.service() result for one press. A pressId that is not the live press is ignored. */
+  resolvePress(pressId: number, alpha: number): void {
+    const p = this.press;
+    if (!p || p.pressId !== pressId || p.phase !== 'pending') return;
+    if (alpha < ENTER_ALPHA) { this.press = null; return; }          // off-model: nothing is sent
+    const pick = this.opts.pick(p.clientX, p.clientY);
+    let part = pick.part ?? this.opts.hitPartDefault;
+    if (pick.alpha < ENTER_ALPHA) { this.opts.onDisagreement(alpha - pick.alpha); part = this.opts.hitPartDefault; }
+    p.phase = 'grabbed'; p.part = part; p.alpha = alpha;
+    this.opts.onGrab({ pressId, part, modelX: clamp1(pick.modelX), modelY: clamp1(pick.modelY), screenX: p.screenX, screenY: p.screenY });
+    if (p.endedEarly) {
+      const end = p.endedEarly;
+      this.press = null;
+      this.finish(p, end.clientX, end.clientY, end.rejected);
     }
-    if (this.opts.hitTest(e.clientX, e.clientY) === null) {
-      this.offModel = true;
-      return;
-    }
-    this.drag = { x: e.screenX, y: e.screenY, moved: 0 };
-    this.opts.onDragStart?.();
   }
 
   mousemove(e: PressEvent): void {
+    const p = this.press;
+    if (!p) return;
     // The button can be released where we never see the mouseup (outside the window, or over
-    // another window once main has moved us). Without this the drag would stick and every later
-    // move would keep dragging the window around.
-    if (this.drag && e.buttons === 0) {
-      this.drag = null;
+    // another window once main has moved us). Without this the press would stick.
+    if (e.buttons === 0) {
+      this.press = null;
       this.consumed = true;
-      this.opts.onDragEnd();
+      if (p.phase === 'grabbed') this.opts.onRelease({ pressId: p.pressId, wasTap: p.moved < this.opts.slopPx });
       return;
     }
-    if (!this.drag) return;
-    const dx = e.screenX - this.drag.x;
-    const dy = e.screenY - this.drag.y;
-    this.drag = { x: e.screenX, y: e.screenY, moved: this.drag.moved + Math.abs(dx) + Math.abs(dy) };
-    this.opts.onDragMove(dx, dy);
+    p.moved += Math.abs(e.screenX - p.screenX) + Math.abs(e.screenY - p.screenY);
+    p.screenX = e.screenX; p.screenY = e.screenY;
   }
 
   mouseup(e: PressEvent): void {
     if (e.button !== 0) return;
-    const press = this.drag;
-    const rejected = this.rejected || this.consumed || this.offModel;
-    this.drag = null;
+    const p = this.press;
+    const rejected = this.rejected || this.consumed || this.opts.isRejected(e.target);
     this.rejected = false;
     this.consumed = false;
-    this.offModel = false;
-    // Anything that moved already sent drag deltas, so main always gets its terminator.
-    if (press && press.moved > 0) this.opts.onDragEnd();
-    // A real drag ends there: letting go after moving the window must not also fire a tap. A press
-    // that only jittered is still a tap, which is why the slop is compared instead of `moved > 0`.
-    if (press && press.moved >= this.opts.slopPx) return;
-    // The press began on the panel (or ends over it): the drag terminator above still had to be
-    // sent, but the click belongs to the button and must not also play a tap motion.
-    if (rejected || this.opts.isRejected(e.target)) return;
-    const hit = this.opts.hitTest(e.clientX, e.clientY);
-    if (hit) this.opts.onTap(hit);
+    if (!p) return;
+    if (p.phase === 'pending') { p.endedEarly = { clientX: e.clientX, clientY: e.clientY, rejected }; return; }
+    this.press = null;
+    this.finish(p, e.clientX, e.clientY, rejected);
+  }
+
+  private finish(p: Press, clientX: number, clientY: number, rejected: boolean): void {
+    const wasTap = p.moved < this.opts.slopPx;
+    this.opts.onRelease({ pressId: p.pressId, wasTap });
+    // A real drag ends there; a press that began or ended on the panel belongs to the button.
+    if (!wasTap || rejected) return;
+    this.opts.onTap({ pressId: p.pressId, part: p.part, alpha: p.alpha, clientX, clientY });
   }
 }
+
+function clamp1(v: number): number { return Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0; }
 
 /**
  * Every `(group, index)` pair a hit area maps to, flattened.
