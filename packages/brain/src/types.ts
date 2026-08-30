@@ -1,9 +1,11 @@
-import { EMOTIONS, isEmotion, type Emotion, type SentenceEvent, type TurnState, type Usage } from '@ds/protocol';
+import { EMOTIONS, isEmotion, type Emotion, type SentenceEvent, type TurnState, type Usage, type WalkAnchor } from '@ds/protocol';
+import type { LookTarget } from './act.ts';
 export { EMOTIONS, isEmotion };
 export type { Emotion, SentenceEvent, TurnState, Usage };
 
+/** §2.6 (D14): the act arm carries look/walkTo; the pause arm is unchanged. */
 export type Tag =
-  | { kind: 'act'; emotion: Emotion; motion?: string }
+  | { kind: 'act'; emotion: Emotion; motion?: string; look?: LookTarget; walkTo?: WalkAnchor }
   | { kind: 'pause'; seconds: number };
 
 export type ScanItem =
