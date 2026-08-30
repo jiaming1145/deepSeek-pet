@@ -27,3 +27,17 @@ test('the attribution prompt is blind: labels 甲/乙/丙, no card names, and th
   assert.equal(parseAttribution('废话 {"persona":"丙"} 更多'), 2);
   assert.equal(parseAttribution('{"persona":"丁"}'), null);
 });
+
+// FIX ROUND 1, finding 4 (Minor). §9.6 requires eval/personas/haru.json to be a copy of the SHIPPED
+// card, but the only drift check was a manual re-run of the generator script. Task 12 (T3-B) edits
+// characters/haru/character.json in batch 4, and the card's own creator_notes says the P5/E-1
+// persona tuning is still pending — either would silently leave this copy stale and measure a
+// future A8 number against a persona that is no longer shipped. This assertion is now the check.
+test('eval/personas/haru.json is the shipped card, not a stale copy (§9.6)', () => {
+  const CHARACTER = fileURLToPath(new URL('../../characters/haru/character.json', import.meta.url));
+  assert.deepEqual(
+    JSON.parse(readFileSync(personaPath('haru'), 'utf8')),
+    JSON.parse(readFileSync(CHARACTER, 'utf8')).card,
+    '再跑一次生成脚本，把 eval/personas/haru.json 同步成 characters/haru/character.json 的 card',
+  );
+});

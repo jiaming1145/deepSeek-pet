@@ -1,7 +1,17 @@
 import type { ProactiveTemplate } from '@ds/brain';
 import { bigramSet, jaccard } from '@ds/memory';
 
-/** R3-30: >= 15 hand-audited templates per bucket (Phase 4 raises it toward 160). */
+/**
+ * R3-30: >= 15 hand-audited templates per bucket (Phase 4 raises it toward 160).
+ *
+ * OPEN RULING (fix round 1, finding 5a — escalated, NOT changed here: the number is pinned by
+ * contract 4.8 / R3-30 and only an Amendment may move it). A floor of 15 cannot survive the
+ * 30-day no-repeat window for the once-per-day buckets: `greeting` draws one line per local day and
+ * `callback` one LLM line per local day (R3-25), so each needs ~30 distinct templates inside the
+ * window and both run dry around day 16, after which no candidate remains. Before Task 14 consumes
+ * this module the controller must either raise the greeting/callback floors to >= 31, or amend
+ * R3-30 to accept an exhausted bucket falling through to the next one.
+ */
 export const PROACTIVE_TEMPLATE_FLOOR = 15;
 /** bar §0: proactive one-liners fit the 2-second reveal cap (60–80 ms per hanzi). */
 export const PROACTIVE_TEXT_MAX_CHARS = 30;
@@ -14,6 +24,10 @@ export const A14_FORBIDDEN: readonly { rule: string; re: RegExp }[] = [
   { rule: 'guilt-duty',     re: /(还没(跟|和)?我|该(来|陪)|答应过我|你欠)/ },
   { rule: 'fomo',           re: /(限时|最后一次|错过|仅剩|机会不多)/ },
   { rule: 'neediness',      re: /(求你|别走|再陪|多陪|离不开你|会消失|会难过)/ },
+  // OPEN RULING (fix round 1, finding 5b — escalated, NOT changed here: the rule is verbatim from
+  // 4.8). `\d` is ASCII-only, so the Chinese-numeral form a Chinese template would actually use —
+  // 三天没见了, 两个小时没理我 — escapes this rule, and 三天没见了 escapes `guilt-absence` too.
+  // Proposed amendment: `[\d一二两三四五六七八九十半几]+`.
   { rule: 'silence-count',  re: /(\d+\s*(分钟|小时|天).{0,4}(没|未))/ },
   { rule: 'question-nag',   re: /(在吗|还在不在|你怎么不)/ },
 ];

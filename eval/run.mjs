@@ -2,13 +2,13 @@
 // eval/run.mjs — Phase 2 eval harness (contracts.md §7).
 // Offline: node run.mjs --dry     Online: DEEPSEEK_API_KEY=... node run.mjs
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEEPSEEK_BASE_URL, DeepSeekClient,
   parseCharacterBundle, renderStaticSystem, cardTokens, staticSystemTokens,
 } from '@ds/brain';
-import { parseArgs } from './lib/args.mjs';
+import { parseArgs, resolveOutTarget } from './lib/args.mjs';
 import { loadFixture, validateFixture } from './lib/fixture.mjs';
 import { RecordedClient } from './lib/recorded.mjs';
 import { runTurn, pool } from './lib/turn.mjs';
@@ -89,12 +89,16 @@ async function main() {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) fail(NO_KEY_MESSAGE, 2);
     const fixture = JSON.parse(readFileSync(opts.fixture ?? fileURLToPath(new URL('fixtures/memory-recall.zh.json', HERE)), 'utf8'));
-    mkdirSync(outDir, { recursive: true });
+    // FIX ROUND 1, finding 3. `--out` is a DIRECTORY everywhere else, but this suite also accepts a
+    // file (the brief's own Step-20 invocation is `--out out/memory-recall.json`). `outDir` used to
+    // be that literal path, so `mkdirSync(outDir)` created a DIRECTORY named `memory-recall.json`
+    // and the write below then threw EISDIR — after the whole paid run had finished and with the
+    // results only in memory. `resolveOutTarget` separates the two uses.
+    const { dir: runDir, path: outPath } = resolveOutTarget(opts.out, DEFAULT_OUT, `${stampFrom(startedAt)}-memory-recall.json`);
+    mkdirSync(runDir, { recursive: true });
     const client = new DeepSeekClient({ apiKey, model: opts.model, baseUrl: DEEPSEEK_BASE_URL });
-    const r = await runMemoryRecall({ client, fixture, sessions: opts.sessions, characterPath, dbPath: join(outDir, 'memory-recall.sqlite') });
+    const r = await runMemoryRecall({ client, fixture, sessions: opts.sessions, characterPath, dbPath: join(runDir, 'memory-recall.sqlite') });
     const report = { version: 1, startedAt, suite: 'memory-recall', model: opts.model, sessions: opts.sessions, ...r };
-    const outPath = opts.out && opts.out.endsWith('.json') ? opts.out : join(outDir, `${stampFrom(startedAt)}-memory-recall.json`);
-    mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     console.log(`A11 recall ${r.recalled}/20（门槛 18），「根据你之前提到的」出现 ${r.callbackPhraseCount} 次（门槛 0）：${r.pass ? 'PASS' : 'FAIL'}`);
     console.log(outPath);

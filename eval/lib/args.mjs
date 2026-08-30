@@ -1,4 +1,5 @@
 // eval/lib/args.mjs — CLI parsing for run.mjs (contracts.md §7.1).
+import { dirname, join } from 'node:path';
 import { DEEPSEEK_MODEL, DEEPSEEK_JUDGE_MODEL } from '@ds/brain';
 
 export const USAGE = `node eval/run.mjs [options]
@@ -64,4 +65,24 @@ export function parseArgs(argv) {
     return { ok: false, message: `未知参数 ${a}\n\n${USAGE}` };
   }
   return { ok: true, opts };
+}
+
+/**
+ * FIX ROUND 1, finding 3. `--out` is a DIRECTORY for every suite, but `--suite memory-recall` also
+ * accepts a single `.json` FILE — the brief's own Step-20 invocation is `--out out/memory-recall.json`.
+ * Resolving both uses from the same string is what crashed the run: `mkdirSync(opts.out)` created a
+ * DIRECTORY literally named `memory-recall.json`, and the report write then threw
+ * `EISDIR: illegal operation on a directory` — after the entire paid run had completed, with the
+ * results only in memory.
+ *
+ * @param {string|null} out       the raw --out value
+ * @param {string} defaultDir     the fallback directory (eval/out)
+ * @param {string} fileName       the file name to use when --out is a directory
+ * @returns {{dir: string, path: string}} `dir` is the directory to create and to put scratch files
+ *   (the recall sqlite) in; `path` is the report file to write. `dir` always contains `path`.
+ */
+export function resolveOutTarget(out, defaultDir, fileName) {
+  if (out !== null && out !== undefined && out.endsWith('.json')) return { dir: dirname(out), path: out };
+  const dir = out ?? defaultDir;
+  return { dir, path: join(dir, fileName) };
 }
