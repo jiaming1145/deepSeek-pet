@@ -2728,6 +2728,17 @@ Behaviour, pinned:
 
 ### 5.3 `main/bubble-place.ts` — `placeBubble` (pure)
 
+> **AMENDED, Task 10 fix round 1 (2026-08-29).** Everything from `HEAD_ANCHOR` down was rewritten
+> when the controller's required placement fix landed (commit `02ad454`), and this section was left
+> describing the retired geometry. It is now the shipped geometry. **`HEAD_ANCHOR` no longer exists**
+> — it anchored every placement at 18 % of the pet window's height, i.e. her FACE, which is the
+> defect `docs/evidence/phase2/desktop-chat-over-pet.png` and `task6-fake-brain-run.png` recorded.
+> The band now sits over her LOWER THIRD and extends LEFT so she stands in its right third, which is
+> what `task-0-direction.md` (FIRST VIEWPORT) and `apps/desktop/DESIGN.md` always said. `top` and
+> `bottom` are no longer reachable placements: the notch lives on a vertical edge. The five numeric
+> examples in §5.3.1 and the `placeBubble` row of §8.7 moved with it, and
+> `apps/desktop/src/main/bubble-place.test.ts` test **G2** pins all five.
+
 ```ts
 // D3 discipline: ONE definition. `SideSchema`/`Side` live in @ds/protocol (§2.2); this is a re-export,
 // never a second `type Side = 'top' | 'right' | 'bottom' | 'left'`.
@@ -2737,44 +2748,56 @@ export interface Rect { x: number; y: number; width: number; height: number }
 export interface Size { width: number; height: number }
 export interface Placement { x: number; y: number; side: Side; arrowOffset: number }
 
-export const BUBBLE_GAP = 12;          // addendum C6 offset(12)
+export const BUBBLE_GAP = 12;          // addendum C6 offset(12) — the clearance the band leaves round the composer
 export const BUBBLE_PADDING = 16;      // addendum C6 shift({padding:16})
 export const BUBBLE_MAX: Size = { width: 460, height: 320 };   // R3
 export const BUBBLE_MIN: Size = { width: 120, height: 44 };
 export const ARROW_MARGIN = 18;
-export const HEAD_ANCHOR = { x: 0.5, y: 0.18 } as const;       // fraction of petBounds
+
+export const BAND_ANCHOR_Y = 0.72;          // the band's vertical CENTRE, as a fraction of pet.height
+export const BAND_TOP_MAX_FRACTION = 0.55;  // hard floor for its TOP edge; yields to the work area
+export const BAND_PET_FRACTION = 0.8;       // her horizontal centre inside the band, extending left
 
 export function preferredSideFor(pet: Rect, workArea: Rect): Side;
-export function placeBubble(pet: Rect, size: Size, workArea: Rect, preferredSide: Side): Placement;
+export function placeBubble(
+  pet: Rect, size: Size, workArea: Rect, preferredSide: Side, avoid?: Rect | null,
+): Placement;
 ```
 
 All four arguments and the result are in **DIP screen coordinates** — exactly what `BrowserWindow.getBounds()` and `screen.getDisplayMatching(...).workArea` return. `workArea` **must** be `screen.getDisplayMatching(petBounds).workArea`, never `screen.getPrimaryDisplay().workArea`; that single choice is what makes C14 ("bubble never crosses a monitor edge") true on mixed-DPI setups.
 
 Algorithm, exactly:
 
-1. `ax = pet.x + pet.width * HEAD_ANCHOR.x`, `ay = pet.y + pet.height * HEAD_ANCHOR.y`.
-2. Candidate order = `[preferredSide, OPPOSITE[preferredSide], ...(['left','right','top','bottom'] minus the first two)]`, where `OPPOSITE = {top:'bottom', bottom:'top', left:'right', right:'left'}`.
-3. Unshifted origin per side:
-   - `top`: `x = ax - size.width/2`, `y = ay - BUBBLE_GAP - size.height`
-   - `bottom`: `x = ax - size.width/2`, `y = ay + BUBBLE_GAP`
-   - `left`: `x = pet.x - BUBBLE_GAP - size.width`, `y = ay - size.height/2`
-   - `right`: `x = pet.x + pet.width + BUBBLE_GAP`, `y = ay - size.height/2`
-4. A candidate **fits** when `x >= workArea.x + PAD`, `x + width <= workArea.x + workArea.width - PAD`, `y >= workArea.y + PAD`, `y + height <= workArea.y + workArea.height - PAD`. The first fitting candidate wins (this is `flip()`).
-5. If none fit, take **candidate[0]** and shift: `x = clamp(x, waL, max(waL, waR - width))`, `y = clamp(y, waT, max(waT, waB - height))` with `waL = workArea.x + PAD`, `waR = workArea.x + workArea.width - PAD`, `waT = workArea.y + PAD`, `waB = workArea.y + workArea.height - PAD`. When the available span is smaller than the bubble, the `max(...)` makes it left/top aligned rather than producing a negative range.
-6. `arrowOffset` = distance from the chosen rect's leading edge to the anchor, along the tail's axis: for `top`/`bottom` it is `ax - x` clamped to `[ARROW_MARGIN, size.width - ARROW_MARGIN]`; for `left`/`right` it is `ay - y` clamped to `[ARROW_MARGIN, size.height - ARROW_MARGIN]`.
-7. `x`, `y` and `arrowOffset` are `Math.round`ed last (Electron `setBounds` takes integers); the fit test uses the unrounded values.
+1. `petCx = pet.x + pet.width/2`, `bandCy = pet.y + pet.height * BAND_ANCHOR_Y`, `topFloor = pet.y + pet.height * BAND_TOP_MAX_FRACTION`. `waL = workArea.x + PAD`, `waR = workArea.x + workArea.width - PAD`, `waT = workArea.y + PAD`, `waB = workArea.y + workArea.height - PAD`, `yMax = max(waT, waB - size.height)`.
+2. **Row.** `y = clamp(max(bandCy - size.height/2, topFloor), waT, yMax)` — the band is centred on the anchor row, never starts above the 55 % floor, and never leaves the work area. The last clamp is what makes the floor *yield*: C14 is a contract, the floor is a composition rule, and a window too tall to fit between them is placed against the work area (the 468 DIP composer-with-history case lands at 36 % of the pet, pinned in `bubble-place.test.ts`).
+3. **Column.** Candidate order is `[first, OPPOSITE[first]]` with `first = preferredSide === 'right' ? 'right' : 'left'` and `OPPOSITE = {left:'right', right:'left'}`. There are only two candidates: `top` and `bottom` are unreachable, and a `'top'`/`'bottom'` argument from a caller that predates this geometry reads as the default, `left`. Origins: `xFor('left') = petCx - size.width * BAND_PET_FRACTION`, `xFor('right') = petCx - size.width * (1 - BAND_PET_FRACTION)`. The band therefore **overlaps her body** — she stands at 80 % of its width on the left flip, 20 % on the right — and `BUBBLE_GAP` is not a gap to her.
+4. A candidate **fits** when `x >= waL` and `x + size.width <= waR`. The first fitting candidate wins (this is `flip()`). Only the horizontal axis flips; the row is already inside the work area by step 2.
+5. If neither fits (a band wider than the room either way), keep the preferred side and shift: `x = clamp(x, waL, max(waL, waR - size.width))`. The `max(...)` makes it left-aligned rather than producing a reversed range.
+6. **`avoid`** (added in Task 10 fix round 1; the floor guard added in **fix round 2**). When `avoid` is non-null and `{x, y, ...size}` shares a pixel with it, the band steps out of its way on the vertical axis — the same flip-then-give-up discipline the horizontal axis uses. Below first: `y = avoid.y + avoid.height + BUBBLE_GAP` when `y + size.height <= waB`; otherwise above: `y = avoid.y - BUBBLE_GAP - size.height` when `y >= max(waT, topFloor)`. **When the dodge and the 55 % floor conflict, the FLOOR wins**: the band gives up the dodge, keeps step 2's `y`, and the two rects overlap. The floor is the controller's placement ruling (`02ad454` exists to satisfy it); the dodge is a courtesy, and a courtesy may not put the band on her face. Without that guard the composer with its history pane open — 468 DIP, always clamped against the work-area bottom by step 2's own deliberate exception, so there is never room below it — pushed every band above the composer and above the pet window itself (a 460×320 band landed at `y = 224`, i.e. −10 % of the pet). So the band keeps step 2's `y` and the two rects overlap in **two** cases now: when neither side of `avoid` has room inside the work area (**C14 outranks the dodge**), and when the only side with room is above the 55 % floor (**the floor outranks the dodge**). `bubble-place.test.ts` pins that these are the only cases in which they can overlap, and that the dodge never raises the band above `min(topFloor, step 2's y)`. `avoid` is only ever the VISIBLE composer's rect, and only the band ever passes it (§6.1).
+7. `arrowOffset = clamp(bandCy - y, ARROW_MARGIN, max(ARROW_MARGIN, size.height - ARROW_MARGIN))` — the notch sits on the pet-facing **vertical** edge at the band's anchor row. There is no horizontal-tail case any more.
+8. `x`, `y` and `arrowOffset` are `Math.round`ed last (Electron `setBounds` takes integers); the fit tests use the unrounded values.
 
-`preferredSideFor(pet, workArea)` returns `'left'` when `pet.x + pet.width/2 > workArea.x + workArea.width/2`, else `'right'`. Main calls it on every placement, so a pet dragged across the screen flips the bubble to the roomier side.
+`preferredSideFor(pet, workArea)` returns `'left'` whenever `pet.x + pet.width * BAND_PET_FRACTION - (workArea.x + BUBBLE_PADDING) >= BUBBLE_MIN.width`, else `'right'`. It is **LEFT at every pet position that has room for a minimum band** — deliberately not "the roomier half of the screen", which made the band flip sides halfway across the desktop for no reason the user could see. Main calls it on every placement, and `placeBubble` re-tests the fit against the actual band size, so this is a hint rather than the decision.
 
 #### 5.3.1 Numeric examples (these are the required unit tests — C14)
 
+**AMENDED, Task 10 fix round 1.** All five rows moved with the band geometry above; the old rects
+described `HEAD_ANCHOR` and are unreachable (`side` can only be `left` or `right` now). These are the
+values the shipped `placeBubble` returns, pinned by test **G2** in `bubble-place.test.ts` and by
+§8.7's `placeBubble` row.
+
 | # | Case | `pet` | `size` | `workArea` | `preferredSide` | **Expected** |
 |---|---|---|---|---|---|---|
-| A | fits on the preferred side | `{1476, 296, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `left` | `{x:1144, y:366, side:'left', arrowOffset:60}` |
-| B | flips left → right at the screen edge | `{24, 296, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `left` | `{x:456, y:366, side:'right', arrowOffset:60}` |
-| C | flips top → bottom (pet at the top) | `{1476, 0, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `top` | `{x:1526, y:142, side:'bottom', arrowOffset:160}` |
-| D | nothing fits → shift, keeps the preferred side | `{290, 0, 420, 600}` | `{460, 520}` | `{0, 0, 1000, 600}` | `top` | `{x:270, y:16, side:'top', arrowOffset:230}` |
-| E | **mixed DPI**, pet on the secondary display | `{2900, 296, 420, 720}` | `{380, 160}` | `{1280, 0, 1920, 1040}` | `left` | `{x:2508, y:346, side:'left', arrowOffset:80}` |
+| A | fits on the preferred side | `{1476, 296, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `left` | `{x:1430, y:754, side:'left', arrowOffset:60}` |
+| B | flips left → right at the screen edge | `{24, 296, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `left` | `{x:170, y:754, side:'right', arrowOffset:60}` |
+| C | pet at the top of the screen — still her lower third, no top/bottom flip | `{1476, 0, 420, 720}` | `{320, 120}` | `{0, 0, 1920, 1040}` | `left` | `{x:1430, y:458, side:'left', arrowOffset:60}` |
+| D | nothing fits → shift, and the work area wins over the 55 % floor | `{290, 0, 420, 600}` | `{460, 520}` | `{0, 0, 1000, 600}` | `left` | `{x:132, y:64, side:'left', arrowOffset:368}` |
+| E | **mixed DPI**, pet on the secondary display | `{2900, 296, 420, 720}` | `{380, 160}` | `{1280, 0, 1920, 1040}` | `left` | `{x:2804, y:734, side:'left', arrowOffset:80}` |
+
+Row B is the flip: `preferredSideFor` still says `left` (a minimum band fits there), but a 320-wide
+band placed left of a pet at `x = 24` would start at `-22`, so `placeBubble` takes the right
+candidate and she ends up in the band's LEFT third. Row D is the yield: a 520 DIP window does not
+fit between the 55 % floor and a 600 px work area, so C14 places it against the work area instead.
 
 Example E's display topology, spelled out because it is the case that breaks naive code: primary 1920×1080 at 150 % scaling reports DIP bounds `{0,0,1280,720}` / workArea `{0,0,1280,680}`; a secondary 1920×1080 at 100 % placed to its right reports bounds `{1280,0,1920,1080}` / workArea `{1280,0,1920,1040}`. Passing the **primary's** work area here would clamp `x` to at most `1280 - 16 - 380 = 884` and throw the bubble onto the other monitor. A sixth test asserts exactly that failure mode is avoided:
 
@@ -2844,7 +2867,7 @@ setBubbleClickThrough(win, true);    // setIgnoreMouseEvents(true, { forward: tr
 Lifecycle rules:
 
 1. Created once at startup, immediately after the pet window, and kept for the app's life. `ready-to-show` → **stays hidden** (it only appears when there is something to say).
-2. `bubble:size` from the renderer → clamp to `[BUBBLE_MIN, BUBBLE_MAX]`, `placeBubble(pet.getBounds(), clamped, screen.getDisplayMatching(pet.getBounds()).workArea, preferredSideFor(...))`, `win.setBounds({...placement, ...clamped})`, then send `bubble:place {maxWidth, maxHeight, side, arrowOffset}` back so the renderer can draw the tail on the right edge. `maxWidth/maxHeight` are always `BUBBLE_MAX` — the renderer lays out inside them and reports what it actually needs.
+2. `bubble:size` from the renderer → clamp to `[BUBBLE_MIN, BUBBLE_MAX]`, `placeBubble(pet.getBounds(), clamped, screen.getDisplayMatching(pet.getBounds()).workArea, preferredSideFor(...), avoidRect)` — `avoidRect` is the visible composer's bounds or `null` (§5.3 step 6, §6.1), `win.setBounds({...placement, ...clamped})`, then send `bubble:place {maxWidth, maxHeight, side, arrowOffset}` back so the renderer can draw the tail on the right edge. `maxWidth/maxHeight` are always `BUBBLE_MAX` — the renderer lays out inside them and reports what it actually needs.
 3. Re-placed on **every** pet move: the existing `avatar:drag` handler in `main/index.ts` already calls `moveBy(win, dx, dy)`; add a `placeBubbleWindow(...)` call right after it, plus one on `display-metrics-changed` and on `avatar:dragEnd`.
 4. `setIgnoreMouseEvents(true, {forward:true})` by default; `false` while `bubble:hover {inside:true}`. This is the same pattern as the pet's `avatar:hover` and reuses `setClickThrough`'s debounce discipline. **The pet window's hover predicate is not touched** — the bubble is a different window, which is precisely why R3 chose this shape (A57/A59 are dissolved, not patched). **The same handler also gates the hide timer** (§5.2's box): `{inside:true}` cancels a pending window hide, `{inside:false}` re-arms the full `BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS`. One channel, two effects, one handler.
 5. Visibility: the bubble follows `VisibilityState.hidden`. `applyVisibility()` in `main/index.ts` gains `hidden ? hideBubble(bubble) : (speaking ? showBubble(bubble) : noop)` and sends `shell:visibility` to the bubble as well as the pet.
@@ -3084,9 +3107,11 @@ new BrowserWindow({
 
 Both windows: `win.once('ready-to-show', () => { /* do NOT show here */ })` — they are created hidden at startup and shown by `openChat` / `openKeyWindow`. Creating them eagerly is what makes C8's "opens ≤ 250 ms" reachable, and C2's zero-white-frame bar depends on `backgroundColor '#00000000'` + `show:false` being present on **every** new window.
 
-Positioning: `openChat` calls **`placeBubble(petBounds, {width: CHAT_WIDTH, height: currentHeight}, workArea, 'top')` verbatim**, with `workArea = screen.getDisplayMatching(pet.getBounds()).workArea` — one placement implementation for both surfaces, one set of tests, the same flip/shift discipline.
+Positioning: `openChat` calls **`placeBubble(petBounds, {width: CHAT_WIDTH, height: currentHeight}, workArea, preferredSideFor(petBounds, workArea))` verbatim**, with `workArea = screen.getDisplayMatching(pet.getBounds()).workArea` — one placement implementation for both surfaces, one set of tests, the same flip/shift discipline. The composer **never passes `avoid`**: it is the surface that keeps the band's anchor rect.
 
-> **The competing prose sentence is deleted, not reconciled.** This paragraph used to say *both* "places the window `CHAT_GAP` above the pet window's top edge, **left-aligned to the pet's left edge**" *and* "reuse `placeBubble(…, 'top')` verbatim" — and the two do not describe the same rectangle. `placeBubble`'s `'top'` origin is `x = ax - size.width/2` where `ax = pet.x + pet.width * 0.5`, i.e. **centred on the head anchor**, and `y = ay - BUBBLE_GAP - height` where `ay = pet.y + pet.height * 0.18` — for the 420×720 pet that is `pet.y + 129.6`, i.e. over her upper body rather than above the window. **The reuse instruction wins** (it is the one with `bubble-place.test.ts` behind it, and C14's monitor-edge guarantee comes free); the left-aligned/top-edge sentence is deleted. The visible consequence is intended and recorded here so no one "fixes" it back: the composer sits centred on her head, not flush to the window's top-left.
+> **AMENDED, Task 10 fix round 1 (2026-08-29).** This paragraph used to pin the literal `'top'`, and the note below it recorded "the composer sits centred on her head … so no one fixes it back". Both are retired with `HEAD_ANCHOR` (§5.3): `'top'` is no longer a reachable side, and the composer over her face was the defect the controller ordered fixed (`desktop-chat-over-pet.png`). What survives from that note is the part that was always right — **there is exactly one placement implementation**, `placeBubble`, with `bubble-place.test.ts` behind it and C14's monitor-edge guarantee free; a second placement path for the chat window is still the rejected alternative (§8.6 row 16).
+>
+> **The two surfaces are one object in two states, but both windows can be on screen at once.** §6.2 rule 4 keeps the composer open for the whole reply (Escape cancels instead of closing while `brainState !== 'idle'`) and rule 6 needs it open to restore the text on `brain:error`. Two always-on-top windows on one rect therefore render two different texts into the same pixels — visible in `docs/evidence/phase2/app-placement.png`. The composer keeps the rect; **the BAND steps out of its way** through `placeBubble`'s `avoid` (§5.3 step 6), below it when the work area has room, above it when the work area does not but the 55 % floor still allows it, and not at all — the two rects overlap — when the only remaining room is above her face. Fix round 2: **the 55 % floor outranks the dodge**, exactly as C14 does. `brain-service.ts` supplies `avoid` from the chat window's bounds on every band placement and re-places the band on the chat window's `show`/`hide` and on `chat:resize`, so every path into and out of the composer state is covered without widening `openChat` / `resizeChat`. Hiding the band instead was rejected: it would make her whole reply invisible for as long as the composer is up.
 
 Light dismiss: `win.on('blur', …)` closes the chat **unless** the last `chat:composing` said `{on:true}` (an IME candidate window steals focus). `Esc` in the renderer sends `chat:close`.
 
@@ -3725,6 +3750,8 @@ These were `undefined` in the preflight and had no ruling; each is decided here 
 5. **`post_history_instructions` is placed in the latest user message**, not in the static system block — that is what "post-history" means, and the latest user message is already the dynamic slot, so the cached prefix is unaffected.
 6. **`DS_DEV_DEEPSEEK_KEY`, not `DEEPSEEK_API_KEY`, is the dev app key.** `DEEPSEEK_API_KEY` stays reserved for the gated tests and the eval harness, so running the app in dev never bypasses the first-run flow the same variable is supposed to let you test (X9).
 7. **`environmentMatchGlobs` is deprecated in vitest 3** but present and honoured; the per-file `// @vitest-environment jsdom` fallback is recorded in §1.5 so a future removal is a mechanical change.
+8. **The band geometry replaced the head anchor** (Task 10, commit `02ad454`, on the controller's required-fix instruction). `HEAD_ANCHOR` is gone; `BAND_ANCHOR_Y = 0.72`, `BAND_TOP_MAX_FRACTION = 0.55` and `BAND_PET_FRACTION = 0.80` replace it, `top`/`bottom` are unreachable, and `preferredSideFor` prefers `left` at every pet position that has room instead of "the roomier half". §5.3, §5.3.1, §6.1, §8.6 row 16 and §8.7 were amended to match in fix round 1; `docs/evidence/phase2/deferred.md` records the same change as its eighth deviation. The two files are T6's — T10 edited them as integration owner because the controller required the fix.
+9. **`placeBubble` takes a fifth argument, `avoid`** (Task 10 fix round 1). The composer stays open through her reply (§6.2 rules 4 and 6), so the band and the composer are on screen together and cannot share the band's rect. The band dodges; the composer never does. Default `null` reproduces the pre-fix geometry exactly, which is what every `placeBubble` call outside `bubble-window.ts` still gets.
 
 ### 8.6 Conflicts resolved while folding the task briefs back in
 
@@ -3747,7 +3774,7 @@ Each row is a place where two briefs, or a brief and this file, disagreed. The *
 | 13 | `--bubble-max-w` / `--bubble-max-h` written on the **band root** by `place()` but consumed on `#content`, the band's **parent** — custom properties inherit downwards only, so the 460 px cap silently vanished | **all three geometry tokens are written on `document.documentElement`** (§5.2); every consumer inherits, and `data-side` stays an attribute on the band | writing them on `#content` — needs a second element in `Bubble`'s constructor for one call site |
 | 14 | §5.2's `bubble.pinned` (renderer, defers indefinitely on hover) vs §5.4's flat 3400 ms window hide — the window could vanish under a pinned band | **main defers too**: `bubble:hover {inside:true}` cancels the pending hide, `{inside:false}` re-arms the full delay (§5.2, §5.4 rule 4). Reuses the handler main already has | scoping the pinning promise to the band only and documenting that the window may hide under it — the visible result is the bug |
 | 15 | §6.6's synthetic first message vs §5.2's `onState('idle')` "drop the queue" — mutually exclusive if `'first-mes'` ever emits a state | **`'first-mes'` emits `brain:sentence` + `brain:turnDone` and NO `brain:state` at all** (§6.6); the window is raised by `setBubbleVisible(true)` and lowered from the `playback:turnDone` path | sending `brain:state idle` and special-casing `'first-mes'` inside `SpeechController` — a rule in two sections instead of none |
-| 16 | §6.1's `openChat` prose (`CHAT_GAP` above the pet's top edge, left-aligned) vs its own "reuse `placeBubble(…, 'top')` verbatim" | **the reuse instruction** (§6.1); it is the one with `bubble-place.test.ts` behind it and it inherits C14's monitor-edge guarantee. The prose sentence is deleted | keeping the prose and writing a second placement path for the chat window — two implementations, two test suites, one of them untested |
+| 16 | §6.1's `openChat` prose (`CHAT_GAP` above the pet's top edge, left-aligned) vs its own "reuse `placeBubble(…, 'top')` verbatim" | **the reuse instruction** (§6.1); it is the one with `bubble-place.test.ts` behind it and it inherits C14's monitor-edge guarantee. The prose sentence is deleted. **Amended in fix round 1:** the literal side `'top'` went with `HEAD_ANCHOR` (§8.5 deviation 8) — `openChat` now passes `preferredSideFor(petBounds, workArea)`. The resolution itself is unchanged: still one implementation | keeping the prose and writing a second placement path for the chat window — two implementations, two test suites, one of them untested |
 | 17 | `key:status.lastTest` had no lifecycle: a stale `可用 ✓` survived `key:clear` | **a key change nulls it** — every `key:status` from `KeyStore.onChange` carries `lastTest: null`; only a completed `key:test` sets it (§2.3) | carrying `lastTest` inside `onChange`'s payload — widens `KeyStore` for a value it does not own |
 | 18 | `chat:composing` was a one-way latch: a hide or focus loss mid-IME left light-dismiss armed forever | **cleared from both ends** — renderer sends `{on:false}` on textarea `blur`; main calls `setChatComposing(false)` in `closeChat` and on the window's `hide` (§2.3, §6.1) | a timeout on the latch — picks an arbitrary duration and still fails a long composition |
 | 19 | §1.7 pinned `git commit -m … -m …` as the only form while tasks 0, 1 and 2 used a heredoc | **both permitted; the heredoc is preferred for multi-line CJK bodies** (§1.7 rule 2) | declaring three shipped tasks defective over a quoting style |
@@ -3765,7 +3792,7 @@ Every value below was measured, not estimated. A brief that changes one is wrong
 | `estimateTokens` | `'你好世界'` → **3**, `'hello world'` → **3**, `''` → **0** | §3.8.1 |
 | `planTrim` | **8400** dropped tokens / **14** dropped / **46** kept | §3.8.4 |
 | `RevealPlan` | **1990** ms for the 20-hanzi string, **105** ms for `'abc'`, **2** steps for the ZWJ cluster | §5.1 |
-| `placeBubble` | A `1144/366/left/60` · B `456/366/right/60` · C `1526/142/bottom/160` · D `270/16/top/230` · E `2508/346/left/80` | §5.3.1 |
+| `placeBubble` | A `1430/754/left/60` · B `170/754/right/60` · C `1430/458/left/60` · D `132/64/left/368` · E `2804/734/left/80` — **re-measured in Task 10 fix round 1** against the band geometry (§8.5 deviation 8); the pre-fix `1144/366` · `456/366` · `1526/142/bottom` · `270/16/top` · `2508/346` row described `HEAD_ANCHOR` and is unreachable. Pinned by test G2 | §5.3.1 |
 | Contrast | light band **14.7135** (`toBeCloseTo(14.714, 2)`), dark **15.2548** (`15.255`); `:root` **64** declarations, dark **29** | §5.8 |
 | Summary cap | 2 000 → **600** tokens, **900** characters, ends on `。` | §4.4 |
 | `node:sqlite` behaviour | `journal_mode` returns lowercase `'wal'`; `sqlite_sequence` appears with `AUTOINCREMENT`; opening a directory throws `unable to open database file` | §4.1, §4.2 |

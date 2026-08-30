@@ -7,6 +7,8 @@
   "scripts": {
     "eval": "node run.mjs",
     "eval:dry": "node run.mjs --dry",
+    "session": "node session.mjs",
+    "session:dry": "node session.mjs --dry",
     "test": "node --test lib/*.test.mjs"
   },
   "dependencies": {

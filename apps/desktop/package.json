@@ -10,7 +10,8 @@
     "dev:browser": "vite --config vite.browser.config.ts",
     "build": "electron-vite build",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.ui.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:electron": "playwright test -c playwright.electron.config.ts"
   },
   "dependencies": {
     "@ds/brain": "workspace:*",
