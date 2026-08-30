@@ -71,7 +71,11 @@ export function createNotificationState(q: NotificationQuery | null): Notificati
       const effective = dnd ?? true;   // §10.5 rung 3: unknown is DND on, conservatively
       if (effective !== lastEffective) {
         lastEffective = effective;
-        for (const cb of subs) cb(effective);
+        // FIX ROUND 1, finding 1: `poll()` runs on ActivitySensor's SINGLE sensing timer (§10.3), so
+        // a throwing DND listener must not abort the rest of that tick's sample or reach the pump.
+        for (const cb of subs) {
+          try { cb(effective); } catch (err) { console.warn('[notification-state] onChange listener threw:', err); }
+        }
       }
     },
     onChange(cb) {

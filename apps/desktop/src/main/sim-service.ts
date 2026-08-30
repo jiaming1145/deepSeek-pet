@@ -4,8 +4,8 @@ import { Channels, SimSnapshotSchema, type SimSnapshot } from '@ds/protocol';
 import type { StatePreamble } from '@ds/brain';
 import { getKv, setKv } from '@ds/memory';
 import {
-  SIM_DEFAULTS, SimPersistedSchema, affectionShown, energyOf, fromPersisted, initialSimState,
-  reduceWithEffects, toPersisted, toSnapshot, type SimEffect, type SimEvent, type SimState,
+  SIM_DEFAULTS, affectionShown, energyOf, initialSimState, reduceWithEffects, restoreSim,
+  toPersisted, toSnapshot, type SimEffect, type SimEvent, type SimState,
 } from '@ds/sim';
 import type { Rect } from './foreground';
 import type { ActivitySensor } from './activity-sensor';
@@ -59,12 +59,36 @@ export interface SimServiceDeps {
 const SNAPSHOT_KEYS = (Object.keys(SimSnapshotSchema.shape) as (keyof SimSnapshot)[])
   .filter((k) => k !== 'tsMain');
 
+/**
+ * FIX ROUND 1, finding 3 — the resolution at which two snapshots count as the SAME broadcast.
+ *
+ * `energy` is a continuous function of the WALL clock (`energyOf` = `circadian(localHour(nowWall))`
+ * minus expenditure, and `circadian` is piecewise-linear), so an exact field-by-field comparison
+ * can never suppress anything in production: between the 13:00 and 15:00 anchors energy moves
+ * ~6.9e-4 every 500 ms tick, and `sim:state` — plus the §12.2 `presence` trace record behind it —
+ * would fire at 2 Hz forever on a perfectly idle pet (~7 200 records/hour for Task 17's D16
+ * evidence). `valence`/`arousal` have the same shape whenever mood sits off its base, decaying
+ * exponentially toward it. Those three are therefore compared at BROADCAST resolution — 0.1 on
+ * energy's 0…100 scale, 0.001 on mood's -1…1 scale, both an order of magnitude below anything a
+ * renderer can draw — while the payload itself keeps full precision. Every other field in the
+ * subset is discrete (enums, booleans, integer `userIdleS`, stepped `affection`) and compared
+ * exactly, so no real state change can hide behind the quantum.
+ */
+const BROADCAST_QUANTUM: Partial<Record<keyof SimSnapshot, number>> = {
+  energy: 10, valence: 1_000, arousal: 1_000,
+};
+
 /** Field-by-field (§3.11); `battery` is the one nested object. `tsMain` is excluded on purpose. */
 export function snapshotEquals(a: SimSnapshot, b: SimSnapshot): boolean {
   for (const k of SNAPSHOT_KEYS) {
     if (k === 'battery') {
       if (a.battery.charging !== b.battery.charging || a.battery.level !== b.battery.level) return false;
-    } else if (a[k] !== b[k]) return false;
+    } else {
+      const q = BROADCAST_QUANTUM[k];
+      if (q === undefined) {
+        if (a[k] !== b[k]) return false;
+      } else if (Math.round((a[k] as number) * q) !== Math.round((b[k] as number) * q)) return false;
+    }
   }
   return true;
 }
@@ -198,23 +222,26 @@ export class SimService {
     const { db } = this.deps;
     const nowMono = this.nowMono();
     const nowWall = this.nowWall();
-    let restored: SimState | null = null;
-    let reason: string | null = null;
     const raw = getKv(db, KV_SIM_SNAPSHOT);
-    if (raw !== null) {
-      try {
-        const parsed = SimPersistedSchema.safeParse(JSON.parse(raw));
-        if (parsed.success) restored = fromPersisted(parsed.data, nowMono, nowWall);
-        else reason = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-      } catch (err) {
-        reason = String(err);
-      }
+    // FIX ROUND 1, finding 6: §3.12's discard-on-mismatch rule has exactly ONE implementation —
+    // Task 9's `restoreSim` (packages/sim/src/snapshot.ts) — and this is its only production caller,
+    // so hand-rolling a second copy of the version check + schema parse + issue string here would
+    // mean a future v2 migration silently never reaches the code that reads the format. `restoreSim`
+    // also carries the "absence is not corruption" carve-out. Only `JSON.parse` (kv stores TEXT, so
+    // the helper is handed a value, not a string) and the scalar-mirror recovery below stay local.
+    let result: { state: SimState; discarded: string | null };
+    try {
+      result = restoreSim(raw === null ? null : JSON.parse(raw), nowMono, nowWall, { seed: this.deps.seed });
+    } catch (err) {
+      result = { state: initialSimState(nowMono, nowWall, { seed: this.deps.seed }), discarded: String(err) };
     }
-    if (restored) {
-      this.state = restored;
+    if (result.discarded !== null) console.warn('[sim] snapshot discarded:', result.discarded);
+    if (raw !== null && result.discarded === null) {
+      this.state = result.state;
     } else {
-      if (reason !== null) console.warn('[sim] snapshot discarded:', reason);
-      const base = initialSimState(nowMono, nowWall, { seed: this.deps.seed });
+      // `restoreSim` already returned a fresh `initialSimState` for both the absent and the
+      // discarded case; recover the two scalar mirrors onto it.
+      const base = result.state;
       // The one piece of state a corrupt snapshot must not silently reset (§3.12).
       const affection = readMirror(getKv(db, KV_SIM_AFFECTION), 100, false);
       const days = readMirror(getKv(db, KV_SIM_DAYS_SEEN), Number.MAX_SAFE_INTEGER, true);

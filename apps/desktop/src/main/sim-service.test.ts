@@ -41,22 +41,17 @@ let db: DatabaseSync;
 let mono = 10_000;
 let wall = WALL0;
 const clock = { nowMono: () => mono, nowWall: () => wall };
-const advance = (ms: number): void => { mono += ms; wall += ms; vi.advanceTimersByTime(ms); };
 /**
- * R3-51 DERIVATION — advances the monotonic clock and the timers but HOLDS the wall clock.
+ * Moves BOTH clocks and the fake timers together — the only shape production can ever be in.
  *
- * The plan's two coalescing cases advance both clocks and then assert "nothing but tsMain changes:
- * no send". That is not true of the shipped code: `SimSnapshot.energy` is
- * `clamp(circadian(localHour(nowWall)) - expenditure, 0, 100)` (energy.ts), and `circadian` is a
- * piecewise-linear function of the WALL clock — between its 13:00 (78) and 15:00 (68) anchors it
- * falls 5 points per hour, i.e. 6.94e-4 per 500 ms tick. So with the wall clock moving, `energy`
- * is a changed field on EVERY tick and the field-by-field guard correctly sends. Holding the wall
- * clock still removes the one continuously-moving field and leaves the guard as the only thing
- * that can suppress the send — which is what these two assertions are for. (`presentMsToday` and
- * `sinceInteractionMs` still move on mono time, so the reducer still emits `snapshotDirty` every
- * tick; neither is in the broadcast subset, so the comparison is what has to catch it.)
+ * FIX ROUND 1, finding 3: the two coalescing cases below used to run their "no send" tail on a
+ * mono-only helper that froze the wall clock, because `SimSnapshot.energy` moves continuously with
+ * it and defeated the exact field-by-field guard on every tick. A frozen wall clock is a state
+ * production cannot reach, so the guard was never actually exercised. It now compares `energy`
+ * (and `valence`/`arousal`) at broadcast resolution (`BROADCAST_QUANTUM`, sim-service.ts), so both
+ * tails run on the real `advance()` again and exercise the production path.
  */
-const advanceMonoOnly = (ms: number): void => { mono += ms; vi.advanceTimersByTime(ms); };
+const advance = (ms: number): void => { mono += ms; wall += ms; vi.advanceTimersByTime(ms); };
 
 function make(o: { sensor?: ActivitySensor; petBounds?: () => typeof WORK; trace?: (r: Record<string, unknown>) => void } = {}) {
   return new SimService({
@@ -220,8 +215,27 @@ describe('dispatch / broadcast policy (§2.3, §3.11)', () => {
     expect(pet).toHaveLength(1);
     expect((pet[0][2] as { liveliness: number }).liveliness).toBe(0.7);
     sent.mockReset();
-    advanceMonoOnly(SIM_DEFAULTS.TICK_MS * 4);    // nothing but tsMain changes: no send
+    // FIX ROUND 1, finding 3: real time, BOTH clocks. Over these 2 s `energy` slides
+    // 5/3600 * 2 = 0.0028 down from 73.0 — inside the 0.1 broadcast quantum — and nothing else in
+    // the subset moves, so the guard suppresses all four ticks.
+    advance(SIM_DEFAULTS.TICK_MS * 4);            // nothing but tsMain changes: no send
     expect(stateSends()).toHaveLength(0);
+    return sim.dispose();
+  });
+
+  // FIX ROUND 1, finding 3: the twin of the suppression tail above. The broadcast quantum is a
+  // RESOLUTION, not a mute — a real energy slide still reaches both windows. Over 5 min of wall
+  // time between the 13:00 (78) and 15:00 (68) circadian anchors energy falls 5/12 = 0.417, four
+  // quanta, so a handful of sends get through; the point is that it is a handful and not the 600
+  // ticks that an exact field-by-field comparison would have sent.
+  it('a real energy change still sends: the quantum is a resolution, not a mute', () => {
+    const sim = make();
+    sim.start();
+    sent.mockReset();
+    advance(60_000 * 5);
+    const sends = stateSends().filter((c) => c[0] === PET).length;
+    expect(sends).toBeGreaterThan(0);
+    expect(sends).toBeLessThan(10);
     return sim.dispose();
   });
 
@@ -320,7 +334,7 @@ describe('dispatch / broadcast policy (§2.3, §3.11)', () => {
     expect(SimSnapshotSchema.safeParse(pet[0][2]).success).toBe(true);
     sent.mockReset();
     sim.setUiFlags({ workMode: true, sfxMuted: true });   // idempotent
-    advanceMonoOnly(SIM_DEFAULTS.TICK_MS * 4);
+    advance(SIM_DEFAULTS.TICK_MS * 4);                   // FIX ROUND 1, finding 3: real time
     expect(stateSends()).toHaveLength(0);
     return sim.dispose();
   });
@@ -335,14 +349,24 @@ describe('dispatch / broadcast policy (§2.3, §3.11)', () => {
     return sim.dispose();
   });
 
-  it('onProactiveEvaluate relays the reducer effect', () => {
+  // FIX ROUND 1, finding 4: the plan's assertion was `cb.mock.calls.length >= 0` — a tautology that
+  // passed even if `apply()` stored the callback and never called it, or if the `proactiveEvaluate`
+  // branch of `apply()` were deleted. A TICK emits no `proactiveEvaluate` at all (reduce.ts pushes
+  // it from UNLOCKED / RESUME / FULLSCREEN-off / DND-off / CHAT_OPEN-off / MODE / TURN_DONE /
+  // PROACTIVE_MUTE and from `applyPresence`'s return edge, never from the 2 Hz tick), so the relay
+  // is pinned with an event the reducer emits it for UNCONDITIONALLY: PROACTIVE_MUTE (reduce.ts:182).
+  it('onProactiveEvaluate relays the reducer effect, and the unsubscribe stops it', () => {
     const sim = make();
     const cb = vi.fn();
-    sim.onProactiveEvaluate(cb);
+    const off = sim.onProactiveEvaluate(cb);
     sim.start();
-    advance(SIM_DEFAULTS.TICK_MS * 2 * SIM_DEFAULTS.PROACTIVE_EVAL_INTERVAL_MS / 1000);   // 10 s of ticks
-    expect(cb.mock.calls.length).toBeGreaterThanOrEqual(0);   // presence of the hook is what is pinned;
-    // the reducer's emission cadence is Task 9's test, not this one's.
+    advance(SIM_DEFAULTS.TICK_MS * 4);                    // ticks alone must not evaluate
+    expect(cb).not.toHaveBeenCalled();
+    sim.dispatch({ type: 'PROACTIVE_MUTE', untilWall: null });
+    expect(cb).toHaveBeenCalledTimes(1);
+    off();
+    sim.dispatch({ type: 'PROACTIVE_MUTE', untilWall: wall + 3_600_000 });
+    expect(cb).toHaveBeenCalledTimes(1);
     return sim.dispose();
   });
 });
