@@ -52,8 +52,11 @@ export function createBeforeQuit(deps: QuitDeps): {
     // app unable to quit — and surface as an unhandled rejection from `void run()`.
     step('teardownAfterDrain', () => deps.teardownAfterDrain());
     step('closeDb', () => deps.closeDb());
+    // GC2-1: `phase` reaches 'done' before quit() is attempted, and quit() is attempted exactly
+    // once per drain — a throwing quit() (or a re-entrant before-quit from inside it) can neither
+    // wedge the phase nor run the sequence again.
     phase = 'done';
-    deps.quit();
+    step('quit', () => deps.quit());
   };
 
   const step = (name: string, fn: () => void): void => {
@@ -70,7 +73,10 @@ export function createBeforeQuit(deps: QuitDeps): {
       event.preventDefault();
       if (phase === 'draining') return;
       phase = 'draining';
-      deps.teardownSync();
+      // GC2-1: guarded like every other step — a throwing teardownSync (a screen listener already
+      // removed, a tray already destroyed) used to leave `phase` at 'draining' with `run()` never
+      // started, so every later before-quit was prevented and the app could not quit.
+      step('teardownSync', () => deps.teardownSync());
       void run();
     },
     get phase(): QuitPhase {
