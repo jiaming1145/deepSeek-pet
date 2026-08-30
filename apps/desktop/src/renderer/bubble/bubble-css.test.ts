@@ -23,6 +23,13 @@ describe('bubble.css craft fixes', () => {
     expect(block('.bubble__surface,\n.bubble__plate')).toMatch(/pointer-events:\s*auto/);
   });
 
+  it('M-16 (round 1): the plate bridges the gap to the surface so plate->surface is one hover', () => {
+    const b = block('.bubble__plate::after');
+    expect(b).toMatch(/top:\s*100%/);
+    expect(b).toMatch(/height:\s*var\(--sp-1\)/);
+    expect(b).toMatch(/pointer-events:\s*auto/);
+  });
+
   it('M-13: the plate carries the outline and its span counter-skews from the token', () => {
     expect(block('.bubble__plate')).toMatch(/border:\s*1px solid var\(--c-border-strong\)/);
     expect(block('.bubble__plate-text')).toMatch(/skewX\(calc\(-1 \* var\(--adv-skew\)\)\)/);

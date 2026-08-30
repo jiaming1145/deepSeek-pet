@@ -201,6 +201,20 @@ body.browser .content {
   display: none;
 }
 
+/* M-16 (fix round 1): the --sp-1 gap between the plate and the surface is transparent, so without
+   this bridge a pointer crossing it leaves and re-enters #bubble — an `inside:false/true` pair,
+   a click-through flip and a linger re-arm for a pointer that never left the band. Invisible;
+   pointer only. */
+.bubble__plate::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--sp-1);
+  pointer-events: auto;
+}
+
 /* M-13: counter-skew derived from the same token as chat's .plate__text, so the name stands
    upright inside the slanted box instead of rendering italic. */
 .bubble__plate-text {
