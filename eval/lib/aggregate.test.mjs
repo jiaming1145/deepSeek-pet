@@ -102,3 +102,56 @@ test('a judge error above 5 per cent fails', () => {
   assert.equal(r.axes.judge_error_rate.pct, 0.1);
   assert.equal(r.axes.judge_error_rate.pass, false);
 });
+
+test('A9: thirteen in_character=0 turns among 138 pass the mean/pct2 pair but fail the zero-flip row (I-13)', () => {
+  const rows = [
+    ...Array.from({ length: 125 }, (_, i) => turn({ indexInRun: i })),
+    ...Array.from({ length: 13 }, (_, i) => turn({ indexInRun: 125 + i, promptId: `flip-${i}`, judge: { ...JUDGE_OK, in_character: 0 } })),
+  ];
+  const r = aggregate(rows, { noJudge: false });
+  assert.equal(r.axes.in_character.pass, true, 'mean 1.812 / pct2 0.906 still clear the pair');
+  assert.equal(r.axes.in_character_flips.kind, 'countMax');
+  assert.equal(r.axes.in_character_flips.n, 138);
+  assert.equal(r.axes.in_character_flips.count, 13);
+  assert.equal(r.axes.in_character_flips.threshold, 0);
+  assert.equal(r.axes.in_character_flips.pass, false);
+  assert.equal(r.pass, false);
+  assert.equal(r.worst.in_character_flips.length, 3);
+  assert.equal(r.worst.in_character_flips[0].promptId, 'flip-0');
+});
+
+test('A9: a single in_character=0 turn fails the zero-flip row', () => {
+  const r = aggregate([turn(), turn({ indexInRun: 1, judge: { ...JUDGE_OK, in_character: 0 } })], { noJudge: false });
+  assert.equal(r.axes.in_character_flips.count, 1);
+  assert.equal(r.axes.in_character_flips.pass, false);
+});
+
+test('A9: the zero-flip row is skipped under --no-judge and when nothing was judged', () => {
+  assert.equal(aggregate([turn()], { noJudge: true }).axes.in_character_flips.skipped, true);
+  assert.equal(aggregate([turn({ judge: null, judgeError: true })], { noJudge: false }).axes.in_character_flips.skipped, true);
+});
+
+test('A18: a reply with two emoji fails the per-reply gate (M-20)', () => {
+  const two = { hanzi: 5, sentences: 1, endsWithQuestion: false, emojiCount: 2, ellipsisCount: 0 };
+  const one = { hanzi: 5, sentences: 1, endsWithQuestion: false, emojiCount: 1, ellipsisCount: 0 };
+  const ok = aggregate([turn({ shape: one })], { noJudge: false });
+  assert.equal(ok.shape.emojiMultiCount, 0);
+  assert.equal(ok.shapeGates.emojiMultiCount.pass, true);
+  const bad = aggregate([turn({ shape: one }), turn({ indexInRun: 1, shape: two })], { noJudge: false });
+  assert.equal(bad.shape.emojiMultiCount, 1);
+  assert.equal(bad.shapeGates.emojiMultiCount.threshold, 0);
+  assert.equal(bad.shapeGates.emojiMultiCount.pass, false);
+  assert.equal(bad.pass, false);
+});
+
+test('A4: a markdown lint hit on the raw output fails the markdownLintCount gate (I-12)', () => {
+  const md = turn({ lint: { severity: 'strip', violations: [{ rule: 'markdown', reason: 'x' }] } });
+  const r = aggregate([turn(), md], { noJudge: false });
+  assert.equal(r.informational.lintRuleCounts.markdown, 1);
+  assert.equal(r.shape.markdownLintCount, 1);
+  assert.equal(r.shapeGates.markdownLintCount.pass, false);
+  assert.equal(r.pass, false);
+  const clean = aggregate([turn()], { noJudge: false });
+  assert.equal(clean.shape.markdownLintCount, 0);
+  assert.equal(clean.shapeGates.markdownLintCount.pass, true);
+});
