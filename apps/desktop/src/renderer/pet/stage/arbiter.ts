@@ -145,6 +145,20 @@ export class Arbiter {
   /** True while a grant is replacing a lease on the same lane: the outgoing lease's terminal
    *  callback must not release the gaze / clear the overlay that the incoming one is about to set. */
   private granting = 0;
+  /** FIX ROUND 2 (finding 1): `granting` is per-grant, but `behaviour()` is THREE grants (body,
+   *  expression, gaze). Flushing after the FIRST of them handed the runner its behaviour end while
+   *  expression and gaze still held the outgoing lease, letting a re-entrant `behaviour()` — granted,
+   *  because behaviour-vs-behaviour is equal rank — win all three lanes and then be half-overwritten
+   *  by the command still in flight. `committing` makes a whole arbiter command atomic with respect
+   *  to the flush; it deliberately does NOT gate the gaze release / overlay clear, which stay on
+   *  `granting`'s per-lane semantics. */
+  private committing = 0;
+  /** FIX ROUND 2 (finding 1): raised for a WHOLE behaviour command, its end-delivery flush included.
+   *  A command re-entered from that flush (the runner's `onEnd` calls `decide()` synchronously, and
+   *  behaviour-vs-behaviour is equal rank, so the re-entrant one would be GRANTED) is refused instead
+   *  — otherwise it wins all three lanes and the command still in flight overwrites two of them,
+   *  leaving the lanes and `runner.current()` describing different behaviours. */
+  private commanding = 0;
   /** Behaviour ends that arrived mid-grant, waiting for the lane to settle (see `notifyBehaviourEnd`). */
   private readonly pendingBehaviourEnds: { id: string; result: LaneResult }[] = [];
   private flushingBehaviourEnds = false;
@@ -234,9 +248,12 @@ export class Arbiter {
     // for `behaviour` exactly as it does for `llm` and `sim`; a refusal used to return silently, so
     // the D16 trace recorded refusals for two of the three sources only. The id is the behaviour id
     // (what `behaviourStart`/`behaviourEnd` carry), so a reader can pair the refusal with the draw.
-    const noBody = !this.mayTake(this.body, 'behaviour') || this.pendingTouchBody !== null;
-    const noExpression = !this.mayTake(this.expression, 'behaviour');
-    const noGaze = !this.mayTake(this.gaze, 'behaviour');
+    // FIX ROUND 2 (finding 1): a behaviour command arriving from inside another one's end delivery
+    // is refused whole — see `commanding`. All three lanes report it, per §5.1's "refused".
+    const reentrant = this.commanding > 0;
+    const noBody = reentrant || !this.mayTakeLane(this.body, 'behaviour') || this.pendingTouchBody !== null;
+    const noExpression = reentrant || !this.mayTakeLane(this.expression, 'behaviour');
+    const noGaze = reentrant || !this.mayTakeLane(this.gaze, 'behaviour');
     if (noBody || noExpression || noGaze) {
       if (noBody) this.refuse('body', 'behaviour', cmd.id);
       if (noExpression) this.refuse('expression', 'behaviour', cmd.id);
@@ -244,10 +261,26 @@ export class Arbiter {
       return false;
     }
     const motionId = cmd.motion ? `${cmd.motion[0]}_${cmd.motion[1]}` : cmd.id;
-    this.grant(this.body, 'behaviour', cmd.durationMs, { id: motionId, motion: cmd.motion, overlay: cmd.overlay, behaviourId: cmd.id }, now);
-    this.grant(this.expression, 'behaviour', cmd.durationMs, { id: cmd.expression ?? '', name: cmd.expression, weight: cmd.expressionWeight, utteranceEndAt: null }, now);
-    this.applyExpression(now);
-    this.grant(this.gaze, 'behaviour', cmd.durationMs, { id: cmd.gaze, target: { kind: 'pattern', pattern: cmd.gaze } }, now);
+    // FIX ROUND 2 (finding 1): §5.3 is ONE behaviour on three lanes, so the three grants are one
+    // atomic command — the pre-empted behaviour's end may only reach the runner once all three are
+    // installed, or a re-entrant (and equal-rank, therefore granted) `behaviour()` interleaves.
+    this.commanding += 1;
+    try {
+      this.committing += 1;
+      try {
+        this.grant(this.body, 'behaviour', cmd.durationMs, { id: motionId, motion: cmd.motion, overlay: cmd.overlay, behaviourId: cmd.id }, now);
+        this.grant(this.expression, 'behaviour', cmd.durationMs, { id: cmd.expression ?? '', name: cmd.expression, weight: cmd.expressionWeight, utteranceEndAt: null }, now);
+        this.applyExpression(now);
+        this.grant(this.gaze, 'behaviour', cmd.durationMs, { id: cmd.gaze, target: { kind: 'pattern', pattern: cmd.gaze } }, now);
+      } finally {
+        this.committing -= 1;
+      }
+      // The pre-empted behaviour's end reaches the runner HERE, with all three lanes settled on this
+      // command — never after the body grant alone, which used to let the runner tear the command apart.
+      this.flushBehaviourEnds();
+    } finally {
+      this.commanding -= 1;
+    }
     return true;
   }
 
@@ -404,24 +437,37 @@ export class Arbiter {
   // ---- internals ---------------------------------------------------------------------------
   /** §5.1: a source may take a lane that is free, or held by a strictly lower rank — equal rank means
    *  the newer command wins (the same rule Task 8's `expressionPolicy` / `gazePolicy` use). */
-  private mayTake(holder: LaneHolder<unknown>, source: LaneSource): boolean {
+  /** §5.1 probe (fix round 2, finding 3): would a command from `source` win ALL THREE lanes right
+   *  now? The BehaviourRunner asks before `selector.select()`, because a Selection it then throws
+   *  away has already stamped `lastStartedAt`/`cooldownUntil` and pushed onto the 3-slot recency
+   *  list — one wasted draw (and three `laneResult:preempted` records) per 1 Hz poll for the whole
+   *  life of whatever pre-empted it. */
+  mayTake(source: LaneSource): boolean {
+    if (this.commanding > 0) return false;
+    if (this.pendingTouchBody !== null && SOURCE_RANK[source] < SOURCE_RANK.touch) return false;
+    return this.mayTakeLane(this.body, source)
+      && this.mayTakeLane(this.expression, source)
+      && this.mayTakeLane(this.gaze, source);
+  }
+
+  private mayTakeLane(holder: LaneHolder<unknown>, source: LaneSource): boolean {
     const cur = holder.current;
     return !cur || SOURCE_RANK[source] >= SOURCE_RANK[cur.source];
   }
 
   private simGaze(target: GazeTarget, ttl: number, now: number, easeMs?: number): void {
     const id = target.kind === 'pattern' ? target.pattern : target.kind === 'anchor' ? target.anchor : 'point';
-    if (!this.mayTake(this.gaze, 'sim')) { this.refuse('gaze', 'sim', id); return; }
+    if (!this.mayTakeLane(this.gaze, 'sim')) { this.refuse('gaze', 'sim', id); return; }
     this.grant(this.gaze, 'sim', ttl, { id, target, easeMs }, now);
   }
   private simExpression(name: string, weight: number, ttl: number, now: number): void {
-    if (!this.mayTake(this.expression, 'sim')) { this.refuse('expression', 'sim', name); return; }
+    if (!this.mayTakeLane(this.expression, 'sim')) { this.refuse('expression', 'sim', name); return; }
     this.grant(this.expression, 'sim', ttl, { id: name, name, weight, utteranceEndAt: null }, now);
     this.applyExpression(now);
   }
   private simBody(motion: MotionRef, ttl: number, now: number): void {
     const id = `${motion[0]}_${motion[1]}`;
-    if (!this.mayTake(this.body, 'sim') || this.pendingTouchBody) { this.refuse('body', 'sim', id); return; }
+    if (!this.mayTakeLane(this.body, 'sim') || this.pendingTouchBody) { this.refuse('body', 'sim', id); return; }
     this.grant(this.body, 'sim', ttl, { id, motion, overlay: 'none', behaviourId: null }, now);
   }
   /** §5.10's "release at t+1500": every lane the return sequence still owns lets go. */
@@ -495,7 +541,7 @@ export class Arbiter {
   }
 
   private flushBehaviourEnds(): void {
-    if (this.granting > 0 || this.flushingBehaviourEnds) return;
+    if (this.granting > 0 || this.committing > 0 || this.flushingBehaviourEnds) return;
     this.flushingBehaviourEnds = true;
     try {
       for (let next = this.pendingBehaviourEnds.shift(); next; next = this.pendingBehaviourEnds.shift()) {

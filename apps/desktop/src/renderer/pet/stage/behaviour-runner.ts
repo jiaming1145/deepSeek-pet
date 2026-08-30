@@ -1,4 +1,4 @@
-import type { LaneResult } from '@ds/protocol';
+import type { LaneResult, LaneSource } from '@ds/protocol';
 import type { BehaviorSelector, ConditionFacts } from '@ds/behaviors';
 import type { ArbTraceRecord, BehaviourCommand } from './arbiter';
 
@@ -8,6 +8,8 @@ export const CONDITION_POLL_MS = 1_000;   // research §1: the selector is event
 export interface RunnerArbiter {
   behaviour(cmd: BehaviourCommand, now: number): boolean;
   onBehaviourResult(cb: (id: string, result: LaneResult) => void): void;
+  /** §5.1 probe — cheap, and free of side effects, unlike `selector.select()` (fix round 2, finding 3). */
+  mayTake(source: LaneSource): boolean;
 }
 type RunnerSelector = Pick<BehaviorSelector, 'update' | 'select' | 'finish'>;
 
@@ -49,6 +51,12 @@ export class BehaviourRunner {
     if (this.frozen) return;
     const now = this.deps.now();
     if (this.currentId !== null && now < this.nextDecisionAt) return;
+    // FIX ROUND 2 (finding 3): ask before paying. `selector.select()` MUTATES the selector — it
+    // stamps `lastStartedAt`/`cooldownUntil` and pushes onto the 3-slot recency list — so a draw the
+    // arbiter then refuses (a live drag / touch / LLM lease, or a behaviour end still being
+    // delivered) burned a cooldown and polluted D1's recency for a behaviour that never played, once
+    // per 1 Hz poll for the whole life of the pre-empting lease.
+    if (!this.deps.arbiter.mayTake('behaviour')) return;
     const sel = this.deps.selector.select(this.deps.facts(), now);
     if (!sel) return;                                                    // §4.4: hold, never invent
     const b = sel.behavior;

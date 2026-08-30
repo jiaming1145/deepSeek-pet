@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LaneResult } from '@ds/protocol';
 import type { ConditionFacts, Selection } from '@ds/behaviors';
 import { BehaviourRunner, CONDITION_POLL_MS } from './behaviour-runner';
-import { Arbiter, type ArbiterPorts, type BehaviourCommand } from './arbiter';
+import { Arbiter, type ArbTraceRecord, type ArbiterPorts, type BehaviourCommand } from './arbiter';
 
 const facts: ConditionFacts = {
   phase: 'day', present: true, presentation: 'awake', liveliness: 0.3, mood: 0.1, energy: 60,
@@ -17,7 +17,7 @@ function selection(id: string, now: number): Selection {
   };
 }
 
-function harness(opts: { grant?: boolean } = {}) {
+function harness(opts: { grant?: boolean; mayTake?: boolean } = {}) {
   let now = 0;
   const log: string[] = [];
   const traces: unknown[] = [];
@@ -32,6 +32,7 @@ function harness(opts: { grant?: boolean } = {}) {
   const arbiter = {
     behaviour: (cmd: BehaviourCommand) => { log.push(`behaviour:${cmd.id}:${cmd.durationMs}`); return opts.grant ?? true; },
     onBehaviourResult: (cb: (id: string, result: LaneResult) => void) => { listener = cb; },
+    mayTake: () => opts.mayTake ?? true,
   };
   const runner = new BehaviourRunner({ selector, arbiter, facts: () => facts, now: () => now, trace: (r) => traces.push(r) });
   return { runner, log, traces, set now(v: number) { now = v; }, setNext: (id: string) => { nextId = id; }, end: (id: string, r: LaneResult) => listener!(id, r) };
@@ -81,6 +82,17 @@ describe('BehaviourRunner (§5.3)', () => {
     h.setNext('');
     h.now = 2000; h.runner.update();
     expect(h.log.at(-1)).toBe('select@2000');
+  });
+
+  it('never draws a Selection the arbiter would refuse (fix round 2, finding 3)', () => {
+    // `select()` mutates the selector (cooldown, `lastStartedAt`, the 3-slot recency list), so a draw
+    // the arbiter then refuses is not free: it is a burnt cooldown for a behaviour that never played.
+    const h = harness({ mayTake: false });
+    h.runner.update();
+    h.now = 1000; h.runner.update();
+    expect(h.log).toEqual(['update', 'update']);
+    expect(h.log.some((l) => l.startsWith('select'))).toBe(false);
+    expect(h.runner.current()).toBeNull();
   });
 
   it('setFrozen(true) stops selection without ending the current behaviour (D7)', () => {
@@ -141,5 +153,68 @@ describe('BehaviourRunner + the REAL Arbiter (fix round 1, finding 1)', () => {
     runner.update();                                  // the next 1 Hz poll, a full 12 s before nextDecisionAt
     expect(runner.current()).toBe('b');
     expect(arbiter.lanes().find((l) => l.lane === 'body')).toMatchObject({ source: 'behaviour' });
+  });
+});
+
+describe('BehaviourRunner + the REAL Arbiter (fix round 2, finding 1)', () => {
+  /** A behaviour whose body lease OUTLIVES its own `nextDecisionAt` — the shipped default: the
+   *  selector clamps `nextDecisionAt` to now + DENSITY_MAX_PERIOD_MS (14 s) at liveliness >= 0.30,
+   *  while the body ttl is the drawn duration, and Haru's `idle_breathe` draws 8-16 s. */
+  function longSelection(id: string, index: number, now: number): Selection {
+    return {
+      behavior: { id, weight: 1, minMs: 20_000, maxMs: 20_000, cooldownMs: 0, minLiveliness: 0,
+        motion: ['Idle', index], expression: `E_${id}`, expressionWeight: 0.55, gaze: 'follow',
+        overlay: 'none', locomotion: null, tags: [] } as Selection['behavior'],
+      durationMs: 20_000, nextDecisionAt: now + 14_000, trace: { eligible: [id], weights: [1], seed: 1 },
+    };
+  }
+
+  it('re-deciding while the body lease is still live swaps ONE behaviour on all three lanes', () => {
+    // Pre-fix this produced body `Idle_2` (a third behaviour) over expression/gaze `E_b`, with
+    // `runner.current()` still reporting `b` and three `behaviourStart` records for one boundary.
+    let now = 0;
+    const calls: string[] = [];
+    const traces: ArbTraceRecord[] = [];
+    const ports: ArbiterPorts = {
+      now: () => now, schedule: () => {}, trace: (r) => traces.push(r),
+      motion: { startMotionForced: (g, i) => { calls.push(`body:${g}_${i}`); return true; } },
+      expression: { setExpression: (n) => { calls.push(`expr:${n}`); }, setExpressionWeight: () => {} },
+      gaze: { apply: (t) => { calls.push(`gaze:${t.kind === 'pattern' ? t.pattern : t.kind}`); }, release: () => {} },
+      overlay: { set: () => {} },
+      blink: { force: () => {}, setSleepy: () => {} },
+    };
+    const arbiter = new Arbiter(ports);
+    let n = 0;
+    const runner = new BehaviourRunner({
+      selector: {
+        update: () => {},
+        select: (_f: ConditionFacts, at: number) => longSelection(String.fromCharCode(97 + n), n++, at),
+        finish: () => {},
+      },
+      arbiter, facts: () => facts, now: () => now, trace: (r) => traces.push(r as ArbTraceRecord),
+    });
+
+    runner.update();                       // t=0: `a`, body ttl 20 000, nextDecisionAt 14 000
+    now = 14_000;
+    arbiter.update(now);                   // `a`'s body lease is STILL live here
+    runner.update();                       // the 1 Hz poll at the boundary
+
+    expect(traces.filter((t) => t.kind === 'behaviourStart').map((t) => t.id)).toEqual(['a', 'b']);
+    expect(traces.filter((t) => t.kind === 'behaviourEnd').map((t) => `${t.id}:${t.result}`)).toEqual(['a:preempted']);
+    expect(runner.current()).toBe('b');
+    expect(calls.filter((c) => c.startsWith('body:')).at(-1)).toBe('body:Idle_1');
+    expect(calls.filter((c) => c.startsWith('expr:')).at(-1)).toBe('expr:E_b');
+    expect(calls.filter((c) => c.startsWith('gaze:')).at(-1)).toBe('gaze:follow');
+    // Every lane grant of the second boundary belongs to `b`, and nothing else was drawn.
+    expect(traces.filter((t) => t.kind === 'laneGrant' && t.source === 'behaviour').slice(-3).map((t) => t.id))
+      .toEqual(['Idle_1', 'E_b', 'follow']);
+    expect(n).toBe(2);
+    // No `behaviourEnd` may precede its own `behaviourStart` (§12.2 / D16).
+    for (const [i, rec] of traces.entries()) {
+      if (rec.kind !== 'behaviourEnd') continue;
+      const start = traces.findIndex((t) => t.kind === 'behaviourStart' && t.id === rec.id);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(start).toBeLessThan(i);
+    }
   });
 });
