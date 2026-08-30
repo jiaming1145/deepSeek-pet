@@ -1,4 +1,4 @@
-# Samples the whole Electron process tree over a window of seconds and appends one row to a
+﻿# Samples the whole Electron process tree over a window of seconds and appends one row to a
 # markdown table. CPU comes from TotalProcessorTime deltas (plain .NET) rather than performance
 # counters, whose names are localized on a Chinese Windows install.
 param(

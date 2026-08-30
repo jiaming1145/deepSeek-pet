@@ -20,9 +20,21 @@ Add-Type -Namespace Ds -Name Gdi -MemberDefinition @'
 [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
 [DllImport("user32.dll")] public static extern IntPtr GetWindowDC(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+[DllImport("user32.dll")] public static extern int GetSystemMetrics(int nIndex);
 [DllImport("gdi32.dll")] public static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int w, int h, IntPtr hdcSrc, int xSrc, int ySrc, int rop);
 '@
 [void][Ds.Gdi]::SetProcessDPIAware()
+
+# The desktop window DC spans the whole VIRTUAL screen, whose origin is the primary monitor's
+# top-left - so a monitor placed left of or above the primary has NEGATIVE screen coordinates, and
+# the source offsets BitBlt takes are measured from SM_XVIRTUALSCREEN / SM_YVIRTUALSCREEN.
+# Clamping a negative x/y to 0 (what this script used to do) silently captured the wrong screen
+# area on exactly that layout - the mixed-DPI case bubble-place.test.ts H models - and produced a
+# plausible-looking PNG of the wrong thing. Out-of-range now throws instead.
+$VX = [Ds.Gdi]::GetSystemMetrics(76)   # SM_XVIRTUALSCREEN
+$VY = [Ds.Gdi]::GetSystemMetrics(77)   # SM_YVIRTUALSCREEN
+$VW = [Ds.Gdi]::GetSystemMetrics(78)   # SM_CXVIRTUALSCREEN
+$VH = [Ds.Gdi]::GetSystemMetrics(79)   # SM_CYVIRTUALSCREEN
 
 $b = Get-Content -Raw -Path $BoundsFile | ConvertFrom-Json
 $pad = if ($null -eq $b.pad) { 24 } else { [int]$b.pad }
@@ -31,9 +43,13 @@ $x = [int][Math]::Round(($b.x - $pad) * $sf)
 $y = [int][Math]::Round(($b.y - $pad) * $sf)
 $w = [int][Math]::Round(($b.width + 2 * $pad) * $sf)
 $h = [int][Math]::Round(($b.height + 2 * $pad) * $sf)
-if ($x -lt 0) { $x = 0 }
-if ($y -lt 0) { $y = 0 }
 if ($w -lt 1 -or $h -lt 1) { throw "capture-region: empty rect ($w x $h)" }
+if ($x -lt $VX -or $y -lt $VY -or ($x + $w) -gt ($VX + $VW) -or ($y + $h) -gt ($VY + $VH)) {
+  throw "capture-region: rect ${w}x${h} at ${x},${y} leaves the virtual screen (${VW}x${VH} at ${VX},${VY})"
+}
+# BitBlt's source offsets are relative to the DC's own origin, i.e. the virtual screen's top-left.
+$sx = $x - $VX
+$sy = $y - $VY
 
 $dir = Split-Path -Parent $Out
 if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
@@ -46,7 +62,7 @@ $dest = $g.GetHdc()
 $desktop = [Ds.Gdi]::GetDesktopWindow()
 $src = [Ds.Gdi]::GetWindowDC($desktop)
 try {
-  if (-not [Ds.Gdi]::BitBlt($dest, 0, 0, $w, $h, $src, $x, $y, $rop)) { throw 'capture-region: BitBlt failed' }
+  if (-not [Ds.Gdi]::BitBlt($dest, 0, 0, $w, $h, $src, $sx, $sy, $rop)) { throw 'capture-region: BitBlt failed' }
 } finally {
   [void][Ds.Gdi]::ReleaseDC($desktop, $src)
   $g.ReleaseHdc($dest)
@@ -54,4 +70,4 @@ try {
 $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose()
 $bmp.Dispose()
-Write-Output "captured ${w}x${h} at ${x},${y} -> $Out"
+Write-Output "captured ${w}x${h} at ${x},${y} (dc offset ${sx},${sy}) -> $Out"
