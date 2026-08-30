@@ -1,0 +1,24 @@
+#!/bin/sh
+# Versioned pre-commit hook (final-review M-27). Installed by the root package.json `prepare`
+# script: `git config core.hooksPath .githooks`.
+#
+# Rejects any staged ADDITION that looks like a DeepSeek / OpenAI-style API key. Prints the offending
+# path(s) and exits 1. PNGs and other binaries are out of scope: key-window captures must use an
+# empty field. Never bypass with --no-verify; fix the staged content instead.
+
+pattern='sk-[A-Za-z0-9]{20,}'
+offenders=$(git diff --cached --name-only --diff-filter=ACMR -z \
+  | tr '\0' '\n' \
+  | while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      if git diff --cached -U0 -- "$path" | grep -E '^\+' | grep -v '^+++' | grep -Eq "$pattern"; then
+        printf '%s\n' "$path"
+      fi
+    done)
+
+if [ -n "$offenders" ]; then
+  echo "pre-commit: refusing to commit content that looks like an API key (sk-...) in:" >&2
+  printf '%s\n' "$offenders" | sed 's/^/  /' >&2
+  exit 1
+fi
+exit 0

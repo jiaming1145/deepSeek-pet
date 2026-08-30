@@ -28,6 +28,13 @@ packaged; it is held in memory for that run and never persisted. `DEEPSEEK_API_K
 the tests and the eval harness — the app never reads it. `DS_FAKE_BRAIN=1` swaps in a scripted
 client, also unpackaged-only.
 
+### Secrets
+
+`pnpm install` runs the `prepare` script, which sets `core.hooksPath` to the versioned `.githooks/`.
+Its `pre-commit` rejects any staged addition matching `sk-[A-Za-z0-9]{20,}` and prints the offending
+file, so a real DeepSeek key cannot be committed; screenshots of the key window must use an empty
+field, because the hook cannot inspect PNGs.
+
 ### Eval harness
 
 ```
@@ -64,10 +71,12 @@ live one; `docs/evidence/phase2/not-measured.md` carries the verification and th
 that produce all of it once the balance is topped up.
 
 What the harness *would* measure is 138 eval turns (46 prompts × 3 runs), not the addendum's
-200–500-turn denominators, so the writing-quality axes are directional; 24 gate rows are checked
-(16 judge/derived axes and 8 local shape metrics), of which `trait_hit` reports SKIP because Phase 2
+200–500-turn denominators, so the writing-quality axes are directional; 27 gate rows are checked
+(17 judge/derived axes and 10 local shape metrics), of which `trait_hit` reports SKIP because Phase 2
 ships no trait probes; A8 (persona bleed across three personas) is out of scope because only one
-persona exists. What *was* measured — the built app on a virgin profile, in both themes, on the real
+persona exists, and A10 (self-fact consistency) has no probe at all and is deferred with it. The
+judge and the linter read the raw reply (tags stripped, before `sanitizeForDisplay`); the shape
+metrics read the sanitized text the user sees. What *was* measured — the built app on a virgin profile, in both themes, on the real
 desktop, with CPU and working-set samples and six in-app checks — is indexed in
 [`docs/evidence/phase2/README.md`](docs/evidence/phase2/README.md), and everything Phase 2
 deliberately did not build is listed in
