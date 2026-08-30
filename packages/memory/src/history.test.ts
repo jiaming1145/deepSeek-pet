@@ -6,6 +6,7 @@ import type { ChatMessage, MetricsRecord, Summarize, TrimPlan } from '@ds/brain'
 import { estimateTokens, planTrim } from '@ds/brain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KV_LAST_TRIM_ID, getKv, openDb, setKv } from './db.ts';
+import { FactStore } from './facts.ts';
 import { HISTORY_WINDOW_SAFETY_TOKENS, HistoryStore, TRIM_CHUNK_TOKENS } from './history.ts';
 import { RunningSummary } from './summary.ts';
 
@@ -22,12 +23,15 @@ const okSummarize: Summarize = (oldSummary, dropped) => {
   return Promise.resolve('这是摘要。');
 };
 
-function makeStore(overrides: { maxTokens?: number; summarize?: Summarize } = {}): HistoryStore {
+function makeStore(
+  overrides: { maxTokens?: number; summarize?: Summarize; factStore?: FactStore } = {},
+): HistoryStore {
   return new HistoryStore({
     db,
     summary: new RunningSummary(db, () => clock),
     summarize: overrides.summarize ?? okSummarize,
     maxTokens: overrides.maxTokens,
+    factStore: overrides.factStore,
     now: () => clock,
   });
 }
@@ -422,6 +426,7 @@ describe('HistoryStore', () => {
       sensitive: false,
       lint: { violations: [{ rule: 'markdown', detail: '**b**' }], severity: 'strip' },
       errorCode: null,
+      envelope: null,
     };
     await store.record(m);
 
@@ -451,6 +456,24 @@ describe('HistoryStore', () => {
     expect(again.n).toBe(1); // the same turn_id replaces
     expect(again.ttft_ms).toBe(null);
     expect(again.error_code).toBe('rate');
+
+    // §8.8: the wire envelope is stored for audit, never replayed.
+    const wire = JSON.stringify([
+      { role: 'system', content: 's' },
+      { role: 'user', content: '在吗' },
+    ]);
+    await store.record({ ...m, turnId: 'turn-2', envelope: wire });
+    const env = db.prepare('SELECT envelope FROM metrics WHERE turn_id = ?').get('turn-2') as {
+      envelope: string | null;
+    };
+    expect(env.envelope).toBe(wire);
+    expect(
+      (
+        db.prepare('SELECT envelope FROM metrics WHERE turn_id = ?').get('turn-1') as {
+          envelope: string | null;
+        }
+      ).envelope,
+    ).toBe(null);
   });
 
   it('list() maps the interruption marker, turn id and kind (R2)', async () => {
@@ -508,5 +531,138 @@ describe('HistoryStore', () => {
     clock = 5000;
     await store.append('assistant', 'b');
     expect(store.lastMessageTs()).toBe(5000);
+  });
+});
+
+describe('§8.6 facts(), setQuery and the shared write chain', () => {
+  it('facts() returns [] when no FactStore was injected (Phase 2 behaviour, unchanged)', async () => {
+    expect(await store.facts()).toEqual([]);
+    store.setQuery('面试'); // still legal; the query is simply never used
+    expect(await store.facts()).toEqual([]);
+  });
+
+  it('facts() returns FactStore.retrieve(pendingQuery, now())', async () => {
+    const facts = new FactStore(db, () => clock);
+    facts.upsert({
+      key: 'job_interview',
+      value: '主人下周三要去杭州面试',
+      alias: ['面试', '工作'],
+      confidence: 0.9,
+      sourceTurn: null,
+    });
+    facts.upsert({
+      key: 'drink_coffee',
+      value: '主人喜欢喝冰美式',
+      alias: ['咖啡'],
+      confidence: 0.9,
+      sourceTurn: null,
+    });
+    const s = makeStore({ factStore: facts });
+
+    expect(await s.facts()).toEqual([]); // pendingQuery is '' until setQuery runs
+    s.setQuery('面试怎么样了');
+    expect(await s.facts()).toEqual(['主人下周三要去杭州面试']);
+    s.setQuery('咖啡');
+    expect(await s.facts()).toEqual(['主人喜欢喝冰美式']);
+    s.setQuery('医院');
+    expect(await s.facts()).toEqual([]);
+  });
+
+  it('facts() never returns more than the 【你记得】 budget and never returns raw 【】', async () => {
+    const facts = new FactStore(db, () => clock);
+    for (let i = 0; i < 9; i++) {
+      facts.upsert({
+        key: `c${i}`,
+        value: `【状态】主人的第${i}只猫`,
+        alias: ['猫'],
+        confidence: 0.9,
+        sourceTurn: null,
+      });
+    }
+    const s = makeStore({ factStore: facts });
+    s.setQuery('猫');
+    const out = await s.facts();
+    expect(out).toHaveLength(5);
+    for (const v of out) expect(v.includes('【')).toBe(false);
+  });
+
+  it('enqueueWrite serialises behind an in-flight trim — an extraction cannot interleave a BEGIN…COMMIT', async () => {
+    // DEVIATION (task-2 Step 22c): the brief appends 60 turns. A trim summarises every row from the
+    // old pointer to the cutoff — the prefix window() safety-truncated included (GC-1) — in chunks
+    // of TRIM_CHUNK_TOKENS, so 60 turns is ~49_000 tokens and calls `summarize` THREE times. `slow`
+    // reassigns `release` on each call, so releasing once leaves chunks 2 and 3 awaiting a resolver
+    // nobody holds and the case times out. 20 turns is 40 rows x 600 tokens = 24_000: window() does
+    // not truncate (budget 32_000), planTrim drops 8_400 tokens, and that is ONE chunk — exactly one
+    // `summarize` call, which is what the ordering assertion below describes. 21 turns = 42 rows x
+    // 600 tokens = 25_200, just over planTrim's 24_000 trigger (24_000 exactly does NOT trim) and
+    // well under window()'s 32_000 budget, so nothing is truncated and the drop is ~8_400 tokens.
+    for (let i = 0; i < 21; i++) {
+      await store.append('user', '字'.repeat(900));
+      await store.append('assistant', '字'.repeat(900));
+    }
+    const order: string[] = [];
+    let release = (): void => {};
+    const slow: Summarize = async () => {
+      order.push('trim:start');
+      await new Promise<void>((r) => {
+        release = r;
+      });
+      order.push('trim:end');
+      return '这是摘要。';
+    };
+    const s = makeStore({ summarize: slow });
+    const plan = planTrim(await s.window());
+    expect(plan.drop.length).toBeGreaterThan(0);
+
+    const trim = s.onTrimNeeded(plan);
+    await vi.waitFor(() => expect(order).toContain('trim:start'));
+    const write = s.enqueueWrite(async () => {
+      order.push('extract');
+    });
+    expect(order).toEqual(['trim:start']); // the extraction has NOT started
+    release();
+    await Promise.all([trim, write]);
+    expect(order).toEqual(['trim:start', 'trim:end', 'extract']);
+  });
+
+  it('enqueueWrite runs immediately on an idle store and chains two writes in order', async () => {
+    const order: string[] = [];
+    await store.enqueueWrite(async () => {
+      order.push('a');
+    });
+    const p1 = store.enqueueWrite(async () => {
+      await Promise.resolve();
+      order.push('b');
+    });
+    const p2 = store.enqueueWrite(async () => {
+      order.push('c');
+    });
+    await Promise.all([p1, p2]);
+    expect(order).toEqual(['a', 'b', 'c']);
+  });
+
+  it('a rejecting enqueueWrite does not poison the chain, and its rejection reaches the caller', async () => {
+    await expect(
+      store.enqueueWrite(async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    await expect(store.enqueueWrite(async () => 'ok')).resolves.toBe('ok');
+  });
+
+  it('FW-3a: after close() the fence rejects a write instead of racing db.close()', async () => {
+    store.close();
+    await expect(store.enqueueWrite(async () => 'never')).rejects.toThrow(/closed/);
+  });
+
+  it('trimSettled() covers an enqueued write too', async () => {
+    let done = false;
+    const p = store.enqueueWrite(async () => {
+      await Promise.resolve();
+      done = true;
+    });
+    await store.trimSettled();
+    expect(done).toBe(true);
+    await p;
   });
 });
