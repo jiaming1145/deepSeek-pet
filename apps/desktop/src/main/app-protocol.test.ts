@@ -1,11 +1,12 @@
 import { join, sep } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Neither `net` nor `protocol` is touched by the pure resolver under test; mocking keeps the real
 // electron package (which prints to stdout when required outside Electron) out of the run.
-vi.mock('electron', () => ({ net: {}, protocol: {} }));
+const electronApp = { isPackaged: false };
+vi.mock('electron', () => ({ app: electronApp, net: {}, protocol: {} }));
 
-const { allowedPetOrigins, isAllowedPetUrl, PET_URL, resolveRendererRequest } = await import('./app-protocol');
+const { allowedPetOrigins, devDebugEnabled, devRendererUrl, isAllowedPetUrl, PET_URL, rendererUrl, resolveRendererRequest } = await import('./app-protocol');
 
 const root = `${sep}app${sep}out${sep}renderer`;
 
@@ -110,5 +111,111 @@ describe('isAllowedPetUrl', () => {
 
   it('grants nothing extra when ELECTRON_RENDERER_URL is unparseable', () => {
     expect(allowedPetOrigins('::::')).toEqual(['app://local']);
+  });
+});
+
+describe('M-9: dev hooks are gated on !app.isPackaged', () => {
+  afterEach(() => {
+    electronApp.isPackaged = false;
+    delete process.env.ELECTRON_RENDERER_URL;
+    delete process.env.DS_DEBUG;
+  });
+
+  it('honours ELECTRON_RENDERER_URL and DS_DEBUG in an unpackaged run', () => {
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    process.env.DS_DEBUG = '1';
+    expect(devRendererUrl()).toBe('http://localhost:5173');
+    expect(rendererUrl('bubble')).toBe('http://localhost:5173/bubble.html');
+    expect(allowedPetOrigins()).toEqual(['app://local', 'http://localhost:5173']);
+    expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(true);
+    expect(devDebugEnabled()).toBe(true);
+  });
+
+  it('ignores both in a packaged build: the IPC trust origin stays app://local', () => {
+    electronApp.isPackaged = true;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    process.env.DS_DEBUG = '1';
+    expect(devRendererUrl()).toBeUndefined();
+    expect(rendererUrl('pet')).toBe(PET_URL);
+    expect(allowedPetOrigins()).toEqual(['app://local']);
+    expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(false);
+    expect(devDebugEnabled()).toBe(false);
+  });
+
+  it('treats an empty ELECTRON_RENDERER_URL as unset', () => {
+    process.env.ELECTRON_RENDERER_URL = '';
+    expect(devRendererUrl()).toBeUndefined();
+    expect(rendererUrl('chat')).toBe('app://local/chat.html');
+  });
+});
+
+describe('G2-1: the dev origin table — only an http(s) loopback URL without credentials is a key', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['plain', 'http://localhost:5173', 'http://localhost:5173'],
+    ['upper-case host', 'http://LOCALHOST:5173', 'http://localhost:5173'],
+    ['trailing slash', 'http://localhost:5173/', 'http://localhost:5173'],
+    ['with a path', 'http://localhost:5173/pet.html', 'http://localhost:5173'],
+    ['default port', 'http://localhost', 'http://localhost'],
+    ['explicit default port', 'http://localhost:80', 'http://localhost'],
+    ['https', 'https://localhost:5173', 'https://localhost:5173'],
+    ['IPv4 loopback', 'http://127.0.0.1:5173', 'http://127.0.0.1:5173'],
+    ['IPv6 loopback', 'http://[::1]:5173', 'http://[::1]:5173'],
+  ])('accepts %s (%s)', (_label, devUrl, key) => {
+    expect(allowedPetOrigins(devUrl)).toEqual(['app://local', key]);
+    expect(isAllowedPetUrl(`${key}/pet.html`, devUrl)).toBe(true);
+  });
+
+  it.each([
+    ['file: (would make every file: document trusted)', 'file:///a'],
+    ['a remote host', 'http://evil.example:5173'],
+    ['a loopback look-alike', 'http://localhost.evil:5173'],
+    ['a non-loopback IP', 'http://10.0.0.1:5173'],
+    ['userinfo', 'http://user:pw@localhost:5173'],
+    ['a bare username', 'http://user@localhost:5173'],
+    ['app://local.evil', 'app://local.evil'],
+    ['a foreign scheme', 'ws://localhost:5173'],
+    ['malformed', 'not a url'],
+    ['a scheme-relative value', '//localhost:5173'],
+  ])('rejects %s (%s) and grants nothing beyond app://local', (_label, devUrl) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(allowedPetOrigins(devUrl)).toEqual(['app://local']);
+    expect(isAllowedPetUrl(devUrl, devUrl)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // Once per value: the guard is consulted on every IPC event and must not spam the log.
+    allowedPetOrigins(devUrl);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('app://local as the dev URL widens nothing (it is granted anyway, never as a dev key)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(allowedPetOrigins('app://local')).toEqual(['app://local']);
+    expect(allowedPetOrigins('app://local/')).toEqual(['app://local']);
+  });
+
+  it('file:///a never authorises file:///b (or file:///a)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(isAllowedPetUrl('file:///b', 'file:///a')).toBe(false);
+    expect(isAllowedPetUrl('file:///a', 'file:///a')).toBe(false);
+  });
+
+  it('a port mismatch against an accepted dev origin is rejected', () => {
+    expect(isAllowedPetUrl('http://localhost:5174/pet.html', 'http://localhost:5173')).toBe(false);
+    expect(isAllowedPetUrl('http://localhost/pet.html', 'http://localhost:5173')).toBe(false);
+  });
+
+  it('a packaged build ignores even a valid loopback ELECTRON_RENDERER_URL', () => {
+    electronApp.isPackaged = true;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    try {
+      expect(allowedPetOrigins()).toEqual(['app://local']);
+      expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(false);
+    } finally {
+      electronApp.isPackaged = false;
+      delete process.env.ELECTRON_RENDERER_URL;
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
-import { isAllowedPetUrl, PET_URL } from './app-protocol';
+import { devDebugEnabled, isAllowedPetUrl, rendererUrl } from './app-protocol';
 import { clampDrag, clampToDisplays, loadWindowState, saveWindowState, type Rect } from './window-state';
 
 export const PET_SIZE = { w: 420, h: 720 };
@@ -71,8 +71,9 @@ export function createPetWindow(options: PetWindowOptions): BrowserWindow {
   // Registered *before* the load is observed, so a synchronous rejection cannot arrive first.
   win.once('ready-to-show', options.onReadyToShow);
 
-  const query = process.env.DS_DEBUG === '1' ? '?debug=1' : '';
-  const base = process.env.ELECTRON_RENDERER_URL ? `${process.env.ELECTRON_RENDERER_URL}/pet.html` : PET_URL;
+  // M-9: both dev hooks are read through app-protocol's `!app.isPackaged` gate, never from env here.
+  const query = devDebugEnabled() ? '?debug=1' : '';
+  const base = rendererUrl('pet');
   // Never `void`: a rejected load (missing renderer build, dev server down, bad app:// authority)
   // is asynchronous, so it bypasses the startup catch and would leave an unhandled rejection plus
   // an invisible always-on-top window wired to a tray icon that controls nothing.

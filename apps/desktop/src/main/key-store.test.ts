@@ -95,6 +95,41 @@ describe('KeyStore', () => {
     expect(store.source()).toBe('none');
   });
 
+  const undecryptable = (): SafeStoragePort => ({
+    ...fakeSafe(),
+    decryptString: () => {
+      throw new Error('DPAPI: bad ciphertext');
+    },
+  });
+
+  it('G-14: an undecryptable key.bin reports source none (no dev key), logs once, keeps the file', () => {
+    const file = tmpFile();
+    new KeyStore({ file, safeStorage: fakeSafe(), isPackaged: false, env: {} }).set('sk-abcdef123456');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = new KeyStore({ file, safeStorage: undecryptable(), isPackaged: false, env: {} });
+    expect(store.get()).toBeNull();
+    expect(store.source()).toBe('none');
+    expect(store.get()).toBeNull();
+    expect(store.source()).toBe('none');
+    expect(store.hasStored()).toBe(true);
+    expect(existsSync(file)).toBe(true); // not quarantined: the key window overwrites it
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it('G-14: an undecryptable key.bin falls back to the dev key AND reports source dev-env', () => {
+    const file = tmpFile();
+    new KeyStore({ file, safeStorage: fakeSafe(), isPackaged: false, env: {} }).set('sk-abcdef123456');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const store = new KeyStore({
+      file, safeStorage: undecryptable(), isPackaged: false,
+      env: { [DEV_KEY_ENV]: 'dev-key-123456' },
+    });
+    expect(store.get()).toBe('dev-key-123456');
+    expect(store.source()).toBe('dev-env');
+    error.mockRestore();
+  });
+
   it('notifies onChange on set and on clear, and stops after unsubscribe', () => {
     const store = new KeyStore({ file: tmpFile(), safeStorage: fakeSafe(), isPackaged: false, env: {} });
     const seen: Array<{ present: boolean; source: string }> = [];
