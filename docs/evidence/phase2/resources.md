@@ -11,3 +11,5 @@ CPU is the summed TotalProcessorTime delta / window / logical cores, so 100 % me
 | speaking | 7 | 5 | 2.48 | 747 |
 | idle | 7 | 10 | 0.93 | 757.2 |
 | speaking | 7 | 5 | 1.92 | 746.4 |
+| idle | 7 | 10 | 1.09 | 747.3 |
+| speaking | 7 | 5 | 2.72 | 750.1 |
