@@ -1,5 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["node"], "lib": ["ES2022"], "allowImportingTsExtensions": true },
-  "include": ["src/main", "src/preload", "electron.vite.config.ts", "vite.browser.config.ts", "playwright.config.ts", "vitest.config.ts", "playwright.electron.config.ts"]
+  // tests/fixtures/motion and tests/fixtures/arbiter are MAIN-side fixtures (§12.7 B-06/B-07/B-09):
+  // they construct `WindowMotionController`, so they belong to this program and are excluded from
+  // tsconfig.renderer.json, whose three Cubism relaxations (strictNullChecks: false above all)
+  // cannot compile src/main. Everything else under tests/ stays in the renderer program.
+  "include": ["src/main", "src/preload", "tests/fixtures/motion", "tests/fixtures/arbiter", "electron.vite.config.ts", "vite.browser.config.ts", "playwright.config.ts", "vitest.config.ts", "playwright.electron.config.ts"]
 }
