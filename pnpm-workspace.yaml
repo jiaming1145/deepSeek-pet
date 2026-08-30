@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - apps/*
+  - eval
 
 # pnpm 10 blocks dependency build scripts by default. Electron's postinstall unpacks
 # node_modules/electron/dist (the real electron.exe), so it has to be allowed.

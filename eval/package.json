@@ -1,0 +1,16 @@
+{
+  "name": "@ds/eval",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "eval": "node run.mjs",
+    "eval:dry": "node run.mjs --dry",
+    "test": "node --test lib/*.test.mjs"
+  },
+  "dependencies": {
+    "@ds/brain": "workspace:*",
+    "@ds/memory": "workspace:*"
+  }
+}

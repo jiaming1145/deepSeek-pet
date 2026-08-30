@@ -44,6 +44,8 @@ Environment verified in this session (do not re-derive):
 - **A-4 (after T4)** §3.9 `TurnRunner.release`: the user-row commit promise carries a warn-and-swallow handler so a superseded turn cannot surface an unhandled rejection.
 - **A-5 (after T5)** Evidence artefacts under `docs/evidence/` are byte-exact (`.gitattributes` `-text`) and must be produced with the cwd banner `D:\\ds\\…`, never a worktree path — regenerate or normalise before committing.
 - **A-6 (after T4)** `brain:turnDone.lint` / `MetricsRecord.lint` is the LAST sentence's verdict, not the turn's union; T9/T10 count violations with `lintReply` over the full reply.
+- **A-7 (after T9)** §3.2 `TagScanner.push`: when no `<|` is present the scanner now **holds a trailing `<`** in the buffer instead of flushing it as text (`const hold = this.buf.endsWith('<') ? 1 : 0; …; this.buf = hold ? '<' : ''`). Reason: an SSE delta boundary landing exactly on the `<` of `<|ACT …|>` split the tag into `<` + `|ACT …|>`, so the whole control token was painted into the user's speech bubble and `StreamParser.complianceMiss` went true. `flush()` still emits a genuine trailing `<` at end of stream. Regression cases live in `packages/brain/src/tags.test.ts`.
+- **A-8 (after T9)** §1.3 / §1.5 / §7.1 `eval/package.json` `"test"` is **`node --test lib/*.test.mjs`**, not `node --test lib/`. Reason: on Node v24.17.0 the positional is expanded as a glob, `lib/` matches only the directory entry, and the runner dies with `Cannot find module …\eval\lib`. Same semantics (node:test, `lib/` only), glob written out. T10's byte-identical edit of that script block must quote the glob form in both its old and new block.
 
 ## 0.1 Task numbering, ownership and execution shape (v2 — canonical)
 
@@ -302,7 +304,7 @@ packages:
     "eval:dry": "node run.mjs --dry",
     "session": "node session.mjs",
     "session:dry": "node session.mjs --dry",
-    "test": "node --test lib/"
+    "test": "node --test lib/*.test.mjs"
   },
   "dependencies": {
     "@ds/brain": "workspace:*",
@@ -469,7 +471,7 @@ import '@testing-library/jest-dom/vitest';
 
 Notes an implementer must not "fix":
 - `environmentMatchGlobs` prints a deprecation warning on vitest 3. It is still honoured (verified in the installed type surface) and is what R6 mandates. **If a future vitest removes it**, the replacement is a `// @vitest-environment jsdom` docblock as line 1 of every `src/renderer/**/*.test.{ts,tsx}` file — nothing else changes.
-- The root `vitest.config.ts` (`projects: ['packages/*','apps/*','scripts']`) is **unchanged**: `packages/brain` and `packages/memory` become projects automatically (verified in preflight). `eval` is deliberately **not** a vitest project — its tests use the Node built-in runner instead (`eval/package.json` gets `"test": "node --test lib/"`, §7.1). Because that suite therefore sits outside the repo-wide `pnpm test` gate, the root `package.json` gains **`"test:eval": "pnpm --filter @ds/eval test"`** (owner: **T9**), and T10's precondition gate and final sweep both run `pnpm test && pnpm test:eval`. Without that, an eval regression is invisible.
+- The root `vitest.config.ts` (`projects: ['packages/*','apps/*','scripts']`) is **unchanged**: `packages/brain` and `packages/memory` become projects automatically (verified in preflight). `eval` is deliberately **not** a vitest project — its tests use the Node built-in runner instead (`eval/package.json` gets `"test": "node --test lib/*.test.mjs"`, §7.1). Because that suite therefore sits outside the repo-wide `pnpm test` gate, the root `package.json` gains **`"test:eval": "pnpm --filter @ds/eval test"`** (owner: **T9**), and T10's precondition gate and final sweep both run `pnpm test && pnpm test:eval`. Without that, an eval regression is invisible.
 - Test-count expectations in a brief are **deltas** against the measured baseline (**23 files / 206 tests** at HEAD `ba2b3ef`, §0). Never write an absolute repo-wide total, and never re-base against the superseded 198.
 
 ### 1.6 `apps/desktop/electron.vite.config.ts` — literal diff (R5)
@@ -1109,7 +1111,7 @@ export interface TrimPlan { keep: ChatMessage[]; drop: ChatMessage[]; droppedTok
 
 ### 3.2 `src/tags.ts` — `TagScanner`
 
-Reproduced from the v1 plan verbatim except `import … from './types.ts'` (C1). It contains no parameter properties, so R1 needs no change here.
+Reproduced from the v1 plan verbatim except `import … from './types.ts'` (C1) and the trailing-`<` hold in `push` (**amendment A-7**, after T9). It contains no parameter properties, so R1 needs no change here.
 
 ```ts
 import { isEmotion, type ScanItem, type Tag } from './types.ts';
@@ -1133,7 +1135,8 @@ export class TagScanner {
     const out: ScanItem[] = [];
     for (;;) {
       const start = this.buf.indexOf(OPEN);
-      if (start < 0) { if (this.buf) out.push({ kind: 'text', text: this.buf }); this.buf = ''; break; }
+      // Hold a trailing '<': it may be the first half of an OPEN split across two chunks.
+      if (start < 0) { const hold = this.buf.endsWith('<') ? 1 : 0; const text = hold ? this.buf.slice(0, -1) : this.buf; if (text) out.push({ kind: 'text', text }); this.buf = hold ? '<' : ''; break; }
       if (start > 0) { out.push({ kind: 'text', text: this.buf.slice(0, start) }); this.buf = this.buf.slice(start); }
       const end = this.buf.indexOf(CLOSE);
       if (end < 0) {
@@ -3404,7 +3407,7 @@ node eval/run.mjs [options]
   "eval:dry": "node run.mjs --dry",
   "session": "node session.mjs",          // T10's 20-turn continuous-session probe
   "session:dry": "node session.mjs --dry",
-  "test": "node --test lib/"              // node:test, NOT vitest (§1.5)
+  "test": "node --test lib/*.test.mjs"    // node:test, NOT vitest (§1.5)
 }
 ```
 
