@@ -1,5 +1,5 @@
 
- RUN  v3.2.7 D:/ds/.claude/worktrees/wf_763d5a61-ab1-1
+ RUN  v3.2.7 D:/ds
 
  ✓ |@ds/brain| src/sanitize.test.ts > sanitizeForDisplay > strips markdown emphasis and list markers 1ms
  ✓ |@ds/brain| src/sanitize.test.ts > sanitizeForDisplay > removes bracketed stage directions 0ms

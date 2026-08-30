@@ -1,4 +1,4 @@
 
-> @ds/memory@0.1.0 typecheck D:\ds\.claude\worktrees\wf_4a01842b-9f1-2\packages\memory
+> @ds/memory@0.1.0 typecheck D:\ds\packages\memory
 > tsc -p tsconfig.json
 
