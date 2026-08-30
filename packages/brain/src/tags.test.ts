@@ -50,3 +50,18 @@ describe('TagScanner', () => {
     expect(run(['嗯<|AC'])).toEqual([{ kind: 'text', text: '嗯' }, { kind: 'text', text: '<|AC' }]);
   });
 });
+
+describe('TagScanner — chunk boundary on the opening <', () => {
+  it('holds a trailing < after text and releases it when it was not a tag', () => {
+    expect(run(['a<', 'b'])).toEqual([
+      { kind: 'text', text: 'a' },
+      { kind: 'text', text: '<b' },
+    ]);
+  });
+  it('flushes a lone trailing < at end of stream as text', () => {
+    expect(run(['你好<'])).toEqual([
+      { kind: 'text', text: '你好' },
+      { kind: 'text', text: '<' },
+    ]);
+  });
+});
