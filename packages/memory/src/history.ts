@@ -13,7 +13,7 @@ import type {
 } from '@ds/brain';
 import type { HistoryRow } from '@ds/protocol';
 import { KV_LAST_TRIM_ID, getKv, setKv } from './db.ts';
-import type { RunningSummary } from './summary.ts';
+import { sanitizeMemoryText, type RunningSummary } from './summary.ts';
 
 /**
  * Safety net only. It sits ABOVE planTrim's 24_000 trigger on purpose: planTrim
@@ -94,7 +94,10 @@ export class HistoryStore implements HistoryPort, MetricsPort {
 
   /** Tier 3 retrieval is Phase 3 (spec §6). The port exists now so the prompt layout is final. */
   facts(): Promise<string[]> {
-    return Promise.resolve([]);
+    // M-5: the same sanitiser as the summary, applied here so Phase 3's real rows cannot forge a
+    // `【记住】` line either. Empty in Phase 2, so the map is a no-op today.
+    const rows: string[] = [];
+    return Promise.resolve(rows.map(sanitizeMemoryText));
   }
 
   recentAssistant(n: number): Promise<string[]> {
@@ -132,6 +135,21 @@ export class HistoryStore implements HistoryPort, MetricsPort {
   async onTrimNeeded(plan: TrimPlan): Promise<void> {
     if (plan.drop.length === 0) return;
 
+    // plan.drop carries no row ids: it is the oldest prefix of the current window, so the new
+    // trim point is the plan.drop.length-th row with id > last_trim_id in ascending id order
+    // (contracts §4.3). If that query returns no row the plan no longer matches the table and
+    // NOTHING is written — neither the summary nor the pointer.
+    //
+    // I-10: resolved BEFORE the summarize await, while the table still matches the plan. A
+    // `history:delete` landing during the network call used to shift the row-count offset onto
+    // kept rows and move the pointer past turns that were never summarised. An id resolved now
+    // bounds `id >` correctly even if that very row is deleted before the transaction below.
+    const row = this.db
+      .prepare('SELECT id FROM messages WHERE id > ? ORDER BY id ASC LIMIT 1 OFFSET ?')
+      .get(this.lastTrimId(), plan.drop.length - 1) as { id: number } | undefined;
+    if (row === undefined) return;
+    const nextTrimId = row.id;
+
     let next: string;
     try {
       next = await this.summarize(this.summaryStore.getSync(), plan.drop);
@@ -142,16 +160,6 @@ export class HistoryStore implements HistoryPort, MetricsPort {
       );
       return;
     }
-
-    // plan.drop carries no row ids: it is the oldest prefix of the current window, so the new
-    // trim point is the plan.drop.length-th row with id > last_trim_id in ascending id order
-    // (contracts §4.3). If that query returns no row the plan no longer matches the table and
-    // NOTHING is written — neither the summary nor the pointer.
-    const row = this.db
-      .prepare('SELECT id FROM messages WHERE id > ? ORDER BY id ASC LIMIT 1 OFFSET ?')
-      .get(this.lastTrimId(), plan.drop.length - 1) as { id: number } | undefined;
-    if (row === undefined) return;
-    const nextTrimId = row.id;
 
     this.db.exec('BEGIN');
     try {
