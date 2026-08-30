@@ -68,9 +68,16 @@ export class PressTracker {
 
   mousedown(e: PressEvent): void {
     if (e.button !== 0) return;
+    // FIX ROUND 1 (finding 6): a still-live GRABBED press means its mouseup was lost and no
+    // intervening `mousemove` reported `buttons === 0`. Dropping it here would send `arb:grab` with
+    // no matching `arb:release`, and main's motor (R3-5) would keep owning the window. Finish it
+    // first — never as a tap: this gesture did not end where the user let go, it ended when we
+    // noticed. A `pending` press sent no grab, so it needs no release.
+    const stale = this.press;
     this.rejected = false;
     this.consumed = false;
     this.press = null;
+    if (stale?.phase === 'grabbed') this.opts.onRelease({ pressId: stale.pressId, wasTap: false });
     // The id is stamped for every left press, rejected or not: a pressId names a GESTURE, and main
     // correlates `arb:grab`/`arb:release` by it — reusing an id a swallowed press already had would
     // make a later grab indistinguishable from a replay of that one.

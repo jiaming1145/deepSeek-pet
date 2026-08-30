@@ -161,14 +161,19 @@ async function main(): Promise<void> {
     },
     // `ArbiterPorts.gaze` is THIS file's adapter onto Task 8's lane; the arbiter never sees GazeLane.
     gaze: {
-      apply: (t: GazeTarget, ease) => {
+      apply: (t: GazeTarget, _ease, ttlMs) => {
         const now = performance.now();
         if (t.kind === 'anchor') { gazeLane?.look({ kind: 'anchor', anchor: t.anchor }, now); return; }
         if (t.kind === 'point') { gazeLane?.look({ kind: 'point', x: t.x, y: t.y }, now); return; }
         // CONTRACT GAP: §5.6 gives no pattern -> target table and no per-request ease.
         // 'follow'/'cursorLock' ride the cursor; every other pattern releases to the lane's own state.
         if (t.pattern === 'follow' || t.pattern === 'cursorLock') {
-          gazeLane?.touchTarget({ x: 0, y: 0, followCursor: true }, ease ?? LOOK_LEASE_TTL_MS, now);
+          // FIX ROUND 1 (finding 4): the LEASE ttl, not the ease. §5.10 grants gaze with
+          // easeMs = 120 and ttl = 900; passing the ease here expired the underlying GazeLane lease
+          // 780 ms early while the arbiter still held the lane. `_ease` has no consumer: GazeLane
+          // exposes no tween — the eyes snap and its own research §5 lag model recruits the head
+          // GAZE_HEAD_DELAY_MS (100 ms) later, which is the 120 ms §5.10 asks for. Recorded.
+          gazeLane?.touchTarget({ x: 0, y: 0, followCursor: true }, ttlMs ?? LOOK_LEASE_TTL_MS, now);
         } else {
           gazeLane?.end('completed', now);
         }
