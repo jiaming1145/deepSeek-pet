@@ -24,13 +24,20 @@ be measured, and the exact commands that will measure it: [`not-measured.md`](no
 | prompt-cache hit, turns 3+ (session) | **NOT MEASURED** | ≥ 70 % (X1) | [`metrics-cache-hit.txt`](metrics-cache-hit.txt) |
 | prompt-cache hit, turns 3–20 (in app) | **NOT MEASURED** | ≥ 70 % (X1) | [`app-20-turns.md`](app-20-turns.md) |
 | tuning iterations | 0 of 3 | ≤ 3 (R8) | [`tuning-log.md`](tuning-log.md) |
-| cold-profile first message, virgin `--user-data-dir` | 391 · 456 · 462 · 476 ms | ≤ 3 s | [`app-first-message-cold.png`](app-first-message-cold.png), `e2e-report.json` |
+| cold-profile first message, virgin `--user-data-dir` | 391 · 456 · 462 · 476 ms (round 1) · 688–721 ms over eight more launches (fix round 1) | ≤ 3 s | [`app-first-message-cold.png`](app-first-message-cold.png), `e2e-report.json` |
 | band / composer top edge vs the pet window | 68.6 % | ≥ 55 % of the pet's height | [`app-placement.png`](app-placement.png), `bubble-place.test.ts` |
+| band rect vs composer rect, both visible | no shared pixel, light and dark and mid-reply | disjoint | [`app-placement.png`](app-placement.png), [`app-desktop.png`](app-desktop.png), [`app-inapp-checks.md`](app-inapp-checks.md) |
 | idle CPU / working set (whole Electron tree, 7 processes) | 1.27 % / **750.3 MB** | ≤ 4 % / ≤ 250 MB | [`resources.md`](resources.md) — CPU passes, **memory misses by 3×** |
 | speaking CPU / working set | 3.36 % / 742.2 MB | ≤ 4 % / ≤ 250 MB | [`resources.md`](resources.md) |
 | card budget | 673 / 700 tokens | ≤ 700 (A21) | [`task-3-card-tokens.txt`](task-3-card-tokens.txt) |
-| in-app checks Task 6 could not run | 5 PASS, 1 UNTESTABLE | — | [`app-inapp-checks.md`](app-inapp-checks.md) |
-| offline Electron end-to-end lane | 4 passed, 0 unexpected | — | [`e2e-report.json`](e2e-report.json) |
+| in-app checks Task 6 could not run | 6 PASS, 1 UNTESTABLE | — | [`app-inapp-checks.md`](app-inapp-checks.md) |
+| offline Electron end-to-end lane | 4 passed, 0 unexpected, 1 skipped (the gated real-API test) | — | [`e2e-report.json`](e2e-report.json) |
+
+`resources.md` carries **four** rows, not two: fix round 1 re-ran the Electron lane to re-photograph
+the placement fix, and every run appends its own `idle` / `speaking` sample. The second pair
+corroborates the first rather than replacing it — idle **1.25 %** / 748.2 MB, speaking **2.48 %** /
+747.0 MB — and the headline rows above are still the original pair. Neither number was re-rolled to
+get a friendlier one: the memory bar is missed by ~3× in both.
 
 ## The light/dark sheet
 
@@ -60,9 +67,11 @@ VIEWPORT and the direction-contract comment inside `bubble.html` are what the fi
 
 ## Every file in the §1.8 manifest, plus Task 10's own
 
-`docs/evidence/phase2/` holds 73 files. The rows below are the 39-file manifest
-(19 inherited + 20 produced here, with 3 of the 20 replaced by NOT MEASURED placeholders and 3
-extra Task 10 captures added), followed by the per-task working evidence T1–T8 left behind.
+`docs/evidence/phase2/` holds the §1.8 **39-file manifest** (19 inherited + 20 produced here, with
+3 of the 20 replaced by NOT MEASURED placeholders and 3 extra Task 10 captures added) **plus the
+per-task working evidence T0–T8 left behind**. No hard total is given: it drifts with every file a
+later task adds, and §8.7 is explicit that the gate is a manifest gate, not a count. Both groups are
+listed below — the manifest first, the working evidence after it.
 
 | File | Owner | What it proves |
 |---|---|---|
@@ -88,12 +97,12 @@ extra Task 10 captures added), followed by the per-task working evidence T1–T8
 | `app-chat-light.png`, `app-chat-dark.png` | T10 | the real composer with text, both themes |
 | `app-key-light.png`, `app-key-dark.png` | T10 | the real key window, masked field + disclosure line, both themes |
 | `app-first-message-cold.png` | T10 | the cold-profile first message on the desktop: virgin user-data dir, band up in 391–476 ms, over her lower third |
-| `app-placement.png` | T10 | the composer on the band's rect over her lower third — the controller's placement ruling, in the running app |
-| `app-desktop.png` | T10 | pet + **speaking** band composited on the desktop, mouth open, DPI-aware capture (offline echo brain) |
+| `app-placement.png` | T10 | the composer on the band's anchor rect over her lower third — the controller's placement ruling — with the band stepped clear below it, in the running app |
+| `app-desktop.png` | T10 | pet + **speaking** band + the open composer composited on the desktop, mouth open, DPI-aware capture (offline echo brain). Before fix round 1 the composer had to be closed for this shot, because it covered the band |
 | `app-history-interrupted.png` | T10 | the `[中断]` row in the running app after `Escape` mid-reply, keeping only the sentence whose `playback:sentenceDone` arrived (R2) |
-| `app-inapp-checks.md` | T10 | the six in-app checks: hover pin, drag follow, display reconciliation (UNTESTABLE, 1 monitor), pointerleave re-arm, Escape mid-reply, abandoned IME |
+| `app-inapp-checks.md` | T10 | the seven in-app checks: hover pin, drag follow, display reconciliation (UNTESTABLE, 1 monitor), pointerleave re-arm, band/composer disjointness, Escape mid-reply, abandoned IME |
 | `resources.md` | T10 | idle and speaking CPU / working set for the whole Electron process tree |
-| `e2e-report.json` | T10 | the Playwright run record for the Electron lane: 4 expected, 0 unexpected, 0 skipped |
+| `e2e-report.json` | T10 | the Playwright run record for the Electron lane: 4 expected, 0 unexpected, 1 skipped — the skip is the `20 real turns` test, gated on `DEEPSEEK_API_KEY` |
 | `deferred.md` | T10 | the deferral ledger, the honesty clauses and the shortfall table |
 | `README.md` | T10 | this sheet |
 

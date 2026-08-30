@@ -28,7 +28,7 @@ later be mistaken for an oversight. Sources: `.superpowers/sdd/2026-08-29-phase2
 
 ## Recorded deviations from the addendum
 
-The seven deviations `contracts.md` §8.5 lists are in force: `bubble:place` / `bubble:size` as two
+The nine deviations `contracts.md` §8.5 lists are in force. The first seven: `bubble:place` / `bubble:size` as two
 channels; the added `bubble:hover`; the added `speech:mouth` / `speech:complete` relays; Space does
 not complete the reveal (Enter on an empty composer does); `post_history_instructions` sits in the
 latest user message rather than the system block; `DS_DEV_DEEPSEEK_KEY` — not `DEEPSEEK_API_KEY` —
@@ -38,17 +38,35 @@ C-4 is also recorded: Chromium disables LCD sub-pixel anti-aliasing on transpare
 surfaces, so the band renders with grayscale AA. That is accepted, not a defect — the bar is crisp
 grayscale at a 300 % crop with no colour fringing required.
 
-**An eighth deviation, added by Task 10 on the controller's ruling of 2026-08-29:** `placeBubble`
+**The eighth deviation, added by Task 10 on the controller's ruling of 2026-08-29:** `placeBubble`
 is no longer a head-anchored flip/shift popover. `BUBBLE_GAP` is still exported as C6's number but
-the band geometry does not use it, because the band **overlaps** her body by design. The band is
-anchored at `BAND_ANCHOR_Y = 0.72` of the pet window's height with a hard `BAND_TOP_MAX_FRACTION =
-0.55` floor on its top edge, extends LEFT with her horizontal centre at `BAND_PET_FRACTION = 0.80`
-of its width (her in its right third), and only ever takes the sides `left` / `right`. The chat
-window goes through the same call instead of asking for `'top'`. This is `task-0-direction.md`'s
-FIRST VIEWPORT and the direction-contract comment inside `bubble.html`, which the shipped code was
-contradicting: `desktop-chat-over-pet.png` and `task6-fake-brain-run.png` show the composer and the
-placeholder band across her FACE. `app-placement.png` and `app-first-message-cold.png` are the
-same surfaces after the fix.
+the band geometry does not use it as a gap to *her*, because the band **overlaps** her body by
+design. The band is anchored at `BAND_ANCHOR_Y = 0.72` of the pet window's height with a hard
+`BAND_TOP_MAX_FRACTION = 0.55` floor on its top edge, extends LEFT with her horizontal centre at
+`BAND_PET_FRACTION = 0.80` of its width (her in its right third), and only ever takes the sides
+`left` / `right`. The chat window goes through the same call instead of asking for `'top'`. This is
+`task-0-direction.md`'s FIRST VIEWPORT and the direction-contract comment inside `bubble.html`,
+which the shipped code was contradicting: `desktop-chat-over-pet.png` and `task6-fake-brain-run.png`
+show the composer and the placeholder band across her FACE. `app-placement.png` and
+`app-first-message-cold.png` are the same surfaces after the fix.
+
+**This ledger is not where that change lives.** Review round 1 was right that a deferral note is no
+substitute for the contract, so `contracts.md` §5.3, §5.3.1, §6.1, §8.5 (deviations 8 and 9), §8.6
+row 16 and §8.7's `placeBubble` row were amended to the shipped geometry in the same change-set, and
+`bubble-place.test.ts` test **G2** pins the five re-measured rects. A Phase 3 task reading the
+contract now gets the code that exists.
+
+**A ninth deviation, added in fix round 1:** `placeBubble` takes a fifth argument, `avoid`. The
+composer takes the band's anchor rect, but §6.2 rule 4 holds it open for the whole reply and rule 6
+needs it open to restore the text on an error — so both always-on-top windows are on screen at once
+and were rendering two different texts into the same rectangle (visible in `app-placement.png`
+behind and around the composer box, and worked around in `phase2.spec.ts`, which used to send
+`chat:close` before capturing `app-desktop.png`). The composer keeps the rect; the **band** steps
+below it, or above it when the work area has no room below. `brain-service.ts` supplies `avoid` from
+the chat window's bounds on every band placement and re-places the band on the chat window's
+`show` / `hide` and on `chat:resize`. Hiding the band while the composer is up was the other
+candidate and was rejected: it would make her whole reply invisible for as long as the composer is
+open.
 
 ## What the Phase 2 numbers actually cover
 
@@ -108,14 +126,16 @@ same surfaces after the fix.
 | idle CPU, whole Electron tree | 1.27 % | ≤ 4 % | **within bar** |
 | speaking CPU | 3.36 % | ≤ 4 % | **within bar** (30 Hz pet + reveal timer + mouth sync) |
 | cold-profile first message | 391–476 ms over four launches | ≤ 3 s (controller ruling) | **within bar**, on a virgin `--user-data-dir` every time. aa0e9df's replay fix holds. |
-| composer / band top edge vs the pet | 68.6 % of the pet window's height | ≥ 55 % (controller ruling) | **within bar** in the running app, both themes; 16 unit tests pin it across the whole band size range. |
+| composer / band top edge vs the pet | 68.6 % of the pet window's height | ≥ 55 % (controller ruling) | **within bar** in the running app, both themes; 22 unit tests pin it across the whole band size range. |
+| band rect vs composer rect, both visible | disjoint | no shared pixel | **within bar.** Fixed in review round 1: the band dodges the visible composer (`placeBubble`'s `avoid`). Pinned by four unit tests over three work areas × four pet positions × three composer heights × the whole band size range, and asserted in the Electron lane while both windows are up. |
 | A9/A19 and the other 14 judged axes | NOT MEASURED | — | Insufficient balance. Neither passed nor failed. |
 | R4 first-sentence p50 | NOT MEASURED | ≤ 1200 ms | Insufficient balance. |
 | X1 prompt-cache hit | NOT MEASURED | ≥ 70 % | Insufficient balance. |
 | addendum §0 paint latency | NOT MEASURED | ≤ 100 ms | Insufficient balance. |
-| display-removal reconciliation | UNTESTABLE | — | One monitor on this machine. The handler path was exercised synthetically (`screen.emit('display-removed')` and `('display-metrics-changed')`) and the pet and band both stayed inside the work area, but a physical unplug and a real scale change were not produced. |
+| display-removal reconciliation | UNTESTABLE | — | One monitor on this machine. The handler path was exercised synthetically: the pet window is first moved **outside** the work area, then `screen.emit('display-removed')` and `('display-metrics-changed')` are fired, and the assertion is that `reconcileDisplays` pulled her back to a grabbable position and the band followed. That assertion fails if the handler is removed (it did not, before fix round 1 moved the windows out first). A physical unplug and a real scale change were still not produced. |
 | the chat window with the history pane open (360 × 468 DIP) | top edge at 36 % of the pet | ≥ 55 % | **Deliberate exception.** 468 DIP does not fit between 55 % of the pet and the work-area bottom, so C14 (never cross the work area) wins and the window is placed against it. Still far below her face — the defect this replaced put the top edge at ~5 %. Pinned by its own unit test. |
 | `eval-report-final.json`, `session-20-turns.json`, `app-20-turns.json` | not produced | — | A machine-readable report is either a measurement or a lie. The `.md` siblings exist and say NOT MEASURED. |
 | `app-desktop.png`, `app-history-interrupted.png` | produced by the **offline** lane | — | The brief has the real-API test produce both. With the API unreachable they were produced on `DS_FAKE_BRAIN=1` instead — real windows, real compositor, real interruption path, scripted words. The real-API run would overwrite them. |
 | `task-3-card-tokens.txt` | 140 bytes | > 200 bytes (the brief's own completeness floor) | The brief's Step 1 and Step 18 gates reject any evidence file under 200 bytes. That file is six correct lines and is 140 bytes. The gate's floor is wrong for it, not the file; both gates were run as written and this is the one row they flag. |
-| the offline Electron lane | 4 passed | the brief says 3 | A fourth test carries the four in-app checks the controller ruled Task 10 must exercise. `e2e-report.json` records `expected: 4, unexpected: 0, skipped: 0`. |
+| the offline Electron lane | 4 passed | the brief says 3 | A fourth test carries the four in-app checks the controller ruled Task 10 must exercise. `e2e-report.json` records `expected: 4, unexpected: 0, skipped: 1` — the skip is the `20 real turns` test, gated on `DEEPSEEK_API_KEY`. |
+| `phase2.spec.ts`'s `20 real turns` aggregation | fixed but **never executed** | — | Fix round 1 corrected the `t.usage !== null` filter (a `brain:error` entry has no `usage` at all, and `undefined !== null` is true, so one errored turn survived it and then threw a TypeError), carried the prompt id on the recorded turn instead of re-deriving it by position, and added an assertion that no turn errored. The test is still skipped for want of a key/balance, so those three lines have never run. Verified only by `tsc`. |

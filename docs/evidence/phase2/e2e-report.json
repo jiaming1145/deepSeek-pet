@@ -5,9 +5,7 @@
       "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\node_modules\\@playwright\\test\\cli.js",
       "test",
       "-c",
-      "playwright.electron.config.ts",
-      "--grep-invert",
-      "20 real turns"
+      "playwright.electron.config.ts"
     ],
     "configFile": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\playwright.electron.config.ts",
     "rootDir": "D:/ds/.claude/worktrees/wf_fd945927-780-1/apps/desktop/tests-e2e",
@@ -90,28 +88,31 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 15255,
+                  "duration": 15391,
                   "errors": [],
                   "stdout": [
                     {
-                      "text": "[check] cold-profile first message (light): visible after 697 ms (bar <= 3000 ms)\n"
+                      "text": "[check] cold-profile first message (light): visible after 701 ms (bar <= 3000 ms)\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWZpcnN0LW1lc3NhZ2UtY29sZC5wbmcNCg=="
+                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWZpcnN0LW1lc3NhZ2UtY29sZC5wbmcNCg=="
                     },
                     {
                       "text": "[check] placement (light): composer top at 68.6 % of the pet window (bar >= 55 %), x 2038 vs pet 2116\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLXBsYWNlbWVudC5wbmcNCg=="
+                      "text": "[check] band vs composer (light): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":104,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
                     },
                     {
-                      "buffer": "aWRsZTogY3B1PTEuMjclIHdzPTc1MC4zTUIgcHJvY3M9Nw0K"
+                      "buffer": "Y2FwdHVyZWQgOTEyeDExNTIgYXQgMjkyOCw5MzYgKGRjIG9mZnNldCAyOTI4LDkzNikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLXBsYWNlbWVudC5wbmcNCg=="
+                    },
+                    {
+                      "buffer": "aWRsZTogY3B1PTEuMjUlIHdzPTc0OC4yTUIgcHJvY3M9Nw0K"
                     }
                   ],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T03:33:37.311Z",
+                  "startTime": "2026-08-30T04:22:42.372Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -140,19 +141,22 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1225,
+                  "duration": 1219,
                   "errors": [],
                   "stdout": [
                     {
-                      "text": "[check] cold-profile first message (dark): visible after 701 ms (bar <= 3000 ms)\n"
+                      "text": "[check] cold-profile first message (dark): visible after 706 ms (bar <= 3000 ms)\n"
                     },
                     {
                       "text": "[check] placement (dark): composer top at 68.6 % of the pet window (bar >= 55 %), x 2038 vs pet 2116\n"
+                    },
+                    {
+                      "text": "[check] band vs composer (dark): band {\"x\":1976,\"y\":1202,\"width\":438,\"height\":102,\"scaleFactor\":1.5} composer {\"x\":2038,\"y\":1142,\"width\":360,\"height\":48,\"scaleFactor\":1.5} overlap=false\n"
                     }
                   ],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T03:33:52.586Z",
+                  "startTime": "2026-08-30T04:22:57.783Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -181,12 +185,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1336,
+                  "duration": 1388,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-08-30T03:33:53.819Z",
+                  "startTime": "2026-08-30T04:22:59.008Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -196,7 +200,7 @@
           ],
           "id": "e4611f7184bd5eaa3983-42846ee9e7875e29218f",
           "file": "phase2.spec.ts",
-          "line": 111,
+          "line": 135,
           "column": 1
         },
         {
@@ -215,7 +219,7 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 48209,
+                  "duration": 48062,
                   "errors": [],
                   "stdout": [
                     {
@@ -225,16 +229,19 @@
                       "text": "[check] the bubble follows a drag of the pet: PASS — pet moved (-180, -60); band moved (-180, -60)\n"
                     },
                     {
-                      "text": "[check] display-removal reconciliation: UNTESTABLE — only 1 display on this machine, so a real unplug cannot be produced. The handler path was exercised synthetically (screen.emit('display-removed') + ('display-metrics-changed')): pet inside work area true, band inside work area true, band top at 64.7 % of the pet.\n"
+                      "text": "[check] display-removal reconciliation: UNTESTABLE — only 1 display on this machine, so a real unplug and a real scale change cannot be produced. The handler path was exercised synthetically: pet stranded at x 3160 (outside the work area: true); after display-removed + display-metrics-changed she is back at x 2512, grabbable true, and the band is inside the work area true. The assertion is not vacuous — it fails if reconcileDisplays is removed — but it is not the physical event either.\n"
                     },
                     {
                       "text": "[check] pointerleave re-arms the hide: PASS — the first message had armed a hide; while the pointer was on the band it never fired, and the band hid within 20 s of pointerleave: true\n"
                     },
                     {
-                      "buffer": "Y2FwdHVyZWQgNzAyeDExNTIgYXQgMjg2OCw4NDYgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWRlc2t0b3AucG5nDQo="
+                      "text": "[check] band and composer never share a pixel: PASS — mid-reply, both windows visible: band {\"x\":2047,\"y\":1144,\"width\":125,\"height\":102,\"scaleFactor\":1.5}, composer {\"x\":1858,\"y\":1082,\"width\":360,\"height\":50,\"scaleFactor\":1.5}, pet.y 588. The band steps below the composer (contracts 5.3 step 6 / 6.1), so app-desktop.png carries both.\n"
                     },
                     {
-                      "buffer": "c3BlYWtpbmc6IGNwdT0zLjM2JSB3cz03NDIuMk1CIHByb2NzPTcNCg=="
+                      "buffer": "Y2FwdHVyZWQgODE5eDExNTIgYXQgMjc1MSw4NDYgKGRjIG9mZnNldCAyNzUxLDg0NikgLT4gRDpcZHNcLmNsYXVkZVx3b3JrdHJlZXNcd2ZfZmQ5NDU5MjctNzgwLTFcZG9jc1xldmlkZW5jZVxwaGFzZTJcYXBwLWRlc2t0b3AucG5nDQo="
+                    },
+                    {
+                      "buffer": "c3BlYWtpbmc6IGNwdT0yLjQ4JSB3cz03NDdNQiBwcm9jcz03DQo="
                     },
                     {
                       "text": "[check] Escape mid-reply: chat stays open, history marks [中断]: PASS — 6.2 rule 4 (Escape while brainState !== idle cancels and does not close) and R2 (the history row keeps only the sentences whose playback:sentenceDone arrived, and carries the [中断] chip)\n"
@@ -248,34 +255,34 @@
                   "steps": [
                     {
                       "title": "hover holds the window interactive",
-                      "duration": 5018
+                      "duration": 5027
                     },
                     {
                       "title": "the bubble follows a drag of the pet",
-                      "duration": 15
+                      "duration": 12
                     },
                     {
                       "title": "display-removal reconciliation",
-                      "duration": 4
+                      "duration": 6
                     },
                     {
                       "title": "pointerleave re-arms the hide",
-                      "duration": 3444
+                      "duration": 3435
                     },
                     {
                       "title": "composited desktop shot while she is speaking",
-                      "duration": 36618
+                      "duration": 36381
                     },
                     {
                       "title": "Escape mid-reply cancels without closing, and history marks [中断]",
-                      "duration": 1736
+                      "duration": 1776
                     },
                     {
                       "title": "an abandoned IME composition is dismissed cleanly",
-                      "duration": 603
+                      "duration": 621
                     }
                   ],
-                  "startTime": "2026-08-30T03:33:55.162Z",
+                  "startTime": "2026-08-30T04:23:00.402Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -285,7 +292,61 @@
           ],
           "id": "e4611f7184bd5eaa3983-9b44087aeb5802aa1cf3",
           "file": "phase2.spec.ts",
-          "line": 138,
+          "line": 162,
+          "column": 1
+        },
+        {
+          "title": "20 real turns: cache hit, paint latency, composited desktop, interruption marker",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [
+                {
+                  "type": "skip",
+                  "description": "DEEPSEEK_API_KEY not set",
+                  "location": {
+                    "file": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
+                    "line": 426,
+                    "column": 8
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 1,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-08-30T04:23:48.471Z",
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "DEEPSEEK_API_KEY not set",
+                      "location": {
+                        "file": "D:\\ds\\.claude\\worktrees\\wf_fd945927-780-1\\apps\\desktop\\tests-e2e\\phase2.spec.ts",
+                        "line": 426,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "skipped"
+            }
+          ],
+          "id": "e4611f7184bd5eaa3983-27bf25a9d2bf44698446",
+          "file": "phase2.spec.ts",
+          "line": 425,
           "column": 1
         }
       ]
@@ -293,10 +354,10 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-08-30T03:33:36.984Z",
-    "duration": 66413.799,
+    "startTime": "2026-08-30T04:22:42.062Z",
+    "duration": 66442.969,
     "expected": 4,
-    "skipped": 0,
+    "skipped": 1,
     "unexpected": 0,
     "flaky": 0
   }
