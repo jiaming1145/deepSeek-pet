@@ -1,3 +1,12 @@
+// @vitest-environment node
+//
+// T7 note (§1.5): this file is T0's and its assertions are untouched. R6's
+// `environmentMatchGlobs: [['src/renderer/**', 'jsdom']]` would sweep it into jsdom, whose `web`
+// transform mode makes Vite rewrite `new URL('./tokens.css', import.meta.url)` into a dev-server
+// `http://localhost:3000/...` URL, so `fileURLToPath` throws "The URL must be of scheme file".
+// §1.4 states this suite "runs in the node environment on purpose"; the one-line docblock — the
+// same per-file mechanism §1.5 names, and the mirror image of pet/debug-panel.test.ts's
+// `// @vitest-environment jsdom` — is what keeps that true without editing R6's literal config.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';

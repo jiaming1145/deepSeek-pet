@@ -2,17 +2,45 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
-  <title>bubble (placeholder)</title>
-  <style>
-    html, body { margin: 0; background: transparent; overflow: hidden; }
-    #box { display: inline-block; box-sizing: border-box; min-width: 120px; min-height: 44px;
-           max-width: 460px; padding: 12px 16px; border-radius: 14px; color: #eef1f7;
-           font: 16px/26px system-ui, "Microsoft YaHei UI", sans-serif;
-           background: rgba(20, 27, 46, 0.92); }
-  </style>
+  <title>ds bubble</title>
+  <!-- Inline so the window has a transparent ground before bubble.css loads (C2: zero white frames). -->
+  <style>html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }</style>
 </head>
 <body>
-  <div id="box"></div>
-  <script type="module" src="/bubble/placeholder.ts"></script>
+  <!-- DIRECTION CONTRACT · seed key 94ed1849 · impeccable new-work §5 · task-0-direction.md
+       THESIS: her words land in the ADV 对话框 every ACG reader has read ten thousand lines in —
+         a translucent ink-navy band with a slanted name plate, typewriter reveal and a blinking ▼,
+         and the box does what an ADV box does: click to skip, flip to input when it is your line.
+         It refuses the glass chat bubble with a tail, the toast, and the card.
+       OWN-WORLD: ink-navy band rgba(20,27,46,.92) (light rgba(250,248,244,.92)), cool-white text,
+         a slanted parallelogram plate in the character's accent, gold advance mark, and a separate
+         grey-blue system voice for hints. One family, weights 400/600; every size, radius, shadow
+         and duration is a C5 token. The band's left edge is cut at the plate's 8°: the one
+         signature device, everything else quiet.
+       STORY: she is a character in a game you happen to be inside. You read her line as it types,
+         tap to skip when you are impatient, click the box when it is your turn. Hints from the app
+         are never in her voice.
+       FIRST VIEWPORT: the band sits over Haru's lower third and extends LEFT, so she stands in its
+         right third (ma: never centred on her); it flips right when the work area has no room.
+         Plate on the top-left corner, hanging above the band; ▼ blinks at 1 Hz when a sentence
+         closes; a thin hint strip may appear with the band.
+       FORM: ADV message window, grounded candidate 1 of 7. Raises kept from the declined hand:
+         ruling as baseline (26 px line grid), state as material (emotion tints the plate and
+         weights the line, never a badge), ma, drawn edges, idle dissolve.
+       FINISH: unreviewed and undocumented is unfinished. This build ends with the finish review,
+         the verdict, DESIGN.md, and every shipping raster carrying its provenance. -->
+  <div id="content" class="content">
+    <div id="bubble" class="bubble" data-side="left" data-emotion="neutral" hidden>
+      <span class="bubble__rail" aria-hidden="true"></span>
+      <div class="bubble__plate" data-bubble-plate hidden></div>
+      <div class="bubble__surface">
+        <p id="bubble-text" class="bubble__text" data-bubble-text></p>
+        <span class="bubble__advance" data-bubble-advance aria-hidden="true">▼</span>
+      </div>
+      <span class="bubble__anchor" aria-hidden="true"></span>
+    </div>
+    <div id="hint" class="hint" role="status" hidden></div>
+  </div>
+  <script type="module" src="/bubble/main.ts"></script>
 </body>
 </html>
