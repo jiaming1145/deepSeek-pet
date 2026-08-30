@@ -1,3 +1,5 @@
+import { CubismFramework } from '@framework/live2dcubismframework';
+import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismUpdateOrder, ICubismUpdater } from '@framework/motion/icubismupdater';
 import type { CubismModel } from '@framework/model/cubismmodel';
 import {
@@ -101,7 +103,7 @@ class PetPoseUpdater extends ICubismUpdater {
   /** 1 = fully opaque. §5.9's work-mode fade tween, re-applied every frame so nothing resets it. */
   opacity = 1;
   constructor(
-    private readonly ids: { angleX: unknown; angleZ: unknown; bodyAngleZ: unknown },
+    private readonly ids: { angleX: CubismIdHandle; angleZ: CubismIdHandle; bodyAngleZ: CubismIdHandle },
     private readonly matrix: { getArray(): Float32Array; setMatrix(a: Float32Array): void; scaleRelative(x: number, y: number): void; translateRelative(x: number, y: number): void } | null,
   ) { super(DRAG_POSE_ORDER); }
 
@@ -109,7 +111,7 @@ class PetPoseUpdater extends ICubismUpdater {
     model.setModelOapcity(this.opacity);
     const p = this.pose;
     if (!p) return;
-    const add = (id: unknown, v: number): void => { if (v !== 0) model.addParameterValueById(id as never, v, 1.0); };
+    const add = (id: CubismIdHandle, v: number): void => { if (v !== 0) model.addParameterValueById(id, v, 1.0); };
     add(this.ids.angleX, p.angleX);
     add(this.ids.angleZ, p.angleZ);
     add(this.ids.bodyAngleZ, p.bodyAngleZ);
@@ -200,7 +202,10 @@ async function main(): Promise<void> {
 
   overlay = new OverlayUpdater();
   stage.model.addUpdater(overlay);
-  const idOf = (name: string): unknown => (stage.model.parameterIds().includes(name) ? name : name);
+  // `addParameterValueById` compares CubismIdHandle IDENTITY (cubismmodel.ts:615), so a raw string
+  // silently matches nothing. Same resolver the §5.7 overlay uses; the Framework is booted by
+  // Live2DStage.create above.
+  const idOf = (name: string): CubismIdHandle => CubismFramework.getIdManager().getId(name);
   poseUpdater = new PetPoseUpdater(
     { angleX: idOf('ParamAngleX'), angleZ: idOf('ParamAngleZ'), bodyAngleZ: idOf('ParamBodyAngleZ') },
     stage.model.getModelMatrix() as unknown as ConstructorParameters<typeof PetPoseUpdater>[1],
@@ -292,15 +297,16 @@ async function main(): Promise<void> {
     sfx,
     intensity: () => arbiter.liveliness().touchVariantIntensity,
   });
+  // `Live2DStage.toDevice` is private (stage.ts:242, Task 11's file); the mapping is the canvas's
+  // own rendered-box ratio, so it is re-derived here rather than reaching into another task's file.
+  const toDevice = (x: number, y: number): { x: number; y: number } => {
+    const r = canvas.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return { x: 0, y: 0 };
+    return { x: ((x - r.left) / r.width) * canvas.width, y: ((y - r.top) / r.height) * canvas.height };
+  };
   const press = new PressTracker({
     slopPx: TAP_SLOP_DIP,
-    // `Live2DStage.toDevice` is private (stage.ts:242, Task 11's file); the mapping is the canvas's
-    // own rendered-box ratio, so it is re-derived here rather than reaching into another task's file.
-    toDevice: (x, y) => {
-      const r = canvas.getBoundingClientRect();
-      if (!(r.width > 0) || !(r.height > 0)) return { x: 0, y: 0 };
-      return { x: ((x - r.left) / r.width) * canvas.width, y: ((y - r.top) / r.height) * canvas.height };
-    },
+    toDevice,
     queuePress: (p) => pressReader.queue(p),
     pick: (x, y) => picker.pick(x, y, stage.currentProjection()),
     hitPartDefault,
@@ -324,6 +330,17 @@ async function main(): Promise<void> {
   // §6.3: the reader is the stage's own; the serviced read comes back on the frame after the press.
   stage.onPressRead = (r) => press.resolvePress(r.pressId, r.alpha);
 
+  /** client px -> the [-1,1] gaze target, i.e. ViewTransform.toGaze over the same device mapping.
+   *  `GazeDriver.setTarget` clamps to the unit square, so an unconverted client pixel would peg her
+   *  eyes at the bottom-right corner for every cursor position on screen. */
+  const toGaze = (clientX: number, clientY: number): { x: number; y: number } => {
+    const d = toDevice(clientX, clientY);
+    return {
+      x: Math.max(-1, Math.min(1, (d.x / canvas.width) * 2 - 1)),
+      y: Math.max(-1, Math.min(1, -((d.y / canvas.height) * 2 - 1))),
+    };
+  };
+
   const sampleCursor = (x: number, y: number): void => {
     lastCursor = { x, y };
     const inside = opaqueAt(x, y) || overPanel(x, y);
@@ -332,14 +349,15 @@ async function main(): Promise<void> {
     // Task 8's machine has enter/move/leave, not cursor(inside).
     if (inside) { if (hoverAck.state === 'out') hoverAck.enter(now); else hoverAck.move(now); }
     else hoverAck.leave(now);
-    // CSS px are DIPs in the pet renderer (no zoom), so x/y serve as both.
-    gazeLane?.setCursor({ x, y, dipX: x, dipY: y }, now);
+    // CSS px are DIPs in the pet renderer (no zoom), so x/y are the DIP pair; the lane's own x/y
+    // are the normalised gaze target it feeds straight into the GazeDriver.
+    const g = toGaze(x, y);
+    gazeLane?.setCursor({ x: g.x, y: g.y, dipX: x, dipY: y }, now);
   };
   window.addEventListener('mousemove', (e) => {
     // First, so a release we never saw as a mouseup stops the press before anything else runs.
     press.mousemove(e);
-    sampleCursor(e.clientX, e.clientY);
-    if (!bridge) stage.gazeClient(e.clientX, e.clientY); // browser mode: gaze from local mouse
+    sampleCursor(e.clientX, e.clientY);   // the gaze lane owns the gaze in BOTH lanes now (§5.6)
     const el = document.getElementById('dbg-hit'); if (el) el.textContent = `hit: ${stage.hitTestClient(e.clientX, e.clientY) ?? '-'}`;
   });
   window.addEventListener('mousedown', (e) => press.mousedown(e));
