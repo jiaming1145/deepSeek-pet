@@ -175,6 +175,45 @@ describe('HistoryStore', () => {
     expect((await failing.window()).length).toBe(3);
   });
 
+  it('I-10: a history:delete of a dropped row during the summarize await does not move last_trim_id past kept turns', async () => {
+    await store.append('user', '一', { turnId: 't1' });
+    await store.append('assistant', '二', { turnId: 't1' });
+    await store.append('user', '三', { turnId: 't2' });
+    await store.append('assistant', '四', { turnId: 't2' });
+    await store.append('user', '五', { turnId: 't3' });
+    await store.append('assistant', '六', { turnId: 't3' });
+
+    let release: (s: string) => void = () => {};
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const slow = makeStore({ summarize: () => gate });
+    const plan: TrimPlan = {
+      keep: [
+        { role: 'user', content: '三' },
+        { role: 'assistant', content: '四' },
+        { role: 'user', content: '五' },
+        { role: 'assistant', content: '六' },
+      ],
+      drop: [
+        { role: 'user', content: '一' },
+        { role: 'assistant', content: '二' },
+      ],
+      droppedTokens: 2,
+    };
+
+    const trimming = slow.onTrimNeeded(plan);
+    // The chat window deletes the very turn being summarised while the network call is in flight.
+    expect(slow.deleteTurn('t1')).toBe(2);
+    release('摘要。');
+    await trimming;
+
+    // Bounded by the id resolved BEFORE the await: rows 3..6 stay inside the window.
+    expect(getKv(db, KV_LAST_TRIM_ID)).toBe('2');
+    expect((await slow.window()).map((m) => m.content)).toEqual(['三', '四', '五', '六']);
+    expect(await slow.summary()).toBe('摘要。');
+  });
+
   it('deleteTurn removes both rows of a turn and returns 2', async () => {
     await store.append('user', '你好', { turnId: 'turn-a' });
     await store.append('assistant', '你好呀。', { turnId: 'turn-a' });
