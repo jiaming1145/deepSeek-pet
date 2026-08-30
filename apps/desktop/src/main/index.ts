@@ -8,6 +8,7 @@ import { HistoryStore, MemoryOpenError, RunningSummary, openDb } from '@ds/memor
 import { registerAppScheme, serveRenderer } from './app-protocol';
 import { BrainService } from './brain-service';
 import { createBubbleWindow, hideBubble, showBubble } from './bubble-window';
+import { decideChatRequest, type ChatRequestSource } from './chat-request';
 import { closeChat, createChatWindow, openChat } from './chat-window';
 import { startCursorPolling, type CursorPolling } from './cursor';
 import { fatal } from './fatal';
@@ -21,6 +22,7 @@ import {
 import {
   createPetWindow, handleLoadFailure, moveBy, reconcileDisplays, savePetPosition, setClickThrough,
 } from './pet-window';
+import { createBeforeQuit } from './quit';
 import { makeSummarizer } from './summarizer';
 import { createTray } from './tray';
 import { createVisibilityController } from './visibility-state';
@@ -96,8 +98,16 @@ function setBubbleVisible(on: boolean): void {
 /** Idempotent: derives the bubble window's visibility from (brain wants it) AND (shell allows it). */
 function applyBubbleVisibility(): void {
   if (!bubble || bubble.isDestroyed()) return;
-  if (bubbleWanted && !visibility.verdict.hidden) showBubble(bubble);
-  else hideBubble(bubble);
+  if (bubbleWanted && !visibility.verdict.hidden) {
+    showBubble(bubble);
+    return;
+  }
+  // M-8: a hide that lands under the pointer delivers no `bubble:hover {inside:false}`, so the
+  // service is told directly — it drops the hover pin, restores click-through and re-arms an owed
+  // hide. Harmless on the timer-driven path, where nothing is pinned by construction.
+  const wasVisible = bubble.isVisible();
+  hideBubble(bubble);
+  if (wasVisible) brain?.bubbleHidden();
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -267,11 +277,29 @@ if (!app.requestSingleInstanceLock()) {
     });
     onFromPet(petWin, Channels.stageError, ({ message }) => console.error('[pet] stage error', message));
 
-    // Three windows may legitimately send this one (contracts.md §2.7), so it gets one listener.
-    onFromAny([petWin, bubbleWin, keyWindow], Channels.chatOpen, ({ source, focusComposer }) => {
-      console.log('[chat] open source=%s', source);
+    // I-7: the ONE way into the chat — the pet double-click, the bubble click, the key window's
+    // save, the tray item and the hotkey all land here. A request while VisibilityState hides her
+    // used to stream the reply into a hidden pet and bubble, or pop the focusable composer over a
+    // fullscreen game. The decision is pure (`chat-request.ts`); this applies it.
+    const requestChat = (source: ChatRequestSource, focusComposer: boolean): void => {
+      const decision = decideChatRequest({ hidden: visibility.verdict.hidden, get: visibility.get });
+      console.log('[chat] request source=%s decision=%s', source, decision);
+      if (decision === 'refuse') {
+        console.log('[chat] refused: hidden reason=%s', visibility.verdict.reason);
+        return;
+      }
+      if (decision === 'reveal') {
+        // The same two lines `second-instance` runs: the user asked for her back.
+        visibility.set('user', false);
+        visibility.apply();
+      }
       if (source === 'key' && !keyWindow.isDestroyed()) keyWindow.hide();
       openChat(chatWin, petWin, focusComposer);
+    };
+
+    // Three windows may legitimately send this one (contracts.md §2.7), so it gets one listener.
+    onFromAny([petWin, bubbleWin, keyWindow], Channels.chatOpen, ({ source, focusComposer }) => {
+      requestChat(source, focusComposer);
     });
 
     tray = createTray({
@@ -283,12 +311,12 @@ if (!app.requestSingleInstanceLock()) {
         console.log('[tray] debug:toggle');
         sendToPet(petWin, Channels.debugToggle, {});
       },
-      openChat: () => openChat(chatWin, petWin, true),
+      openChat: () => requestChat('tray', true),
       openKey: () => showKeyWindow('user'),
       quit: () => app.quit(),
     });
 
-    if (!globalShortcut.register('Control+Shift+Space', () => openChat(chatWin, petWin, true))) {
+    if (!globalShortcut.register('Control+Shift+Space', () => requestChat('hotkey', true))) {
       console.error('[hotkey] Ctrl+Shift+Space is already taken by another app');
     }
 
@@ -331,25 +359,40 @@ if (!app.requestSingleInstanceLock()) {
   };
   // The two `screen.on` registrations live inside `app.whenReady()` above — see the comment there.
 
-  app.on('before-quit', () => {
-    screen.removeListener('display-removed', onDisplaysChanged);
-    screen.removeListener('display-metrics-changed', onDisplaysChanged);
-    // Release the close→hide hold first, or destroy() below fights holdWindowOpen.
-    markQuitting();
-    // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
-    if (pet) savePetPosition(pet);
-    globalShortcut.unregisterAll();
-    brain?.dispose();
-    brain = null;
-    cursorPolling?.stop();
-    foreground?.stop();
-    tray?.destroy();
-    tray = null;
-    for (const win of [bubble, chat, keyWin]) win?.destroy();
-    bubble = null;
-    chat = null;
-    keyWin = null;
-    db?.close();
-    db = null;
+  // I-9: `brain.dispose()` is a barrier — the `[中断]` row and the metrics row of a turn cut off
+  // by the quit are written after `TurnRunner.cancel()` returns — so the first `before-quit` is
+  // prevented, the drain awaited, and only then is the db closed and `app.quit()` called again.
+  // The sequence and its re-entry guard live in `quit.ts`, where they are unit-tested.
+  const beforeQuit = createBeforeQuit({
+    teardownSync: () => {
+      screen.removeListener('display-removed', onDisplaysChanged);
+      screen.removeListener('display-metrics-changed', onDisplaysChanged);
+      // Release the close→hide hold first, or destroy() below fights holdWindowOpen.
+      markQuitting();
+      // Safety net: a drag whose mouseup lands outside the window can lose its avatar:dragEnd.
+      if (pet) savePetPosition(pet);
+      globalShortcut.unregisterAll();
+      cursorPolling?.stop();
+      foreground?.stop();
+      tray?.destroy();
+      tray = null;
+    },
+    drain: async () => {
+      const service = brain;
+      brain = null;
+      await service?.dispose();
+    },
+    teardownAfterDrain: () => {
+      for (const win of [bubble, chat, keyWin]) win?.destroy();
+      bubble = null;
+      chat = null;
+      keyWin = null;
+    },
+    closeDb: () => {
+      db?.close();
+      db = null;
+    },
+    quit: () => app.quit(),
   });
+  app.on('before-quit', beforeQuit.handler);
 }
