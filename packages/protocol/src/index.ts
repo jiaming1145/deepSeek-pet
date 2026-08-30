@@ -22,13 +22,19 @@ export const isEmotion = (s: string): s is Emotion => (EMOTIONS as readonly stri
 export const TurnStateSchema = z.enum(['idle', 'thinking', 'speaking']);
 export type TurnState = z.infer<typeof TurnStateSchema>;
 
+/**
+ * Upper bound, in seconds, of a `<|PAUSE n|>` beat (I-5). `@ds/brain` clamps in `parseTag`; the
+ * schema mirrors it so a bubble can never be parked on an empty band by a runaway number.
+ */
+export const PAUSE_MAX_S = 3;
+
 export const SentenceEventSchema = z.object({
   turnId: z.string().min(1),
   seq: z.number().int().nonnegative(),
   text: z.string(),
   emotion: EmotionSchema,
   motion: z.string().optional(),
-  pause: z.number().nonnegative().optional(),
+  pause: z.number().nonnegative().max(PAUSE_MAX_S).optional(),
 });
 export type SentenceEvent = z.infer<typeof SentenceEventSchema>;
 
