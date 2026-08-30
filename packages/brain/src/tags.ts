@@ -1,28 +1,50 @@
-import { PAUSE_MAX_S } from '@ds/protocol';
+import { PAUSE_MAX_S, type WalkAnchor } from '@ds/protocol';
+import { parseLook, parseWalkTo, type LookTarget } from './act.ts';
 import { isEmotion, type ScanItem, type Tag } from './types.ts';
 
-const OPEN = '<|', CLOSE = '|>', MAX_TAG = 64;
+const OPEN = '<|', CLOSE = '|>';
+/**
+ * §2.6: worst case `<|ACT emotion=surprised motion=<24 chars> look=-0.75,-0.50 walkTo=corner-br|>`
+ * is 91; 96 leaves headroom and still keeps a runaway `<|` from buffering.
+ */
+export const MAX_TAG = 96;
 
-/** G-11: one anchored ACT grammar — exactly `ACT`, attributes `emotion` (required) / `motion` (optional). */
-const ACT_ATTR = /^(emotion|motion)=([\w-]+)$/;
+/** §2.6: four attributes; `[\w.,-]` because `look=-0.75,-0.50` needs `.` and `,`. */
+export const ACT_ATTR = /^(emotion|motion|look|walkTo)=([\w.,-]+)$/;
 
-export function parseTag(raw: string): Tag | null {
+export type DroppedAttr = 'look' | 'walkTo' | 'unknown';
+/** Called once per dropped attribute (§2.6 "counted as a compliance miss"); the StreamParser owner wires it. */
+export type TagDropListener = (attr: DroppedAttr, word: string) => void;
+const NO_DROP: TagDropListener = () => {};
+
+export function parseTag(raw: string, onDrop: TagDropListener = NO_DROP): Tag | null {
   const body = raw.slice(OPEN.length, -CLOSE.length).trim();
   const pause = body.match(/^PAUSE\s+([0-9]*\.?[0-9]+)$/);
   // I-5: a model- or prompt-injected `<|PAUSE 100000|>` must never park the band for hours.
   if (pause) return { kind: 'pause', seconds: Math.min(Number(pause[1]), PAUSE_MAX_S) };
   const words = body.split(/\s+/);
   if (words[0] !== 'ACT' || words.length < 2) return null;
-  const attrs: { emotion?: string; motion?: string } = {};
+  const seen = new Set<string>();
+  let emotion: string | undefined, motion: string | undefined;
+  let look: LookTarget | undefined;
+  let walkTo: WalkAnchor | undefined;
   for (const word of words.slice(1)) {
     const m = ACT_ATTR.exec(word);
-    if (!m) return null;
-    const key = m[1] as 'emotion' | 'motion';
-    if (attrs[key] !== undefined) return null; // duplicate attribute
-    attrs[key] = m[2];
+    if (!m) { onDrop('unknown', word); continue; }          // per-attribute drop (§2.6)
+    const key = m[1], value = m[2];
+    if (seen.has(key)) return null;                          // duplicate: still a hard reject (§2.6)
+    seen.add(key);
+    if (key === 'emotion') emotion = value;
+    else if (key === 'motion') motion = value;
+    else if (key === 'look') { const t = parseLook(value); if (t) look = t; else onDrop('look', word); }
+    else { const a = parseWalkTo(value); if (a) walkTo = a; else onDrop('walkTo', word); }
   }
-  if (!attrs.emotion || !isEmotion(attrs.emotion)) return null;
-  return attrs.motion ? { kind: 'act', emotion: attrs.emotion, motion: attrs.motion } : { kind: 'act', emotion: attrs.emotion };
+  if (!emotion || !isEmotion(emotion)) return null;          // only a missing/invalid emotion rejects
+  const tag: Tag = { kind: 'act', emotion };
+  if (motion) tag.motion = motion;
+  if (look) tag.look = look;
+  if (walkTo) tag.walkTo = walkTo;
+  return tag;
 }
 
 /**
@@ -42,6 +64,8 @@ function reject(raw: string, out: ScanItem[]): string {
 
 export class TagScanner {
   private buf = '';
+  private readonly onDrop: TagDropListener;
+  constructor(onDrop: TagDropListener = NO_DROP) { this.onDrop = onDrop; }
   push(chunk: string): ScanItem[] {
     this.buf += chunk;
     const out: ScanItem[] = [];
@@ -66,7 +90,7 @@ export class TagScanner {
       const raw = this.buf.slice(0, end + CLOSE.length);
       this.buf = this.buf.slice(end + CLOSE.length);
       if (raw.length > MAX_TAG) { this.buf = reject(raw, out) + this.buf; continue; }
-      const tag = parseTag(raw);
+      const tag = parseTag(raw, this.onDrop);
       out.push(tag ? { kind: 'tag', tag } : { kind: 'badtag', raw });
     }
     return out;
