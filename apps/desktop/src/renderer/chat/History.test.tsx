@@ -153,4 +153,60 @@ describe('History', () => {
       holder.IntersectionObserver = prev;
     }
   });
+  // CX-9: the pane used to load once (`startedRef`) and never again, so every turn after the first
+  // opening was missing until an app reload.
+  it('re-reads the newest page on every closed->open edge (CX-9)', async () => {
+    const store: HistoryRow[] = [...ROWS];
+    const list = vi.fn(async () => ({ rows: [...store], nextBefore: null }));
+    const remove = vi.fn(async () => {});
+    const view = render(<History open list={list} remove={remove} now={() => CLOCK} />);
+    await waitFor(() => expect(screen.getByTestId('msg-3')).toBeInTheDocument());
+    view.rerender(<History open={false} list={list} remove={remove} now={() => CLOCK} />);
+    store.push(row({ id: 4, ts: CLOCK, content: '还行。' }));
+    view.rerender(<History open list={list} remove={remove} now={() => CLOCK} />);
+    await waitFor(() => expect(screen.getByTestId('msg-4')).toBeInTheDocument());
+    expect(screen.getByTestId('msg-3')).toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-reads the newest page after a turn completes while open, parked on the new row (CX-9)', async () => {
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollHeight');
+    let height = 1000;
+    Object.defineProperty(Element.prototype, 'scrollHeight', { configurable: true, get: () => height });
+    try {
+      const store: HistoryRow[] = [...ROWS];
+      const list = vi.fn(async () => ({ rows: [...store], nextBefore: null }));
+      const remove = vi.fn(async () => {});
+      const view = render(<History open refresh={0} list={list} remove={remove} now={() => CLOCK} />);
+      await waitFor(() => expect(screen.getByTestId('msg-3')).toBeInTheDocument());
+      expect(screen.getByRole('log').scrollTop).toBe(1000);
+      store.push(row({ id: 4, ts: CLOCK, role: 'user', content: '明天呢' }));
+      store.push(row({ id: 5, ts: CLOCK, content: '明天也在。' }));
+      height = 1400;
+      view.rerender(<History open refresh={1} list={list} remove={remove} now={() => CLOCK} />);
+      await waitFor(() => expect(screen.getByTestId('msg-5')).toBeInTheDocument());
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole('log').scrollTop).toBe(1400);
+      // Rows are keyed by id, so the refetch neither duplicates nor reorders the ones already read.
+      expect(screen.getAllByTestId(/^msg-/).map((el) => el.dataset.testid)).toEqual([
+        'msg-1', 'msg-2', 'msg-3', 'msg-4', 'msg-5',
+      ]);
+    } finally {
+      if (desc === undefined) delete (Element.prototype as { scrollHeight?: unknown }).scrollHeight;
+      else Object.defineProperty(Element.prototype, 'scrollHeight', desc);
+    }
+  });
+
+  it('a refresh keeps the first read\'s paging cursor and asks for the newest page (CX-9)', async () => {
+    const list = vi.fn(async (opts: { before?: number; limit?: number }) => ({
+      rows: opts.before === undefined ? ROWS : [],
+      nextBefore: opts.before === undefined ? 100 : null,
+    }));
+    const remove = vi.fn(async () => {});
+    const view = render(<History open refresh={0} list={list} remove={remove} now={() => CLOCK} />);
+    await waitFor(() => expect(screen.getByTestId('msg-3')).toBeInTheDocument());
+    view.rerender(<History open refresh={1} list={list} remove={remove} now={() => CLOCK} />);
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(list.mock.calls[1][0]).toEqual({ limit: 50 });
+  });
 });
