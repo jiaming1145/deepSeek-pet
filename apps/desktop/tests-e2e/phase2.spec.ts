@@ -58,6 +58,16 @@ for (const theme of ['light', 'dark'] as const) {
       }
       expect(coldMs, 'cold-profile first message must be visible within 3 s of launch').toBeLessThanOrEqual(3000);
 
+      // Pin the band so it is still on screen when the composer opens. Contracts 6.1 (amended,
+      // review round 1) says the two surfaces must never render into the same pixels, and that can
+      // only be asserted while BOTH windows are up; the linger would otherwise take the band away
+      // and make the assertion vacuous. The light branch already pinned it for the capture above.
+      if (theme !== 'light') {
+        await bubble.evaluate(() => {
+          document.querySelector('.bubble')?.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false }));
+        });
+      }
+
       // Clicking the band opens the chat (contracts 5.2 / C-12).
       const chat = await openChatByClickingTheBand(app, bubble);
       const composer = chat.getByRole('textbox');
@@ -74,6 +84,16 @@ for (const theme of ['light', 'dark'] as const) {
       // She stands in the band's right third: her centre is at >= 2/3 of the composer's width.
       const petCentreFraction = (pet.x + pet.width / 2 - chatRect.x) / chatRect.width;
       expect(petCentreFraction).toBeGreaterThanOrEqual(2 / 3);
+
+      // contracts 6.1 (amended, review round 1): the composer keeps the band's anchor rect and the
+      // BAND steps clear, so two always-on-top windows never render two texts into one rectangle.
+      // The band is pinned above, so a hidden band here is a failure of the pin, not a pass.
+      expect(await isVisible(app, 'bubble.html'), 'the band must still be pinned up, or this proves nothing').toBe(true);
+      const bandRect = await boundsOf(app, 'bubble.html');
+      const overlaps = chatRect.x < bandRect.x + bandRect.width && bandRect.x < chatRect.x + chatRect.width
+        && chatRect.y < bandRect.y + bandRect.height && bandRect.y < chatRect.y + chatRect.height;
+      logCheck(`band vs composer (${theme}): band ${JSON.stringify(bandRect)} composer ${JSON.stringify(chatRect)} overlap=${overlaps}`);
+      expect(overlaps, 'the band and the composer must not share a single pixel').toBe(false);
       if (theme === 'light') {
         captureRegion(await unionBounds(app, ['pet.html', 'chat.html', 'bubble.html']), join(EVIDENCE, 'app-placement.png'));
       }
@@ -97,8 +117,12 @@ for (const theme of ['light', 'dark'] as const) {
       await expect.poll(() => isVisible(app, 'chat.html'), { timeout: 10_000 }).toBe(true);
 
       // History pane: the first message was appended with kind 'system' (contracts 6.6, 6.3).
+      // The day header is matched by ROLE, not by bare text: the composer still holds the restored
+      // 「今天差点睡过头」 and React syncs that string onto the textarea's own text content a few
+      // ms after rule 6 restores it, so `getByText('今天')` is a two-element strict-mode violation
+      // that only stays green while the check happens to win that race.
       await chat.getByText('历史').click();
-      await expect(chat.getByText('今天')).toBeVisible({ timeout: 10_000 });
+      await expect(chat.getByRole('heading', { name: '今天' })).toBeVisible({ timeout: 10_000 });
 
       // Idle resource sample, once, while nothing is speaking (addendum section 0).
       if (theme === 'light') sampleResources('idle', 10);
@@ -200,34 +224,52 @@ test('in-app checks: hover pin, drag follow, display reconciliation, abandoned I
     // ---- check 3: display reconciliation ------------------------------------------------
     await test.step('display-removal reconciliation', async () => {
       const displays = await app.evaluate(({ screen }) => screen.getAllDisplays().length);
-      // Fire the two events index.ts listens for. On a single-monitor machine this exercises the
-      // handler and its reconcileDisplays + brain.reposition path; it is NOT a physical unplug.
+      // Review round 1: firing the events with both windows already inside the work area asserts
+      // nothing — the check passed identically with the handler deleted. So STRAND the pet first
+      // (move her wholly outside the work area, which is what an unplugged monitor leaves behind),
+      // then fire the two events index.ts listens for, then assert she was pulled back. It is
+      // still not a physical unplug; it is now a check that fails if `reconcileDisplays` or its
+      // registration goes away.
       const state = await app.evaluate(({ BrowserWindow, screen }) => {
-        (screen as unknown as { emit(e: string): void }).emit('display-removed');
-        (screen as unknown as { emit(e: string): void }).emit('display-metrics-changed');
         const win = (n: string) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes(n));
         const pet = win('pet.html');
         const bub = win('bubble.html');
         if (!pet || !bub) throw new Error('windows missing');
+        const home = pet.getBounds();
+        const wa = screen.getDisplayMatching(home).workArea;
+        // Wholly off the right-hand edge of the only work area, with nothing grabbable left.
+        pet.setPosition(wa.x + wa.width + 600, wa.y + 200, false);
+        const stranded = pet.getBounds();
+        (screen as unknown as { emit(e: string): void }).emit('display-removed');
+        (screen as unknown as { emit(e: string): void }).emit('display-metrics-changed');
         const pb = pet.getBounds();
         const bb = bub.getBounds();
-        return { pb, bb, wa: screen.getDisplayMatching(pb).workArea };
+        // Put her back where check 2 left her, so the composited shots below frame the pet rather
+        // than the screen edge; the same event re-places the band under her.
+        pet.setPosition(home.x, home.y, false);
+        (screen as unknown as { emit(e: string): void }).emit('display-metrics-changed');
+        return { home, stranded, pb, bb, wa };
       });
-      const petInside = state.pb.x >= state.wa.x && state.pb.y >= state.wa.y
-        && state.pb.x + state.pb.width <= state.wa.x + state.wa.width
-        && state.pb.y + state.pb.height <= state.wa.y + state.wa.height;
+      // `reconcileDisplays` promises GRABBABLE, not fully inside: `clampDrag` leaves at least
+      // MIN_GRABBABLE = 48 px of the window on both axes inside some work area (window-state.ts).
+      const grabbable = (r: { x: number; y: number; width: number; height: number }, min: number): boolean =>
+        Math.min(state.wa.x + state.wa.width, r.x + r.width) - Math.max(state.wa.x, r.x) >= min
+        && Math.min(state.wa.y + state.wa.height, r.y + r.height) - Math.max(state.wa.y, r.y) >= min;
+      const wasStranded = !grabbable(state.stranded, 1);
+      const petRecovered = grabbable(state.pb, 48);
       const bandInside = state.bb.x >= state.wa.x && state.bb.y >= state.wa.y
         && state.bb.x + state.bb.width <= state.wa.x + state.wa.width
         && state.bb.y + state.bb.height <= state.wa.y + state.wa.height;
-      const topFraction = (state.bb.y - state.pb.y) / state.pb.height;
+      const detail = `pet stranded at x ${state.stranded.x} (outside the work area: ${wasStranded}); after display-removed + display-metrics-changed she is back at x ${state.pb.x}, grabbable ${petRecovered}, and the band is inside the work area ${bandInside}`;
       if (displays > 1) {
-        record('display-removal reconciliation', petInside && bandInside ? 'PASS' : 'FAIL',
-          `${displays} displays; after display-removed + display-metrics-changed the pet and the band are both inside the work area`);
+        record('display-removal reconciliation', wasStranded && petRecovered && bandInside ? 'PASS' : 'FAIL',
+          `${displays} displays; ${detail}`);
       } else {
         record('display-removal reconciliation', 'UNTESTABLE',
-          `only ${displays} display on this machine, so a real unplug cannot be produced. The handler path was exercised synthetically (screen.emit('display-removed') + ('display-metrics-changed')): pet inside work area ${petInside}, band inside work area ${bandInside}, band top at ${(topFraction * 100).toFixed(1)} % of the pet.`);
+          `only ${displays} display on this machine, so a real unplug and a real scale change cannot be produced. The handler path was exercised synthetically: ${detail}. The assertion is not vacuous — it fails if reconcileDisplays is removed — but it is not the physical event either.`);
       }
-      expect(petInside && bandInside).toBe(true);
+      expect(wasStranded, 'the pet must actually start outside the work area, or this proves nothing').toBe(true);
+      expect(petRecovered && bandInside).toBe(true);
     });
 
     // ---- check 1b: leaving the band re-arms the hide -----------------------------------
@@ -263,22 +305,31 @@ test('in-app checks: hover pin, drag follow, display reconciliation, abandoned I
       await composer.fill(`早。${'今天挺普通的。'.repeat(40)}`);
       await composer.press('Enter');
       await expect.poll(lastState, { timeout: 60_000, intervals: [100] }).toBe('speaking');
-      // Put the composer away so this shot is the pet and the BAND on the desktop: the composer
-      // sits on the band's own rect and would cover it. The pet window is not focusable, so a
-      // focus steal cannot do it; `chat:close` is the channel the composer's own Escape uses.
-      await chat.evaluate(() => {
-        (window as unknown as { dsChat: { send(c: string, p: unknown): void } }).dsChat.send('chat:close', {});
-      });
-      await expect.poll(() => isVisible(app, 'chat.html'), { timeout: 10_000 }).toBe(false);
-      captureRegion(await unionBounds(app, ['pet.html', 'bubble.html']), join(EVIDENCE, 'app-desktop.png'));
+      // This shot is the whole shipping surface at once: the pet, the BAND she is speaking into and
+      // the composer still open under the user's hands. It used to send `chat:close` first, because
+      // the composer sat on the band's own rect and covered it — that workaround was the review's
+      // evidence for the collision, and it is gone now that the band steps clear (contracts 6.1).
+      const deskPet = await petBounds(app);
+      const deskBand = await boundsOf(app, 'bubble.html');
+      const deskChat = await boundsOf(app, 'chat.html');
+      const deskOverlap = deskChat.x < deskBand.x + deskBand.width && deskBand.x < deskChat.x + deskChat.width
+        && deskChat.y < deskBand.y + deskBand.height && deskBand.y < deskChat.y + deskChat.height;
+      record('band and composer never share a pixel', deskOverlap ? 'FAIL' : 'PASS',
+        `mid-reply, both windows visible: band ${JSON.stringify(deskBand)}, composer ${JSON.stringify(deskChat)}, pet.y ${deskPet.y}. The band steps below the composer (contracts 5.3 step 6 / 6.1), so app-desktop.png carries both.`);
+      expect(deskOverlap).toBe(false);
+      captureRegion(await unionBounds(app, ['pet.html', 'bubble.html', 'chat.html']), join(EVIDENCE, 'app-desktop.png'));
       sampleResources('speaking', 5);
       await expect.poll(lastState, { timeout: 120_000, intervals: [250] }).toBe('idle');
-      // Re-open for the interruption step (the band's click gesture is proved in the first-run tests).
-      await bubble.evaluate(() => {
-        (window as unknown as { dsBubble: { send(c: string, p: unknown): void } })
-          .dsBubble.send('chat:open', { source: 'bubble', focusComposer: true });
-      });
-      await expect.poll(() => isVisible(app, 'chat.html'), { timeout: 10_000 }).toBe(true);
+      // The composer no longer has to be closed for the shot, but the resource sampler spawns a
+      // console process and a foreground steal would light-dismiss it (6.1). Re-open only if that
+      // actually happened; the band's click gesture is proved in the first-run tests.
+      if (!(await isVisible(app, 'chat.html'))) {
+        await bubble.evaluate(() => {
+          (window as unknown as { dsBubble: { send(c: string, p: unknown): void } })
+            .dsBubble.send('chat:open', { source: 'bubble', focusComposer: true });
+        });
+        await expect.poll(() => isVisible(app, 'chat.html'), { timeout: 10_000 }).toBe(true);
+      }
     });
 
     await test.step('Escape mid-reply cancels without closing, and history marks [中断]', async () => {
@@ -414,7 +465,7 @@ test('20 real turns: cache hit, paint latency, composited desktop, interruption 
       };
       w.__turns = [];
       w.__states = [];
-      w.dsChat.on('brain:turnDone', (p) => { w.__turns.push(p); });
+      w.dsChat.on('brain:turnDone', (p) => { w.__turns.push({ ...(p as object) }); });
       w.dsChat.on('brain:error', (p) => { w.__turns.push({ error: p }); });
       w.dsChat.on('brain:state', (p) => { w.__states.push((p as { state: string }).state); });
     });
@@ -428,6 +479,12 @@ test('20 real turns: cache hit, paint latency, composited desktop, interruption 
       await composer.fill(prompts[i].text);
       await composer.press('Enter');
       await expect.poll(doneCount, { timeout: 90_000, intervals: [250] }).toBe(before + 1);
+      // Carry the prompt id ON the recorded turn. Deriving it from the row's position in a
+      // filtered array mislabels every later row the moment one turn errors or is dropped.
+      await chat.evaluate((id) => {
+        const t = (window as unknown as { __turns: Record<string, unknown>[] }).__turns.at(-1);
+        if (t) t.promptId = id;
+      }, prompts[i].id);
       if (i === 1) {
         // The band is painting right now: this is the one moment the composited desktop shot is
         // guaranteed to contain both the pet and a speaking band.
@@ -440,25 +497,33 @@ test('20 real turns: cache hit, paint latency, composited desktop, interruption 
 
     const raw = await chat.evaluate(() => (window as unknown as {
       __turns: {
-        usage: { promptTokens: number; cacheHit: number; cacheMiss: number; completionTokens: number } | null;
-        ttftMs: number | null; totalMs: number; complianceMiss: boolean; regenerated: boolean;
+        promptId?: string; error?: unknown;
+        usage?: { promptTokens: number; cacheHit: number; cacheMiss: number; completionTokens: number } | null;
+        ttftMs?: number | null; totalMs?: number; complianceMiss?: boolean; regenerated?: boolean;
       }[];
     }).__turns);
-    const withUsage = raw.filter((t) => t.usage !== null);
+    // A `brain:error` entry is `{error}` with NO `usage` key, and `undefined !== null` is true, so
+    // the old `t.usage !== null` filter kept it and then threw a TypeError on `t.usage!.promptTokens`
+    // instead of failing readably. Fail on the error itself first, then filter on a real usage object.
+    const errored = raw.filter((t) => 'error' in t);
+    expect(errored, `every turn must complete; got ${errored.length} brain:error entries: ${JSON.stringify(errored)}`).toEqual([]);
+    const withUsage = raw.filter((t) => t.usage != null && typeof t.usage === 'object');
     expect(withUsage.length).toBeGreaterThanOrEqual(20);
 
     const rows = withUsage.slice(0, 20).map((t, i) => ({
       turn: i + 1,
-      promptId: prompts[i].id,
+      promptId: t.promptId ?? `unlabelled-${i + 1}`,
       promptTokens: t.usage!.promptTokens,
       cacheHit: t.usage!.cacheHit,
       cacheMiss: t.usage!.cacheMiss,
       completionTokens: t.usage!.completionTokens,
-      ttftMs: t.ttftMs,
-      totalMs: t.totalMs,
-      complianceMiss: t.complianceMiss,
-      regenerated: t.regenerated,
+      ttftMs: t.ttftMs ?? null,
+      totalMs: t.totalMs ?? 0,
+      complianceMiss: t.complianceMiss === true,
+      regenerated: t.regenerated === true,
     }));
+    // The recorded ids must still be the fixture's, in order — the cheap proof that nothing slipped.
+    expect(rows.map((r) => r.promptId)).toEqual(prompts.map((p) => p.id));
     let hit = 0;
     let total = 0;
     for (const r of rows) if (r.turn >= 3) { hit += r.cacheHit; total += r.promptTokens; }
