@@ -105,8 +105,16 @@ class FakeHistory implements HistoryPort {
   windowRows: ChatMessage[] = [];
   summaryText = '';
   recent: string[] = [];
+  /** When set, every append waits for it before landing (G-5). */
+  gate: Promise<void> | null = null;
+  /** When set, appends with this role reject with it (I-8 / G-4). */
+  rejectRole: Role | 'all' | null = null;
+  appendsStarted = 0;
+  /** True: window() reflects the rows appended so far (G-5). */
+  windowFromRows = false;
 
   async window(): Promise<ChatMessage[]> {
+    if (this.windowFromRows) return this.rows.map((r) => ({ role: r.role, content: r.content }));
     return this.windowRows;
   }
   async summary(): Promise<string> {
@@ -119,6 +127,9 @@ class FakeHistory implements HistoryPort {
     return this.recent.slice(-n);
   }
   async append(role: Role, content: string, meta?: MessageMeta): Promise<void> {
+    this.appendsStarted += 1;
+    if (this.gate !== null) await this.gate;
+    if (this.rejectRole === 'all' || this.rejectRole === role) throw new Error(`SQLITE_FULL (${role})`);
     this.rows.push({ role, content, meta });
   }
   async onTrimNeeded(plan: TrimPlan): Promise<void> {
@@ -129,7 +140,9 @@ class FakeHistory implements HistoryPort {
 
 class FakeMetrics implements MetricsPort {
   readonly records: MetricsRecord[] = [];
+  reject = false;
   async record(m: MetricsRecord): Promise<void> {
+    if (this.reject) throw new Error('SQLITE_IOERR (metrics)');
     this.records.push(m);
   }
 }
@@ -570,5 +583,195 @@ describe('TurnRunner — review fixes (M-1 / I-3)', () => {
     await until(() => h.turnDone.length === 1, 'turnDone');
     expect(h.sentences.map((s) => s.text)).toEqual(['回来啦。']);
     expect(h.turnDone[0].lint.violations.map((v) => v.rule)).toContain('question-streak');
+  });
+});
+
+describe('TurnRunner — review fixes (I-2 / M-25 / M-6)', () => {
+  it('I-2: a tag-only completion is empty — re-request, then the canned line', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>'] }, { chunks: ['<|ACT emotion=happy|>\n'] }]);
+    await h.runner.send('在吗');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.client.requests).toHaveLength(2);
+    expect(h.sentences).toEqual([
+      { turnId: 't1', seq: 0, text: '……脑子空白了一下，主人再说一遍。', emotion: 'awkward' },
+    ]);
+    expect(h.metrics.records[0].errorCode).toBe('empty');
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+  });
+
+  it('M-25: drops a motion that is not in persona.motionKeys, keeps the emotion, warns once per turn', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const h = harness([{ chunks: ['<|ACT emotion=happy motion=constructor|>回来啦。', '<|ACT emotion=curious motion=__proto__|>今天怎么样。', '<|ACT emotion=sad motion=nod|>嗯。'] }]);
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.sentences.map((s) => [s.emotion, s.motion])).toEqual([['happy', undefined], ['curious', undefined], ['sad', 'nod']]);
+    expect(h.sentences.every((s) => !('motion' in s) || s.motion !== undefined)).toBe(true);
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('motion'))).toHaveLength(1);
+  });
+
+  it('M-6: ttftMs is measured from the dispatch of the delivered attempt, not from send()', async () => {
+    // The harness clock advances 10 per now() call: send() stamps startedAt, each runAttempt stamps
+    // dispatchedAt, the first delta stamps ttft. A regenerated turn must report the SECOND attempt's
+    // dispatch-relative TTFT (one tick), not everything since send().
+    const h = harness([{ chunks: [LEAK] }, { chunks: GREETING }]);
+    await h.runner.send('帮我看看这个。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    expect(h.turnDone[0].regenerated).toBe(true);
+    expect(h.turnDone[0].ttftMs).toBe(10);
+    expect(h.turnDone[0].totalMs).toBeGreaterThan(10);
+  });
+});
+
+describe('TurnRunner — history write failures never wedge the runner (I-8 / G-4)', () => {
+  const quiet = () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  };
+
+  it('settleNormal: a rejecting assistant append still emits exactly one turnDone and reaches idle', async () => {
+    quiet();
+    const h = harness([{ chunks: GREETING }]);
+    h.history.rejectRole = 'assistant';
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    await until(() => h.metrics.records.length === 1, 'metrics');
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    expect(h.turnDone).toHaveLength(1);
+    expect(h.errors).toHaveLength(0);
+    expect(h.history.rows.map((r) => r.role)).toEqual(['user']);
+  });
+
+  it('settleNormal: a rejecting user append still emits exactly one turnDone and reaches idle', async () => {
+    quiet();
+    const h = harness([{ chunks: GREETING }]);
+    h.history.rejectRole = 'user';
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    await until(() => h.metrics.records.length === 1, 'metrics');
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    expect(h.turnDone).toHaveLength(1);
+  });
+
+  it('settleEmpty: a rejecting append still speaks the canned line, emits one turnDone and goes idle', async () => {
+    quiet();
+    const h = harness([{ chunks: [] }, { chunks: [] }]);
+    h.history.rejectRole = 'all';
+    await h.runner.send('在吗？');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    await until(() => h.metrics.records.length === 1, 'metrics');
+    expect(h.sentences).toHaveLength(1);
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    expect(h.metrics.records[0].errorCode).toBe('empty');
+  });
+
+  it('retire: cancel() with a rejecting history resolves, emits one turnDone and goes idle', async () => {
+    quiet();
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], hang: true }]);
+    h.history.rejectRole = 'all';
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    h.runner.sentenceShown('t1', 0);
+    await h.runner.cancel();
+    expect(h.turnDone).toHaveLength(1);
+    expect(h.runner.state).toBe('idle');
+    expect(h.metrics.records).toHaveLength(1);
+  });
+
+  it('fail: a rejecting user append still emits exactly one error, reaches idle and records metrics', async () => {
+    quiet();
+    const h = harness([{ chunks: [], error: new DeepSeekError('rate', 429, 'Rate limit reached') }]);
+    h.history.rejectRole = 'all';
+    await h.runner.send('在吗？');
+    await until(() => h.errors.length === 1, 'the error event');
+    await until(() => h.metrics.records.length === 1, 'metrics');
+    expect(h.errors).toHaveLength(1);
+    expect(h.turnDone).toHaveLength(0);
+    expect(h.runner.state).toBe('idle');
+  });
+
+  it('a rejecting metrics port is warned about and the turn still completes', async () => {
+    quiet();
+    const h = harness([{ chunks: GREETING }]);
+    h.metrics.reject = true;
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    h.runner.turnShown('t1');
+    expect(h.runner.state).toBe('idle');
+    // and the next turn is admitted normally
+    await h.runner.send('再来一次。');
+    await until(() => h.turnDone.length === 2, 'second turnDone');
+  });
+});
+
+describe('TurnRunner — mid-stream failure keeps what the user saw (G-6)', () => {
+  it('persists acknowledged sentences once as interrupted before the error is reported', async () => {
+    const h = harness([
+      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], error: new DeepSeekError('timeout', null, 'no stream data') },
+    ]);
+    const rowsAtError: Row[][] = [];
+    h.runner.on('sentence', (p) => { h.runner.sentenceShown(p.turnId, p.seq); });
+    h.runner.on('error', () => { rowsAtError.push([...h.history.rows]); });
+    await h.runner.send('我回来了。');
+    await until(() => h.errors.length === 1, 'the error event');
+    await until(() => h.metrics.records.length === 1, 'metrics');
+    expect(h.history.rows).toEqual([
+      { role: 'user', content: '我回来了。', meta: { turnId: 't1', kind: 'chat' } },
+      { role: 'assistant', content: '回来啦。', meta: { turnId: 't1', kind: 'chat', interrupted: true } },
+    ]);
+    expect(rowsAtError[0]).toHaveLength(2);
+    await h.runner.cancel();
+    expect(h.history.rows).toHaveLength(2);
+    expect(h.errors[0].code).toBe('timeout');
+  });
+});
+
+describe('TurnRunner — write barrier (G-5) and awaitable cancel', () => {
+  it('a superseding send awaits the previous turn\'s appends before reading the history window', async () => {
+    const h = harness([
+      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], hang: true },
+      { chunks: ['<|ACT emotion=sad|>好吧。'] },
+    ]);
+    h.history.windowFromRows = true;
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    h.runner.sentenceShown('t1', 0);
+    expect(h.history.appendsStarted).toBe(1); // the user row is in flight, not landed
+    await h.runner.send('那你先睡吧。');
+    // The second turn must not have dispatched: its window read waits on the barrier.
+    for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.client.requests).toHaveLength(1);
+    open();
+    await until(() => h.turnDone.length === 2, 'both turns done');
+    const prompt = h.client.requests[1].messages.map((m) => m.content);
+    expect(prompt).toContain('我回来了。');
+    expect(prompt).toContain('回来啦。');
+    expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '回来啦。', '那你先睡吧。', '好吧。']);
+  });
+
+  it('cancel() resolves after retire\'s writes and metrics have settled, and immediately when idle', async () => {
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], hang: true }]);
+    await expect(h.runner.cancel()).resolves.toBeUndefined();
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    await h.runner.send('我回来了。');
+    await until(() => h.sentences.length === 1, 'the first released sentence');
+    h.runner.sentenceShown('t1', 0);
+    let resolved = false;
+    const done = h.runner.cancel().then(() => { resolved = true; });
+    expect(h.runner.state).toBe('idle');
+    expect(h.turnDone).toHaveLength(1);
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(resolved).toBe(false);
+    open();
+    await done;
+    expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '回来啦。']);
+    expect(h.metrics.records).toHaveLength(1);
+    await expect(h.runner.cancel()).resolves.toBeUndefined();
   });
 });
