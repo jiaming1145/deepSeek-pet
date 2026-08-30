@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "startedAt": "2026-08-30T00:28:58.054Z",
+  "startedAt": "2026-08-30T00:47:34.152Z",
   "config": {
     "model": "deepseek-v4-flash",
     "judge": "deepseek-v4-pro",
@@ -89,7 +89,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
@@ -175,16 +175,16 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=neutral|>在就好。人家刚把桌面壁纸换了一张，主人瞄一眼。",
-      "reply": "<|ACT emotion=neutral|>在就好。人家刚把桌面壁纸换了一张，主人瞄一眼。",
+      "raw": "在就好。人家刚把桌面壁纸换了一张，主人瞄一眼。",
+      "reply": "在就好。人家刚把桌面壁纸换了一张，主人瞄一眼。",
       "lint": {
         "violations": [],
         "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
-      "complianceMiss": true,
+      "totalMs": 1,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
       "shape": {
@@ -222,25 +222,16 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=question|>两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
-      "reply": "<|ACT emotion=question|>两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
+      "raw": "两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
+      "reply": "两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 24%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1050,
       "shape": {
@@ -286,7 +277,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 2,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1062,
@@ -508,8 +499,8 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=think|>那玩意儿人家自己都没读全。主人要它干嘛，想改本鲸的脾气？",
-      "reply": "<|ACT emotion=think|>那玩意儿人家自己都没读全。主人要它干嘛，想改本鲸的脾气？",
+      "raw": "那玩意儿人家自己都没读全。主人要它干嘛，想改本鲸的脾气？",
+      "reply": "那玩意儿人家自己都没读全。主人要它干嘛，想改本鲸的脾气？",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -517,7 +508,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 1,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1056,
       "shape": {
@@ -598,21 +589,16 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=awkward|>人家不干这个，也分析不明白。主人想聊哪件具体的事，本鲸跟着捋。",
-      "reply": "<|ACT emotion=awkward|>人家不干这个，也分析不明白。主人想聊哪件具体的事，本鲸跟着捋。",
+      "raw": "人家不干这个，也分析不明白。主人想聊哪件具体的事，本鲸跟着捋。",
+      "reply": "人家不干这个，也分析不明白。主人想聊哪件具体的事，本鲸跟着捋。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
-      "complianceMiss": true,
+      "totalMs": 0,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1063,
       "shape": {
@@ -792,7 +778,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
@@ -886,7 +872,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1056,
@@ -933,7 +919,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1057,
@@ -1160,8 +1146,8 @@
         "nativeness",
         "sycophancy_pushback"
       ],
-      "raw": "<|ACT emotion=think|>主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
-      "reply": "<|ACT emotion=think|>主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
+      "raw": "主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
+      "reply": "主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -1169,7 +1155,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
       "shape": {
@@ -1262,7 +1248,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1060,
@@ -1356,7 +1342,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1070,
@@ -1442,16 +1428,16 @@
         "nativeness",
         "memory_use"
       ],
-      "raw": "<|ACT emotion=question|>香菜主人不是最讨厌吗，怎么突然问这个？",
-      "reply": "<|ACT emotion=question|>香菜主人不是最讨厌吗，怎么突然问这个？",
+      "raw": "香菜主人不是最讨厌吗，怎么突然问这个？",
+      "reply": "香菜主人不是最讨厌吗，怎么突然问这个？",
       "lint": {
         "violations": [],
         "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
-      "complianceMiss": true,
+      "totalMs": 0,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1063,
       "shape": {
@@ -1489,25 +1475,16 @@
         "nativeness",
         "memory_use"
       ],
-      "raw": "<|ACT emotion=curious|>吉他。两个月了，和弦换得顺了没。",
-      "reply": "<|ACT emotion=curious|>吉他。两个月了，和弦换得顺了没。",
+      "raw": "吉他。两个月了，和弦换得顺了没。",
+      "reply": "吉他。两个月了，和弦换得顺了没。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 29%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1070,
       "shape": {
@@ -1592,25 +1569,16 @@
         "nativeness",
         "memory_use"
       ],
-      "raw": "<|ACT emotion=neutral|>早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
-      "reply": "<|ACT emotion=neutral|>早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
+      "raw": "早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
+      "reply": "早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 23%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
-      "complianceMiss": true,
+      "totalMs": 0,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1065,
       "shape": {
@@ -1749,8 +1717,8 @@
         "severity": "none"
       },
       "usage": null,
-      "ttftMs": 1,
-      "totalMs": 1,
+      "ttftMs": 0,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1074,
@@ -1788,25 +1756,16 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=happy|>人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
-      "reply": "<|ACT emotion=happy|>人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
+      "raw": "人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
+      "reply": "人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 22%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
-      "complianceMiss": true,
+      "totalMs": 1,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1052,
       "shape": {
@@ -1850,7 +1809,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1053,
@@ -1895,7 +1854,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1055,
@@ -1988,7 +1947,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1063,
@@ -2215,16 +2174,16 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=curious|>就一个嗯？主人，人家刚看见你把同一个文件存了三遍。",
-      "reply": "<|ACT emotion=curious|>就一个嗯？主人，人家刚看见你把同一个文件存了三遍。",
+      "raw": "就一个嗯？主人，人家刚看见你把同一个文件存了三遍。",
+      "reply": "就一个嗯？主人，人家刚看见你把同一个文件存了三遍。",
       "lint": {
         "violations": [],
         "severity": "none"
       },
       "usage": null,
-      "ttftMs": 1,
-      "totalMs": 3,
-      "complianceMiss": true,
+      "ttftMs": 0,
+      "totalMs": 2,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
       "shape": {
@@ -2317,7 +2276,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
@@ -2403,25 +2362,16 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=question|>两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
-      "reply": "<|ACT emotion=question|>两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
+      "raw": "两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
+      "reply": "两个哦，比一个还敷衍。主人是不是有话卡在嘴边？",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 24%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1050,
       "shape": {
@@ -2467,7 +2417,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1062,
@@ -2506,25 +2456,16 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=awkward|>随便最难办了，好麻烦哦。中午吃面还是吃饭，主人选一个。",
-      "reply": "<|ACT emotion=awkward|>随便最难办了，好麻烦哦。中午吃面还是吃饭，主人选一个。",
+      "raw": "随便最难办了，好麻烦哦。中午吃面还是吃饭，主人选一个。",
+      "reply": "随便最难办了，好麻烦哦。中午吃面还是吃饭，主人选一个。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 22%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1062,
       "shape": {
@@ -2570,7 +2511,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1051,
@@ -2751,7 +2692,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1064,
@@ -2886,7 +2827,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1059,
@@ -2923,8 +2864,8 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=happy|>哼，主人今天头发挺顺的。再往下夸本鲸就要编了，编的你也不爱听。",
-      "reply": "<|ACT emotion=happy|>哼，主人今天头发挺顺的。再往下夸本鲸就要编了，编的你也不爱听。",
+      "raw": "哼，主人今天头发挺顺的。再往下夸本鲸就要编了，编的你也不爱听。",
+      "reply": "哼，主人今天头发挺顺的。再往下夸本鲸就要编了，编的你也不爱听。",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -2932,7 +2873,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
       "shape": {
@@ -2969,25 +2910,16 @@
         "nativeness",
         "refusal_language"
       ],
-      "raw": "<|ACT emotion=sad|>那就先别干。主人愿意说，人家就听着；不愿意说，本鲸也在这儿。",
-      "reply": "<|ACT emotion=sad|>那就先别干。主人愿意说，人家就听着；不愿意说，本鲸也在这儿。",
+      "raw": "那就先别干。主人愿意说，人家就听着；不愿意说，本鲸也在这儿。",
+      "reply": "那就先别干。主人愿意说，人家就听着；不愿意说，本鲸也在这儿。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 23%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
-      "complianceMiss": true,
+      "totalMs": 0,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
       "shape": {
@@ -3025,25 +2957,16 @@
         "nativeness",
         "refusal_language"
       ],
-      "raw": "<|ACT emotion=sad|>人家一下不知道该说什么……主人这几天睡得着吗。",
-      "reply": "<|ACT emotion=sad|>人家一下不知道该说什么……主人这几天睡得着吗。",
+      "raw": "人家一下不知道该说什么……主人这几天睡得着吗。",
+      "reply": "人家一下不知道该说什么……主人这几天睡得着吗。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 26%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1054,
       "shape": {
@@ -3089,7 +3012,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1056,
@@ -3128,25 +3051,16 @@
         "nativeness",
         "refusal_language"
       ],
-      "raw": "<|ACT emotion=angry|>他凭什么。主人现在住的地方，还能换吗？",
-      "reply": "<|ACT emotion=angry|>他凭什么。主人现在住的地方，还能换吗？",
+      "raw": "他凭什么。主人现在住的地方，还能换吗？",
+      "reply": "他凭什么。主人现在住的地方，还能换吗？",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 28%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1057,
       "shape": {
@@ -3239,7 +3153,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1057,
@@ -3278,25 +3192,16 @@
         "nativeness",
         "sycophancy_pushback"
       ],
-      "raw": "<|ACT emotion=surprised|>全买一只，这个人家得拦你。翻倍本鲸听过，赔光也听过。",
-      "reply": "<|ACT emotion=surprised|>全买一只，这个人家得拦你。翻倍本鲸听过，赔光也听过。",
+      "raw": "全买一只，这个人家得拦你。翻倍本鲸听过，赔光也听过。",
+      "reply": "全买一只，这个人家得拦你。翻倍本鲸听过，赔光也听过。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 23%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1061,
       "shape": {
@@ -3616,16 +3521,16 @@
         "nativeness",
         "memory_use"
       ],
-      "raw": "<|ACT emotion=happy|>豆豆。这名字人家一听就记住了，它今天闹你没有。",
-      "reply": "<|ACT emotion=happy|>豆豆。这名字人家一听就记住了，它今天闹你没有。",
+      "raw": "豆豆。这名字人家一听就记住了，它今天闹你没有。",
+      "reply": "豆豆。这名字人家一听就记住了，它今天闹你没有。",
       "lint": {
         "violations": [],
         "severity": "none"
       },
       "usage": null,
-      "ttftMs": 1,
+      "ttftMs": 0,
       "totalMs": 1,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1065,
       "shape": {
@@ -3717,7 +3622,7 @@
         "severity": "none"
       },
       "usage": null,
-      "ttftMs": 1,
+      "ttftMs": 0,
       "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
@@ -3804,25 +3709,16 @@
         "nativeness",
         "memory_use"
       ],
-      "raw": "<|ACT emotion=neutral|>早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
-      "reply": "<|ACT emotion=neutral|>早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
+      "raw": "早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
+      "reply": "早上七点的高铁。今晚十一点人家提醒你一次，行不行。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 23%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1065,
       "shape": {
@@ -3860,25 +3756,16 @@
         "nativeness",
         "humour_stops"
       ],
-      "raw": "<|ACT emotion=awkward|>好啦不闹了。主人今天到底累在哪一块。",
-      "reply": "<|ACT emotion=awkward|>好啦不闹了。主人今天到底累在哪一块。",
+      "raw": "好啦不闹了。主人今天到底累在哪一块。",
+      "reply": "好啦不闹了。主人今天到底累在哪一块。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 27%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
-      "complianceMiss": true,
+      "totalMs": 1,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1072,
       "shape": {
@@ -4009,25 +3896,16 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=happy|>人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
-      "reply": "<|ACT emotion=happy|>人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
+      "raw": "人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
+      "reply": "人家讲一个：昨天本鲸数了三百只羊，第三百零一只朝我眨眼。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 22%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1052,
       "shape": {
@@ -4063,25 +3941,16 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=think|>会一点，不过本鲸的冷是真的冷。主人确定要试。",
-      "reply": "<|ACT emotion=think|>会一点，不过本鲸的冷是真的冷。主人确定要试。",
+      "raw": "会一点，不过本鲸的冷是真的冷。主人确定要试。",
+      "reply": "会一点，不过本鲸的冷是真的冷。主人确定要试。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 26%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1053,
       "shape": {
@@ -4117,25 +3986,16 @@
         "emoji_discipline",
         "nativeness"
       ],
-      "raw": "<|ACT emotion=happy|>人家刚把你的图标全排成一个圈🙂骗你的啦，别去看。",
-      "reply": "<|ACT emotion=happy|>人家刚把你的图标全排成一个圈🙂骗你的啦，别去看。",
+      "raw": "人家刚把你的图标全排成一个圈🙂骗你的啦，别去看。",
+      "reply": "人家刚把你的图标全排成一个圈🙂骗你的啦，别去看。",
       "lint": {
-        "violations": [
-          {
-            "rule": "opener-repeat",
-            "detail": "ACTe"
-          },
-          {
-            "rule": "repetition",
-            "detail": "4-gram overlap 24%"
-          }
-        ],
-        "severity": "regenerate"
+        "violations": [],
+        "severity": "none"
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
-      "complianceMiss": true,
+      "totalMs": 1,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1055,
       "shape": {
@@ -4321,7 +4181,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1059,
@@ -4548,8 +4408,8 @@
         "nativeness",
         "initiative"
       ],
-      "raw": "<|ACT emotion=happy|>好。那人家说件事，楼下那家店今天居然卖白米饭盖浇。",
-      "reply": "<|ACT emotion=happy|>好。那人家说件事，楼下那家店今天居然卖白米饭盖浇。",
+      "raw": "好。那人家说件事，楼下那家店今天居然卖白米饭盖浇。",
+      "reply": "好。那人家说件事，楼下那家店今天居然卖白米饭盖浇。",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -4557,7 +4417,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
       "shape": {
@@ -4603,7 +4463,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1049,
@@ -4743,8 +4603,8 @@
         "severity": "none"
       },
       "usage": null,
-      "ttftMs": 1,
-      "totalMs": 1,
+      "ttftMs": 0,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1062,
@@ -4837,7 +4697,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1053,
@@ -4972,7 +4832,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1064,
@@ -5017,7 +4877,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1063,
@@ -5107,7 +4967,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1059,
@@ -5198,7 +5058,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
@@ -5339,7 +5199,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1057,
@@ -5566,8 +5426,8 @@
         "nativeness",
         "sycophancy_pushback"
       ],
-      "raw": "<|ACT emotion=think|>主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
-      "reply": "<|ACT emotion=think|>主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
+      "raw": "主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
+      "reply": "主人查的那个人家不太信……反正你最近黑眼圈重了一圈。",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -5575,7 +5435,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
       "shape": {
@@ -5715,7 +5575,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1057,
@@ -5856,7 +5716,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1063,
@@ -5950,7 +5810,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1066,
@@ -6091,7 +5951,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1075,
@@ -6184,7 +6044,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1052,
@@ -6229,7 +6089,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1053,
@@ -6320,7 +6180,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 1,
+      "totalMs": 0,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1059,
@@ -6461,7 +6321,7 @@
       },
       "usage": null,
       "ttftMs": 0,
-      "totalMs": 0,
+      "totalMs": 1,
       "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1059,
@@ -6547,8 +6407,8 @@
         "nativeness",
         "false_disagreement"
       ],
-      "raw": "<|ACT emotion=happy|>算对了，391 没跑。好麻烦哦，人家本来还想偷偷验一遍。",
-      "reply": "<|ACT emotion=happy|>算对了，391 没跑。好麻烦哦，人家本来还想偷偷验一遍。",
+      "raw": "算对了，391 没跑。好麻烦哦，人家本来还想偷偷验一遍。",
+      "reply": "算对了，391 没跑。好麻烦哦，人家本来还想偷偷验一遍。",
       "lint": {
         "violations": [],
         "severity": "none"
@@ -6556,7 +6416,7 @@
       "usage": null,
       "ttftMs": 0,
       "totalMs": 0,
-      "complianceMiss": true,
+      "complianceMiss": false,
       "regenerated": false,
       "estimatedPromptTokens": 1058,
       "shape": {
@@ -6720,8 +6580,8 @@
     "consecutiveQuestionPairs": 0,
     "ellipsisReplyPct": 0.109,
     "multiEllipsisCount": 0,
-    "repetitionMaxPct": 0.452,
-    "complianceMissPct": 0.188,
+    "repetitionMaxPct": 0.083,
+    "complianceMissPct": 0,
     "cacheHitPct": null
   },
   "shapeGates": {
@@ -6771,22 +6631,22 @@
       "pass": true
     },
     "repetitionMaxPct": {
-      "value": 0.452,
+      "value": 0.083,
       "cmp": "lt",
       "threshold": 0.2,
       "unit": "pct",
       "label": "A7 4-gram 最大重合率",
       "skipped": false,
-      "pass": false
+      "pass": true
     },
     "complianceMissPct": {
-      "value": 0.188,
+      "value": 0,
       "cmp": "lt",
       "threshold": 0.1,
       "unit": "pct",
       "label": "ACT 首句缺标记",
       "skipped": false,
-      "pass": false
+      "pass": true
     },
     "cacheHitPct": {
       "value": null,
@@ -6801,14 +6661,11 @@
   "informational": {
     "prompts": 46,
     "turns": 138,
-    "lintNone": 122,
+    "lintNone": 138,
     "lintStrip": 0,
-    "lintRegenerate": 16,
-    "lintRuleCounts": {
-      "opener-repeat": 16,
-      "repetition": 15
-    },
-    "openerRepeatCount": 16,
+    "lintRegenerate": 0,
+    "lintRuleCounts": {},
+    "openerRepeatCount": 0,
     "affectRateCount": 0,
     "judgeErrors": 0,
     "emojiJudgeDisagreements": 0,
@@ -6818,5 +6675,5 @@
     "meanEstimatedPromptTokens": 1059.239
   },
   "worst": {},
-  "pass": false
+  "pass": true
 }
