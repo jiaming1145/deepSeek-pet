@@ -8,6 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "fetch-sdk": "node scripts/fetch-sdk.mjs",
     "test": "vitest run",
     "test:eval": "pnpm --filter @ds/eval test",
