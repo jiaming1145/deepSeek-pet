@@ -1,0 +1,6 @@
+cwd: D:\ds
+node: v24.17.0
+character: 994
+plain: 104
+plain-bytes: 470
+phase2-plain-superseded: 184

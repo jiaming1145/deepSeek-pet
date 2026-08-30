@@ -37,7 +37,7 @@ export default defineConfig({
       // Workspace packages (@ds/*) are TypeScript sources — they must be BUNDLED, never
       // externalized (main cannot `require()` a .ts file). electron-vite externalizes every
       // package.json dependency by default, so they are excluded here.
-      externalizeDeps: { exclude: ['@ds/protocol', '@ds/stage', '@ds/brain', '@ds/memory', 'zod'] },
+      externalizeDeps: { exclude: ['@ds/protocol', '@ds/stage', '@ds/brain', '@ds/memory', '@ds/sim', 'zod'] },
       rollupOptions: {
         // koffi is a native N-API module: it must stay external even once something imports it.
         external: ['koffi'],

@@ -76,9 +76,10 @@ test('judgeInput hands the judge the raw reply, not the sanitized one (I-12)', (
   assert.equal(judgeInput(t), t.raw);
 });
 
-test('the shipped rubric is version 1 and has a body', () => {
+test('the shipped rubric is version 2 and has a body', () => {
   const j = loadJudge(fileURLToPath(new URL('../judge.md', import.meta.url)));
-  assert.equal(j.version, 1);
+  // Phase 3 §9.6/§13.2 appended the three gate notes to the judge's system prompt -> version 2.
+  assert.equal(j.version, 2);
   assert.ok(j.body.includes('false_disagreement'));
   assert.ok(!j.body.startsWith('---'));
 });

@@ -17,6 +17,7 @@
     "@ds/brain": "workspace:*",
     "@ds/memory": "workspace:*",
     "@ds/protocol": "workspace:*",
+    "@ds/sim": "workspace:*",
     "@ds/stage": "workspace:*",
     "koffi": "^2.9.0",
     "react": "19.2.0",
