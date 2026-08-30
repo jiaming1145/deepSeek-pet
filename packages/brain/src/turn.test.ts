@@ -884,3 +884,47 @@ describe('TurnRunner — stream finished but playback not acknowledged (CX-1)', 
     expect(h.client.requests[1].messages.map((m) => m.content)).toContain('回来啦。今天怎么样。');
   });
 });
+
+describe('TurnRunner — settleNormal never skips finish() for a settled turn (fix round 2)', () => {
+  it('R2-1: zero-sentence turn, gated user row, superseding send() during the gate -> turnDone + metrics for BOTH turns, once each', async () => {
+    // `**回来啦**。` is a markdown lint strip: the stream ends normally with nothing emitted, so
+    // settleNormal settles the turn BEFORE awaiting its user row. A send() during that append
+    // replaces `current` without retiring the settled turn — finish() must still run for it.
+    const h = harness([{ chunks: ['<|ACT emotion=happy|>**回来啦**。'] }, { chunks: ['<|ACT emotion=sad|>好吧。'] }]);
+    let open = (): void => undefined;
+    h.history.gate = new Promise<void>((resolve) => { open = resolve; });
+    await h.runner.send('我回来了。');
+    await until(() => h.history.appendsStarted === 1, 'the first user row in flight');
+    expect(h.sentences).toHaveLength(0);
+    expect(h.turnDone).toHaveLength(0);
+    await h.runner.send('那你先睡吧。');
+    open();
+    await until(() => h.turnDone.length === 2, 'both turns done');
+    h.runner.turnShown('t2');
+    await until(() => h.metrics.records.length === 2, 'both metrics records');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.turnDone.map((t) => t.turnId)).toEqual(['t1', 't2']);
+    expect(h.metrics.records.map((r) => r.turnId)).toEqual(['t1', 't2']);
+    expect(h.errors).toHaveLength(0);
+    expect(h.history.rows.map((r) => r.content)).toEqual(['我回来了。', '那你先睡吧。', '好吧。']);
+    expect(h.runner.state).toBe('idle');
+  });
+
+  it('R2-2: a throwing turnDone listener after a normal stream end does not run the fail() path', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const h = harness([{ chunks: GREETING }]);
+    h.runner.on('turnDone', () => { throw new Error('listener blew up'); });
+    await h.runner.send('我回来了。');
+    await until(() => h.turnDone.length === 1, 'turnDone');
+    for (let i = 0; i < 10; i += 1) await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+    expect(h.errors).toHaveLength(0);
+    expect(h.metrics.records).toHaveLength(0); // the throw skipped record(); fail() must not add one
+    h.runner.turnShown('t1');
+    await until(() => h.history.rows.length === 2, 'the assistant row');
+    expect(h.history.rows[1]).toEqual(
+      { role: 'assistant', content: '回来啦。今天怎么样。', meta: { turnId: 't1', kind: 'chat' } },
+    );
+    expect(h.runner.state).toBe('idle');
+    quiet.mockRestore();
+  });
+});
