@@ -65,7 +65,9 @@ const AFFECT_WORDS: string[] = [
 const EMOJI = /\p{Extended_Pictographic}/u;
 const KAOMOJI = /[（(][^）)\n]{0,12}[ω・´｀^∀ヮ〃≧≦˘•][^）)\n]{0,12}[）)]/u;
 
-const MARKDOWN_INLINE = /[*#`]/;
+// Markdown *syntax*, not the bare characters: "C#", "#1", "5*3" and a price are prose.
+// Amendment (controller, after T4): the contract's /[*#`]/ stripped benign sentences.
+const MARKDOWN_INLINE = /\*\*[^*\n]+\*\*|(?:^|\s)#{1,6}\s|`[^`\n]+`|(?:^|\s)\*[^*\n]+\*(?=\s|$)/m;
 const MARKDOWN_LIST = /^\s*[-•]\s/m;
 
 // Contract note 4: the literal class used by opener().
@@ -162,7 +164,10 @@ export function lintTail(text: string, ctx: LintContext): LintResult {
   const ellipses = (text.match(/……/g) ?? []).length;
   if (ellipses > 1) v.push({ rule: 'ellipsis', detail: `${ellipses} ellipses` });
   const hits = [...ctx.recent, text].filter((s) => s.includes('……')).length;
-  const total = ctx.recent.length + 1;
+  // Denominator floored at 5 prior replies (amendment, controller, after T4): with an empty history
+  // a single …… was 1/1 and forced a paid regeneration on the very first turn, and the persona
+  // actively uses ……. The A6 rate (≤ 20 % of replies) is unchanged once history exists.
+  const total = Math.max(ctx.recent.length, 5) + 1;
   if (hits / total > 0.2) v.push({ rule: 'ellipsis-rate', detail: `…… in ${hits}/${total} replies` });
   const affect = firstWord(AFFECT_WORDS, text);
   if (affect && ctx.recent.slice(-2).some((h) => firstWord(AFFECT_WORDS, h) !== undefined)) {
