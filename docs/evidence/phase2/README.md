@@ -24,20 +24,37 @@ be measured, and the exact commands that will measure it: [`not-measured.md`](no
 | prompt-cache hit, turns 3+ (session) | **NOT MEASURED** | ≥ 70 % (X1) | [`metrics-cache-hit.txt`](metrics-cache-hit.txt) |
 | prompt-cache hit, turns 3–20 (in app) | **NOT MEASURED** | ≥ 70 % (X1) | [`app-20-turns.md`](app-20-turns.md) |
 | tuning iterations | 0 of 3 | ≤ 3 (R8) | [`tuning-log.md`](tuning-log.md) |
-| cold-profile first message, virgin `--user-data-dir` | 391 · 456 · 462 · 476 ms (round 1) · 688–721 ms over eight more launches (fix round 1) | ≤ 3 s | [`app-first-message-cold.png`](app-first-message-cold.png), `e2e-report.json` |
-| band / composer top edge vs the pet window | 68.6 % | ≥ 55 % of the pet's height | [`app-placement.png`](app-placement.png), `bubble-place.test.ts` |
-| band rect vs composer rect, both visible | no shared pixel, light and dark and mid-reply | disjoint | [`app-placement.png`](app-placement.png), [`app-desktop.png`](app-desktop.png), [`app-inapp-checks.md`](app-inapp-checks.md) |
+| cold-profile first message, virgin `--user-data-dir` | 391 · 456 · 462 · 476 ms (round 1) · 688–721 ms over eight more launches (fix round 1) · 382 · 720 ms (fix round 2) | ≤ 3 s | [`app-first-message-cold.png`](app-first-message-cold.png), `e2e-report.json` |
+| band / composer top edge vs the pet window | 68.6 % measured in the app; ≥ 55 % held at every band size the unit sweep tries, **except** where the work area forces the window up | ≥ 55 % of the pet's height, C14 permitting | [`app-placement.png`](app-placement.png), `bubble-place.test.ts` |
+| band rect vs composer rect, both visible | no shared pixel with the one-row composer, light and dark and mid-reply | disjoint wherever the dodge has somewhere legal to go — see the note below | [`app-placement.png`](app-placement.png), [`app-desktop.png`](app-desktop.png), [`app-inapp-checks.md`](app-inapp-checks.md) |
 | idle CPU / working set (whole Electron tree, 7 processes) | 1.27 % / **750.3 MB** | ≤ 4 % / ≤ 250 MB | [`resources.md`](resources.md) — CPU passes, **memory misses by 3×** |
 | speaking CPU / working set | 3.36 % / 742.2 MB | ≤ 4 % / ≤ 250 MB | [`resources.md`](resources.md) |
 | card budget | 673 / 700 tokens | ≤ 700 (A21) | [`task-3-card-tokens.txt`](task-3-card-tokens.txt) |
 | in-app checks Task 6 could not run | 6 PASS, 1 UNTESTABLE | — | [`app-inapp-checks.md`](app-inapp-checks.md) |
 | offline Electron end-to-end lane | 4 passed, 0 unexpected, 1 skipped (the gated real-API test) | — | [`e2e-report.json`](e2e-report.json) |
 
-`resources.md` carries **four** rows, not two: fix round 1 re-ran the Electron lane to re-photograph
-the placement fix, and every run appends its own `idle` / `speaking` sample. The second pair
-corroborates the first rather than replacing it — idle **1.25 %** / 748.2 MB, speaking **2.48 %** /
-747.0 MB — and the headline rows above are still the original pair. Neither number was re-rolled to
-get a friendlier one: the memory bar is missed by ~3× in both.
+The 55 % row is a bar with **one** documented exception, not an unqualified pass. A window too tall
+to fit between the floor and the work-area bottom is placed against the work area instead — C14 wins
+— which is what the 468 DIP composer-with-history does (top edge at 36 % of the pet; see
+[`deferred.md`](deferred.md)). Fix round 2 closed a hole in the other direction: round 1's composer
+dodge could flip the **band** above the floor and onto her face (a 460×320 band under the
+history-open composer landed at −10 % of the pet, i.e. clear above the pet window). The floor now
+outranks the dodge, and a sweep test pins `y` at every band size × three composer heights × three
+work areas. The 68.6 % figure above is the composer's top edge as measured in the running app with a
+one-row composer; the unit sweep, not that single photograph, is what covers the rest of the range.
+
+The price of that ordering is the row above it: the band and the composer are disjoint whenever the
+dodge has somewhere legal to go, and they **overlap** in the two cases where it does not — no room
+either side inside the work area (C14 wins), and room only above the 55 % floor (the floor wins),
+which the history-open composer produces for every band. The photographs show the shipped one-row
+case, where the band steps below and the two are disjoint.
+
+`resources.md` carries **six** rows, not two: fix round 1 re-ran the Electron lane to re-photograph
+the placement fix and fix round 2 re-ran it as a regression check, and every run appends its own
+`idle` / `speaking` sample. The later pairs corroborate the first rather than replacing it — round 1
+idle **1.25 %** / 748.2 MB, speaking **2.48 %** / 747.0 MB; round 2 idle **0.93 %** / 757.2 MB,
+speaking **1.92 %** / 746.4 MB — and the headline rows above are still the original pair. No number
+was re-rolled to get a friendlier one: the memory bar is missed by ~3× in all three.
 
 ## The light/dark sheet
 

@@ -140,11 +140,18 @@ export function placeBubble(
   if (avoid !== null && intersects({ x, y, ...size }, avoid)) {
     const below = avoid.y + avoid.height + BUBBLE_GAP;
     const above = avoid.y - BUBBLE_GAP - size.height;
+    // The above branch is gated on the 55 % floor as well as the work area. Without that guard the
+    // dodge undoes the placement ruling this file exists to satisfy: the composer with its history
+    // pane open (468 DIP) is always clamped against the work-area bottom, so there is NEVER room
+    // below it, and every band would flip up onto her face — a 460x320 band landed at y = 224,
+    // entirely above the pet window. The floor is the composition rule the controller ruled on; the
+    // dodge is a courtesy. The floor wins.
     if (below + size.height <= waB) y = below;
-    else if (above >= waT) y = above;
-    // Neither: this work area cannot hold both windows on this column. C14 outranks the dodge, so
-    // the band keeps its own placement and the two overlap — the pre-fix behaviour, in the one case
-    // where there is nowhere to put it. `bubble-place.test.ts` pins that this is the ONLY such case.
+    else if (above >= Math.max(waT, topFloor)) y = above;
+    // Neither: this column cannot hold both windows below the floor and inside the work area. C14
+    // and the 55 % floor both outrank the dodge, so the band keeps step 2's row and the two overlap
+    // — the pre-fix behaviour, in the one case where there is nowhere else to put it.
+    // `bubble-place.test.ts` pins that this is the ONLY such case.
   }
 
   // The notch sits on the pet-facing vertical edge, at the band's anchor row.
