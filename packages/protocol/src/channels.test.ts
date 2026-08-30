@@ -72,16 +72,18 @@ describe('channel table', () => {
     expect(lists.flatMap((l) => l.filter((c) => !CHANNEL_NAMES.has(c)))).toEqual([]);
   });
 
-  it('pins every allow-list to contracts.md §2.5', () => {
+  it('pins every allow-list to contracts.md §2.5 (Phase 2 rows, then Phase 3 rows appended in place)', () => {
     expect(PET_TO_MAIN).toEqual([
       'avatar:hover', 'avatar:tap', 'avatar:drag', 'avatar:dragEnd',
       'stage:ready', 'stage:error', 'chat:open',
+      'arb:grab', 'arb:release', 'arb:touch', 'arb:passthrough', 'arb:trace',
     ]);
     expect(MAIN_TO_PET).toEqual([
       'gaze:cursor', 'shell:visibility', 'stage:setFps',
       'debug:expression', 'debug:motion', 'debug:toggle',
       'brain:state', 'brain:sentence', 'brain:turnDone',
       'avatar:listening', 'speech:mouth',
+      'sim:state', 'sim:event', 'sim:windowMotion', 'sim:landing', 'mode:changed',
     ]);
     expect(BUBBLE_TO_MAIN).toEqual([
       'playback:sentenceDone', 'playback:turnDone',
@@ -90,26 +92,30 @@ describe('channel table', () => {
     expect(MAIN_TO_BUBBLE).toEqual([
       'brain:state', 'brain:sentence', 'brain:turnDone', 'brain:error',
       'hint:show', 'bubble:place', 'shell:visibility', 'speech:complete',
+      'sim:state', 'proactive:turn', 'mode:changed',
     ]);
     expect(CHAT_TO_MAIN).toEqual([
       'user:cancel', 'chat:close', 'chat:composing', 'chat:resize', 'speech:complete',
     ]);
     expect(MAIN_TO_CHAT).toEqual([
       'brain:state', 'brain:turnDone', 'brain:error', 'chat:opened', 'key:status',
+      'proactive:turn', 'proactive:gate', 'mode:changed',
     ]);
     expect(KEY_TO_MAIN).toEqual(['chat:open']);
     expect(MAIN_TO_KEY).toEqual(['key:status']);
     expect(CHAT_INVOKE).toEqual(['user:text', 'history:list', 'history:delete']);
     expect(KEY_INVOKE).toEqual(['key:set', 'key:test', 'key:clear']);
+    // D14 / §2.5: the pet and bubble windows never gain an invoke channel in Phase 3.
     expect(PET_INVOKE).toEqual([]);
     expect(BUBBLE_INVOKE).toEqual([]);
   });
 
-  it('never lets one window reach another window\'s channels (D14)', () => {
-    expect(PET_TO_MAIN.filter((c) => /^(user|key|history):/.test(c))).toEqual([]);
+  it('never lets one window reach another window\'s channels (D14, §1.5: proactive:* is main→chat only)', () => {
+    expect(PET_TO_MAIN.filter((c) => /^(user|key|history|proactive):/.test(c))).toEqual([]);
     expect(PET_TO_MAIN).not.toContain(Channels.chatResize);
-    expect(BUBBLE_TO_MAIN.filter((c) => /^(user|key|history):/.test(c))).toEqual([]);
-    expect(KEY_TO_MAIN.filter((c) => /^(user|history):/.test(c))).toEqual([]);
+    expect(BUBBLE_TO_MAIN.filter((c) => /^(user|key|history|proactive):/.test(c))).toEqual([]);
+    expect(KEY_TO_MAIN.filter((c) => /^(user|history|proactive):/.test(c))).toEqual([]);
+    expect(CHAT_TO_MAIN.filter((c) => /^proactive:/.test(c))).toEqual([]);
     expect(CHAT_INVOKE).not.toContain(InvokeChannels.keySet);
     expect(KEY_INVOKE).not.toContain(InvokeChannels.userText);
   });
@@ -155,5 +161,80 @@ describe('ERROR_HINTS', () => {
 
   it('names no 设置 window anywhere in Phase 2 copy (C-10)', () => {
     expect(JSON.stringify(ERROR_HINTS)).not.toContain('设置');
+  });
+});
+
+describe('Phase 3 channels (contracts §2.2, §2.3, §2.9)', () => {
+  it('names the twelve §2.2 channels with their exact wire strings', () => {
+    expect(Channels.simState).toBe('sim:state');
+    expect(Channels.simEvent).toBe('sim:event');
+    expect(Channels.simWindowMotion).toBe('sim:windowMotion');
+    expect(Channels.simLanding).toBe('sim:landing');
+    expect(Channels.proactiveTurn).toBe('proactive:turn');
+    expect(Channels.proactiveGate).toBe('proactive:gate');
+    expect(Channels.modeChanged).toBe('mode:changed');
+    expect(Channels.arbGrab).toBe('arb:grab');
+    expect(Channels.arbRelease).toBe('arb:release');
+    expect(Channels.arbTouch).toBe('arb:touch');
+    expect(Channels.arbPassthrough).toBe('arb:passthrough');
+    expect(Channels.arbTrace).toBe('arb:trace');
+  });
+
+  it('keeps the retired avatar:drag / avatar:dragEnd rows in PET_TO_MAIN and Schemas (§2.9)', () => {
+    // R3-5 removes the SENDERS; the channel, its schema and its allow-list row stay (Phase 2 §5.6 precedent).
+    expect(PET_TO_MAIN).toContain(Channels.avatarDrag);
+    expect(PET_TO_MAIN).toContain(Channels.avatarDragEnd);
+    expect(PET_TO_MAIN).toContain(Channels.avatarTap);
+    expect(parseEvent(Channels.avatarDrag, { dx: 1, dy: 1 }).ok).toBe(true);
+    expect(parseEvent(Channels.avatarDragEnd, {}).ok).toBe(true);
+  });
+
+  it('adds no invoke channel in Phase 3 (§2.3 "No new invoke channels")', () => {
+    expect(Object.values(InvokeChannels)).toEqual([
+      'user:text', 'key:set', 'key:test', 'key:clear', 'history:list', 'history:delete',
+    ]);
+  });
+
+  const P3_CASES: Array<[Channel, unknown, unknown]> = [
+    [Channels.simState,
+      { tsMain: 1000, presence: 'active', presentationMode: 'awake', phase: 'day', valence: 0.2, arousal: 0.5,
+        energy: 80, affection: 12, liveliness: 0.3, userIdleS: 4, probableTyping: false, cursorNear: true,
+        onFloor: true, nearEdge: false, dnd: false, battery: { charging: true, level: 0.9 }, mode: 'character',
+        uiWorkMode: false, uiSfxMuted: false, localDate: '2026-08-30' },
+      { tsMain: 1000, presence: 'asleep', presentationMode: 'awake', phase: 'day', valence: 0.2, arousal: 0.5,
+        energy: 80, affection: 12, liveliness: 0.3, userIdleS: 4, probableTyping: false, cursorNear: true,
+        onFloor: true, nearEdge: false, dnd: false, battery: { charging: true, level: 0.9 }, mode: 'character',
+        uiWorkMode: false, uiSfxMuted: false, localDate: '2026-08-30' }],
+    [Channels.simEvent, { kind: 'returned', tsMain: 5, awayMs: 400_000 }, { kind: 'returned', tsMain: 5, awayMs: 604_800_001 }],
+    [Channels.simWindowMotion,
+      { generation: 3, tsMain: 10, phase: 'drag', vx: 12.5, vy: -3, lagX: 4, lagY: 0, contact: { x: 0.1, y: -0.2 } },
+      { generation: 3, tsMain: 10, phase: 'hover', vx: 12.5, vy: -3, lagX: 4, lagY: 0, contact: null }],
+    [Channels.simLanding, { generation: 3, tsMain: 10, impulse: 900, edge: 'floor' }, { generation: 3, tsMain: 10, impulse: 900, edge: 'wall' }],
+    [Channels.proactiveTurn,
+      { turnId: 't1', reservationId: 'r1', templateId: 'greeting.morning.01', bucket: 'greeting' },
+      { turnId: 't1', reservationId: 'r1', templateId: 'greeting.morning.01', bucket: 'random' }],
+    [Channels.proactiveGate,
+      { verdict: 'eligible', reason: '', displayedToday: 0, unansweredToday: 0, nextEligibleAt: null, mutedUntil: null },
+      { verdict: 'eligible', reason: '', displayedToday: -1, unansweredToday: 0, nextEligibleAt: null, mutedUntil: null }],
+    [Channels.modeChanged, { mode: 'plain', reason: 'command' }, { mode: 'plain', reason: 'hotkey' }],
+    [Channels.arbGrab,
+      { pressId: 1, part: 'head', modelX: 0.2, modelY: -0.4, screenX: 1200, screenY: 640 },
+      { pressId: 1, part: 'head', modelX: 1.2, modelY: -0.4, screenX: 1200, screenY: 640 }],
+    [Channels.arbRelease, { pressId: 1, wasTap: false }, { pressId: 1 }],
+    [Channels.arbTouch,
+      { pressId: 2, part: 'ticklish', alpha: 255, burst: 1, annoyed: false },
+      { pressId: 2, part: 'ticklish', alpha: 256, burst: 1, annoyed: false }],
+    [Channels.arbPassthrough, { faded: true }, { faded: 'yes' }],
+    [Channels.arbTrace,
+      { tsRenderer: 12.5, kind: 'blink', lane: null, source: null, generation: null, id: '', result: null, value: null, flag: true },
+      { tsRenderer: 12.5, kind: 'dragVisual', lane: null, source: null, generation: null, id: '', result: null, value: null }],
+  ];
+
+  it.each(P3_CASES)('accepts a well-formed %s', (channel, good) => {
+    expect(parseEvent(channel, good).ok).toBe(true);
+  });
+
+  it.each(P3_CASES)('rejects a malformed %s', (channel, _good, bad) => {
+    expect(parseEvent(channel, bad).ok).toBe(false);
   });
 });
