@@ -1,10 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { MAIN_TO_PET, PET_TO_MAIN, type Channel } from '@ds/protocol';
+import { BUBBLE_TO_MAIN, MAIN_TO_BUBBLE, type Channel } from '@ds/protocol';
 
-const toMain = new Set<string>(PET_TO_MAIN);
-const toRenderer = new Set<string>(MAIN_TO_PET);
+const toMain = new Set<string>(BUBBLE_TO_MAIN);
+const toRenderer = new Set<string>(MAIN_TO_BUBBLE);
 
-contextBridge.exposeInMainWorld('ds', {
+contextBridge.exposeInMainWorld('dsBubble', {
   send(channel: Channel, payload: unknown) {
     if (!toMain.has(channel)) throw new Error(`channel not allowed: ${channel}`);
     ipcRenderer.send(channel, payload);

@@ -45,20 +45,28 @@ export type PetIdentity = {
  * document sits on an origin we shipped. Navigation is denied separately in `pet-window.ts`; this
  * is the boundary that holds even if a navigation slips through.
  */
-export function isFromPet(event: SenderIdentity, pet: PetIdentity): boolean {
-  if (pet.isDestroyed() || pet.webContents.isDestroyed()) return false;
-  if (event.sender !== pet.webContents) return false;
+export function isFromWindow(event: SenderIdentity, win: PetIdentity): boolean {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return false;
+  if (event.sender !== win.webContents) return false;
   let frameUrl: string;
   try {
     // Only the frame getters can throw (a frame disposed mid-flight); an event from a frame that
     // no longer exists is not one we can authenticate. Nothing else is caught here, so a broken
     // origin policy stays loud instead of masquerading as "untrusted sender".
-    if (event.senderFrame === null || event.senderFrame !== pet.webContents.mainFrame) return false;
+    if (event.senderFrame === null || event.senderFrame !== win.webContents.mainFrame) return false;
     frameUrl = event.senderFrame.url;
   } catch {
     return false;
   }
+  // The bubble, chat and key pages ship from the same origin as the pet page (app://local in a
+  // build, ELECTRON_RENDERER_URL in dev), so the Phase 1 origin predicate covers all four windows.
+  // Its name is left alone: renaming it would ripple into app-protocol.test.ts, which T6 does not own.
   return isAllowedPetUrl(frameUrl);
+}
+
+/** Phase 1's name, kept so its call sites and its 8 tests are untouched. One copy of the checks. */
+export function isFromPet(event: SenderIdentity, pet: PetIdentity): boolean {
+  return isFromWindow(event, pet);
 }
 
 /** Subscribes to a renderer→main channel; untrusted senders and malformed payloads are dropped. */
@@ -78,5 +86,41 @@ export function onFromPet<C extends Channel>(
       return;
     }
     cb(r.data, pet);
+  });
+}
+
+/**
+ * Null-tolerant send. Same schema validation and destroyed-target guards as `sendToPet`; the null
+ * arm exists because main holds the bubble/chat/key windows in nullable module state that is only
+ * populated inside `app.whenReady()`.
+ */
+export function sendTo<C extends Channel>(win: SendTarget | null, channel: C, payload: Payload<C>): void {
+  if (!win) return;
+  sendToPet(win, channel, payload);
+}
+
+/**
+ * Subscribe once to a channel that several windows may legitimately use (`chat:open` comes from the
+ * pet, the bubble and the key window). The event is accepted only if `isFromWindow` passes for ONE
+ * of `windows`; the matching window is handed to the callback. Untrusted senders and malformed
+ * payloads are dropped with a warning, exactly as in `onFromPet`.
+ */
+export function onFromAny<C extends Channel>(
+  windows: readonly BrowserWindow[],
+  channel: C,
+  cb: (payload: Payload<C>, from: BrowserWindow) => void,
+): void {
+  ipcMain.on(channel, (event, raw: unknown) => {
+    const from = windows.find((w) => isFromWindow(event, w));
+    if (!from) {
+      console.warn(`[ipc] rejected ${channel}: untrusted sender`);
+      return;
+    }
+    const r = parseEvent(channel, raw);
+    if (!r.ok) {
+      console.warn(`[ipc] rejected ${channel}: ${r.error}`);
+      return;
+    }
+    cb(r.data, from);
   });
 }

@@ -13,6 +13,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@ds/brain": "workspace:*",
+    "@ds/memory": "workspace:*",
     "@ds/protocol": "workspace:*",
     "@ds/stage": "workspace:*",
     "koffi": "^2.9.0",
