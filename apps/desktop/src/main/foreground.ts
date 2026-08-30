@@ -170,9 +170,15 @@ export function startForegroundWatch(
       stop();
       return;
     }
+    // FIX ROUND 1, finding 2: the foreground CHANGE is computed inside the try but fanned out
+    // after it. The catch below is written for a native-call failure — it logs 'poll failed,
+    // fullscreen hiding disabled' and calls `stop()`, which nothing re-arms — so a throwing
+    // `onForegroundChanged` listener (Task 14's proactive breakpoint (a)) inside the try would
+    // permanently kill an unrelated Phase 1 feature and blame Win32 for it.
+    let fgChanged = false;
     try {
       const fgHwnd = toHwnd(api.GetForegroundWindow());
-      if (lastFgHwnd !== null && fgHwnd !== lastFgHwnd) for (const cb of fgSubs) cb();
+      fgChanged = lastFgHwnd !== null && fgHwnd !== lastFgHwnd;
       lastFgHwnd = fgHwnd;
       const out: RectOut = { left: 0, top: 0, right: 0, bottom: 0 };
       const ok = fgHwnd !== 0n && api.GetWindowRect(fgHwnd, out);
@@ -203,6 +209,12 @@ export function startForegroundWatch(
       if (lastHide) {
         lastHide = false;
         onChange(false);
+      }
+    }
+    // A pure notification, outside the Win32 catch, each listener isolated from the others.
+    if (fgChanged) {
+      for (const cb of fgSubs) {
+        try { cb(); } catch (err) { console.warn('[foreground] onForegroundChanged listener threw:', err); }
       }
     }
   };

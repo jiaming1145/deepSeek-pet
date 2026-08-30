@@ -190,6 +190,12 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
   const batterySubs = new Set<(b: { charging: boolean; level: number | null }) => void>();
   const wiggleSubs = new Set<() => void>();
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * FIX ROUND 1, finding 1. `stop()` clears this BEFORE it nulls `timer`, and `pump`'s `finally`
+   * reschedules only while it is set: a subscriber that calls `stop()` from inside a fan-out can no
+   * longer resurrect a zombie pump that `stop()` has already lost the handle to.
+   */
+  let armed = false;
   let tickN = 0;
   let inputDegraded = win32 === null;       // rung 2 entered
   let warnedInput = false;
@@ -216,21 +222,43 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     console.warn('[activity-sensor] input age degraded to powerMonitor.getSystemIdleTime():', why);
   };
 
+  /**
+   * FIX ROUND 1, finding 1. Every subscriber is called inside its own try/catch: one bad listener
+   * (Task 17 wires `onInput` straight into `SimService.dispatch`) must not suppress the others and
+   * must never reach the pump, whose single timer IS the sensing loop (§10.3).
+   */
+  const fanOut = (subs: Iterable<() => void>, what: string): void => {
+    for (const cb of subs) {
+      try { cb(); } catch (err) { console.warn(`[activity-sensor] ${what} listener threw:`, err); }
+    }
+  };
+
+  /**
+   * §10.5 rungs 1-2. FIX ROUND 1, finding 5: `inputDegraded` is recomputed on EVERY read instead of
+   * latching. A single transient `GetLastInputInfo` false must not pin the sensor to
+   * second-resolution `powerMonitor` — which would make `probableTyping` permanently false and,
+   * through `derived.healthy`, refuse every proactive line under `sensor-unknown` (R3-9) for the
+   * rest of the session. `warnDegraded` stays once-only so a permanently broken API does not turn
+   * the fallback into a 2 Hz log stream.
+   */
   const readInputAge = (): number | null => {
-    if (!inputDegraded && win32) {
+    if (win32) {
       try {
         const info: LastInputInfo = { cbSize: 8, dwTime: 0 };
-        if (win32.GetLastInputInfo(info)) return inputAgeFrom(win32.GetTickCount(), info.dwTime);
+        if (win32.GetLastInputInfo(info)) {
+          inputDegraded = false;
+          return inputAgeFrom(win32.GetTickCount(), info.dwTime);
+        }
         inputDegraded = true;
         warnDegraded('GetLastInputInfo returned false');
       } catch (err) {
         inputDegraded = true;
         warnDegraded(String(err));
       }
-    } else if (!warnedInput) {
+    } else {
+      inputDegraded = true;
       warnDegraded('koffi unavailable');
     }
-    derived.healthy = false;
     try {
       return powerMonitor.getSystemIdleTime() * 1000;   // second resolution: typing stays false
     } catch {
@@ -260,7 +288,14 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
       ? sample.battery !== null
       : sample.battery === null || sample.battery.charging !== next.charging || sample.battery.level !== next.level;
     sample.battery = next;
-    if (changed && next) for (const cb of batterySubs) cb({ ...next });
+    if (changed && next) {
+      const b = next;
+      for (const cb of batterySubs) {
+        // FIX ROUND 1, finding 1 — see `fanOut`; this one carries an argument, and each listener
+        // still gets its own copy so a mutating listener cannot corrupt the next one's.
+        try { cb({ ...b }); } catch (err) { console.warn('[activity-sensor] onBattery listener threw:', err); }
+      }
+    }
   };
 
   const updateTyping = (now: number): void => {
@@ -352,13 +387,17 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     if (tickN === 1 || tickN % DND_EVERY_N_TICKS === 0) {
       notification.poll();
       sample.dnd = notification.dnd;
-      if (sample.dnd === null) derived.healthy = false;      // rung 3
     }
     // signal 6 — first tick and every POWER_EVERY_N_TICKS
     if (tickN === 1 || tickN % POWER_EVERY_N_TICKS === 0) readBattery();
 
+    // §10.5 health. FIX ROUND 1, finding 5: recomputed from the live reads on every full tick, never
+    // latched. Rung 2 (no millisecond input age) and rung 3 (`dnd === null`, the last poll's
+    // verdict) both clear it, and both RESTORE it the moment the underlying call succeeds again.
+    derived.healthy = !inputDegraded && sample.dnd !== null;
+
     updateTyping(now);
-    if (edge) for (const cb of inputSubs) cb();
+    if (edge) fanOut(inputSubs, 'onInput');
   };
 
   /**
@@ -370,21 +409,33 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
    * asserts with `vi.getTimerCount()`.
    */
   const pump = (): void => {
-    const now = nowMono();
-    let cursor: { x: number; y: number } | null = null;
-    try { cursor = deps.cursor(); } catch { cursor = null; }
-    nearPet = cursorNearPet(cursor);
+    try {
+      const now = nowMono();
+      let cursor: { x: number; y: number } | null = null;
+      try { cursor = deps.cursor(); } catch { cursor = null; }
+      nearPet = cursorNearPet(cursor);
 
-    derived.wiggle = updateWiggle(now, cursor);
-    if (derived.wiggle) for (const cb of wiggleSubs) cb();
+      derived.wiggle = updateWiggle(now, cursor);
+      if (derived.wiggle) fanOut(wiggleSubs, 'onWiggle');
 
-    subTicks += pendingUnits;
-    if (subTicks >= WIGGLE_SUBTICKS_PER_FULL) {
-      subTicks = 0;
-      fullTick(now, cursor);
+      subTicks += pendingUnits;
+      if (subTicks >= WIGGLE_SUBTICKS_PER_FULL) {
+        subTicks = 0;
+        fullTick(now, cursor);
+      }
+    } catch (err) {
+      // FIX ROUND 1, finding 1. The reschedule below is the LAST statement of the pump and this
+      // process owns exactly ONE sensing timer, so an exception escaping here would kill sensing
+      // permanently and silently: input age, DND, battery, typing and wiggle would all freeze while
+      // `SimService.tick` kept reading the stale `sample` at 2 Hz forever. The old §10.3
+      // fixed-interval shape lost one tick; the R3-36 self-rescheduling shape loses the sensor.
+      console.warn('[activity-sensor] pump failed:', err);
+    } finally {
+      if (armed) {
+        pendingUnits = nearPet ? 1 : WIGGLE_SUBTICKS_PER_FULL;
+        timer = setTimeout(pump, nearPet ? WIGGLE_FAST_TICK_MS : SENSOR_TICK_MS);
+      }
     }
-    pendingUnits = nearPet ? 1 : WIGGLE_SUBTICKS_PER_FULL;
-    timer = setTimeout(pump, nearPet ? WIGGLE_FAST_TICK_MS : SENSOR_TICK_MS);
   };
 
   const onPowerEvent = (): void => readBattery();
@@ -394,6 +445,7 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
     get derived() { return derived; },
     start() {
       if (timer !== null) return;
+      armed = true;
       offDnd = notification.onChange(() => { sample.dnd = notification.dnd; });
       powerMonitor.on('on-ac', onPowerEvent);
       powerMonitor.on('on-battery', onPowerEvent);
@@ -402,6 +454,7 @@ export function createActivitySensor(deps: ActivitySensorDeps): ActivitySensor {
       timer = setTimeout(pump, SENSOR_TICK_MS);   // the ONE timer (§10.3)
     },
     stop() {
+      armed = false;                     // FIX ROUND 1, finding 1: cleared BEFORE `timer` is nulled
       if (timer !== null) clearTimeout(timer);
       timer = null;
       offDnd?.();

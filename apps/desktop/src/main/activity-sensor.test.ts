@@ -414,10 +414,104 @@ describe('degradation ladder (§10.5)', () => {
   });
 });
 
+describe('fix round 1 — the ONE sensing timer survives its subscribers and its deps (§10.3)', () => {
+  it('a throwing onInput listener neither kills the pump nor suppresses the next listener', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let age = 60_000;
+    const { sensor } = make(fakeWin32({ age: () => age }));
+    const bad = vi.fn(() => { throw new Error('dispatch to a destroyed window'); });
+    const good = vi.fn();
+    sensor.onInput(bad);
+    sensor.onInput(good);
+    sensor.start();
+    age = 100;
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    expect(bad).toHaveBeenCalledTimes(1);
+    expect(good).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);              // the one timer is still armed
+    age = 5_000;
+    vi.advanceTimersByTime(SENSOR_TICK_MS * 4);      // ... and still sampling
+    expect(sensor.sample.inputAgeMs).toBe(5_000);
+    sensor.stop();
+    warn.mockRestore();
+  });
+
+  it('an exception raised inside the pump is logged and the pump still reschedules', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const age = vi.fn(() => 5_000);
+    let boom = false;
+    const sensor = createActivitySensor({
+      cursor: () => ({ x: 0, y: 0 }),
+      scaleFactor: () => { if (boom) throw new Error('display gone'); return 1; },
+      win32: fakeWin32({ age }),
+    });
+    sensor.start();
+    vi.advanceTimersByTime(SENSOR_TICK_MS * 2);
+    boom = true;
+    vi.advanceTimersByTime(SENSOR_TICK_MS);          // tick 3 throws after reading the input age
+    expect(warn).toHaveBeenCalledWith('[activity-sensor] pump failed:', expect.anything());
+    expect(vi.getTimerCount()).toBe(1);
+    boom = false;
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    expect(age).toHaveBeenCalledTimes(4);            // ticks 1, 2, 3 (which threw) and 4
+    sensor.stop();
+    warn.mockRestore();
+  });
+
+  it('a listener that calls stop() from inside the fan-out leaves no zombie pump', () => {
+    let age = 60_000;
+    const { sensor } = make(fakeWin32({ age: () => age }));
+    sensor.onInput(() => { sensor.stop(); });
+    sensor.start();
+    age = 100;
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    // Without the `armed` guard, stop() nulled `timer` and the pump's tail then reassigned it:
+    // a pump nothing could cancel any more.
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('derived.healthy RECOVERS — it is recomputed per tick, not latched (§10.5, R3-9)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let age: number | null = 3_000;
+    let q: number | null = QUNS.ACCEPTS_NOTIFICATIONS;
+    const { sensor } = make(fakeWin32({ age: () => age, quns: () => q }));
+    sensor.start();
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    expect(sensor.derived.healthy).toBe(true);
+    q = null;                                        // one transient SHQueryUserNotificationState HRESULT
+    vi.advanceTimersByTime(SENSOR_TICK_MS * DND_EVERY_N_TICKS);
+    expect(sensor.derived.healthy).toBe(false);
+    q = QUNS.ACCEPTS_NOTIFICATIONS;
+    vi.advanceTimersByTime(SENSOR_TICK_MS * DND_EVERY_N_TICKS);
+    expect(sensor.sample.dnd).toBe(false);
+    expect(sensor.derived.healthy).toBe(true);       // ... and proactive speech is possible again
+    age = null;                                      // one transient GetLastInputInfo false
+    idleSeconds.mockReturnValue(4);
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    expect(sensor.sample.inputAgeMs).toBe(4_000);
+    expect(sensor.derived.healthy).toBe(false);
+    age = 3_000;
+    vi.advanceTimersByTime(SENSOR_TICK_MS);
+    expect(sensor.sample.inputAgeMs).toBe(3_000);    // millisecond resolution came back
+    expect(sensor.derived.healthy).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(1);           // warnDegraded is still once-only
+    sensor.stop();
+    warn.mockRestore();
+  });
+});
+
 describe('§10.7 — every capability PRIVACY-SENSING.md denies is absent from the source', () => {
   it('grep over apps/desktop/src and packages returns nothing', () => {
     const root = new URL('../../../../', import.meta.url);
-    const pattern = 'SetWindowsHookEx\\|WH_KEYBOARD\\|RIDEV_INPUTSINK\\|GetAsyncKeyState\\|clipboard\\|GetWindowText\\|desktopCapturer\\|capturePage';
+    // FIX ROUND 1, finding 7: the clipboard term is `clipboard[?.]*read`, not the bare token.
+    // PRIVACY-SENSING.md denies READING the clipboard (「不读剪贴板」) and says nothing about a
+    // write; the bare token also matched Phase 2's user-initiated "copy this message" button
+    // (`renderer/chat/History.tsx:178`, `navigator.clipboard?.writeText`) in a file Task 12 does
+    // not own, which forced a second allow-list entry that no reader of PRIVACY-SENSING.md could
+    // see. The narrowed term denies exactly what the statement denies -- `clipboard.readText`,
+    // `clipboard.read` and `navigator.clipboard?.readText` all match it -- so the denial and the
+    // grep are back in step and the allow-list is down to this file alone (the brief's item).
+    const pattern = 'SetWindowsHookEx\\|WH_KEYBOARD\\|RIDEV_INPUTSINK\\|GetAsyncKeyState\\|clipboard[?.]*read\\|GetWindowText\\|desktopCapturer\\|capturePage';
     let out = '';
     try {
       out = execFileSync('grep', ['-rn', pattern, 'apps/desktop/src', 'packages'], { cwd: root, encoding: 'utf8' });
@@ -426,16 +520,8 @@ describe('§10.7 — every capability PRIVACY-SENSING.md denies is absent from t
       if (err.status !== 1) throw e;          // grep exit 1 = no match; anything else is a real error
       out = err.stdout ?? '';
     }
-    // Two audited exceptions, each pinned by its exact text so a NEW use of any token in either
-    // file still fails the test:
-    //  1. this file names the pattern once, in the string above;
-    //  2. Phase 2's chat transcript has a "copy this message" button. PRIVACY-SENSING.md denies
-    //     READING the clipboard ("不读剪贴板"); a user-initiated WRITE of text the user is already
-    //     looking at senses nothing. `History.tsx` is not owned by Task 12 (§1.5), so the deviation
-    //     is recorded here rather than edited away.
-    const hits = out.split('\n').filter((l) => l
-      && !l.includes('activity-sensor.test.ts')
-      && !(l.includes('renderer/chat/History.tsx') && l.includes('navigator.clipboard?.writeText')));
+    // This file names the pattern once, in the string above; nothing else may.
+    const hits = out.split('\n').filter((l) => l && !l.includes('activity-sensor.test.ts'));
     expect(hits).toEqual([]);
   });
   it('the privacy statement exists and carries the denial sentence', () => {

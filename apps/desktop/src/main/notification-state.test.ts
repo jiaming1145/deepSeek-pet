@@ -43,6 +43,18 @@ describe('createNotificationState', () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
 
+  it('one throwing onChange listener does not suppress the others (fix round 1, finding 1)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ns = createNotificationState(() => QUNS.BUSY);
+    const good = vi.fn();
+    ns.onChange(() => { throw new Error('a DND handler blew up'); });
+    ns.onChange(good);
+    ns.poll();
+    expect(good).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('[notification-state] onChange listener threw:', expect.anything());
+    warn.mockRestore();
+  });
+
   it('is inert with no query (koffi missing): dnd stays null and onChange reports on once', () => {
     const ns = createNotificationState(null);
     const cb = vi.fn();
