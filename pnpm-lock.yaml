@@ -94,6 +94,15 @@ importers:
         specifier: workspace:*
         version: link:../packages/memory
 
+  packages/behaviors:
+    dependencies:
+      '@ds/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: ^4.0.0
+        version: 4.5.2
+
   packages/brain:
     dependencies:
       '@ds/protocol':
