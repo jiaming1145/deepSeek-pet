@@ -363,7 +363,10 @@ export class TurnRunner {
     if (ev === null) return;
     turn.pending = null;
     if (turn.emitted.length === 0) {
-      void this.commitUser(turn);
+      // The stored promise is awaited on every normal path; a turn superseded by send() never
+      // awaits it, so attach a handler here or a failing HistoryPort.append becomes an unhandled
+      // rejection (T4 concern C6).
+      this.commitUser(turn).catch((err: unknown) => console.warn('[turn] history append failed', err));
       this.setState('speaking', turn);
     }
     turn.emitted.push(ev);

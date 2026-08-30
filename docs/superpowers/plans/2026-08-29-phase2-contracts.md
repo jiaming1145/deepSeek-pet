@@ -36,6 +36,15 @@ Environment verified in this session (do not re-derive):
 
 ---
 
+## Amendments (controller rulings after execution began — these override the sections below)
+
+- **A-1 (after T4, 2026-08-29)** §3.6 `ellipsis-rate`: denominator is `Math.max(recent.length, 5) + 1` (was `recent.length + 1`). Reason: with an empty history one …… scored 1/1 and forced a paid regeneration on the first turn.
+- **A-2 (after T4)** §3.6 `markdown`: `MARKDOWN_INLINE` matches markdown *syntax* (`**bold**`, `*em*`, heading `#` after whitespace/line start, code spans) — not the bare characters `* # \``. Reason: "C#", "#1", "5*3" stripped benign sentences.
+- **A-3 (after T4)** §3.6 `opener-repeat`: unchanged (4 code points, regenerate). The regeneration cost only applies when nothing is painted, which is the A7-intended behaviour; T9's judge treats a repeated opener as a real violation.
+- **A-4 (after T4)** §3.9 `TurnRunner.release`: the user-row commit promise carries a warn-and-swallow handler so a superseded turn cannot surface an unhandled rejection.
+- **A-5 (after T5)** Evidence artefacts under `docs/evidence/` are byte-exact (`.gitattributes` `-text`) and must be produced with the cwd banner `D:\\ds\\…`, never a worktree path — regenerate or normalise before committing.
+- **A-6 (after T4)** `brain:turnDone.lint` / `MetricsRecord.lint` is the LAST sentence's verdict, not the turn's union; T9/T10 count violations with `lintReply` over the full reply.
+
 ## 0.1 Task numbering, ownership and execution shape (v2 — canonical)
 
 The v2 renumbering was never propagated through the briefs. **This table is the only correct map.** Every "Task N" reference anywhere in this file, in `rulings.md`, or in a task brief means the number in the left column. Where a brief says an old number, read it through this table.

@@ -79,6 +79,9 @@ describe('markdown (A4)', () => {
 
   it('leaves plain prose alone', () => {
     expect(rules('今天不错。', ctx())).not.toContain('markdown');
+    // Bare characters in prose are not markdown syntax.
+    expect(rules('我在学 C#，第 #1 个练习是 5*3。', ctx())).not.toContain('markdown');
+    expect(rules('用 `npm test` 跑一下。', ctx())).toContain('markdown');
   });
 });
 
@@ -167,6 +170,8 @@ describe('ellipsis (A6)', () => {
 describe('ellipsis-rate (A6)', () => {
   it('flags the ellipsis rate across replies', () => {
     expect(rules('嗯……', ctx(['好……', '嗯。', '在。', '哦。']))).toContain('ellipsis-rate');
+    // Cold start: one …… with no history is 1/6, not 1/1 — must not force a regeneration.
+    expect(rules('嗯……', ctx([]))).not.toContain('ellipsis-rate');
   });
 
   it('allows one ellipsis in six replies', () => {
