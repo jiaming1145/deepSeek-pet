@@ -1,0 +1,1260 @@
+{
+  "cwd": "D:\\ds",
+  "runDir": "D:\\ds\\.claude\\worktrees\\wf_53266240-b22-5",
+  "date": "2026-08-30T20:36:17.223Z",
+  "hardware": "Windows 10.0.26200 (Windows 11 Home 10.0.26200), CPU 12th Gen Intel(R) Core(TM) i7-12700K, GPU/driver ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver), display 3840x2160 @ 150 % (devicePixelRatio 1.5)",
+  "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "dpr": 1.5,
+  "canvas": {
+    "w": 630,
+    "h": 1080
+  },
+  "samples": 27242,
+  "boundaryShare": 0.5004404962924895,
+  "ambiguousRate": 0.2227075838778357,
+  "ambiguousCoverageOnlyRate": 0.11423537185228691,
+  "ambiguousIdOnlyRate": 0.10847221202554878,
+  "parts": {
+    "body": 5266,
+    "ticklish": 5538,
+    "hair": 623,
+    "arm": 201,
+    "face": 200
+  },
+  "requiredParts": [
+    "arm",
+    "body",
+    "face",
+    "hair",
+    "head"
+  ],
+  "contextAntialias": true,
+  "glSamples": 4,
+  "mismatchPairs": {
+    "body -> none": 298,
+    "ticklish -> none": 198,
+    "body -> face": 78,
+    "hair -> face": 70,
+    "hair -> none": 49,
+    "arm -> body": 40,
+    "body -> arm": 37,
+    "face -> hair": 23,
+    "hair -> head": 19,
+    "body -> hair": 8,
+    "hair -> body": 4,
+    "face -> head": 3,
+    "arm -> none": 3,
+    "arm -> hair": 2,
+    "hair -> arm": 2
+  },
+  "exposedButUnreachable": [
+    "head"
+  ],
+  "reference": {
+    "gating": "non-multisampled full-resolution RGBA8 FBO, redrawn by the same renderer in the same frozen pose",
+    "secondary": "the default framebuffer, which Live2DStage.create requests with antialias: true (MSAA resolve)"
+  },
+  "cpu": {
+    "geom": {
+      "fpRate": 0,
+      "fnRate": 0.035092871301666544,
+      "fnInterior": 6,
+      "fnMaxRefAlpha": 111,
+      "fnIdPresent": 544,
+      "fnIdAbsent": 412,
+      "fnRateIdPresent": 0.01996916525952573
+    },
+    "msaa": {
+      "fpRate": 0,
+      "fnRate": 0.035239703399163054,
+      "fnInterior": 6,
+      "fnMaxRefAlpha": 111,
+      "fnIdPresent": 547,
+      "fnIdAbsent": 413,
+      "fnRateIdPresent": 0.020079289332648118
+    },
+    "mismatchRate": 0.039386068476977565,
+    "p50Ms": 0,
+    "p95Ms": 0.09999990463256836,
+    "p99Ms": 0.10000038146972656,
+    "pass": false
+  },
+  "cpuTexelCenter": {
+    "geom": {
+      "fpRate": 0,
+      "fnRate": 0.03645106820350929,
+      "fnInterior": 7,
+      "fnMaxRefAlpha": 125,
+      "fnIdPresent": 543,
+      "fnIdAbsent": 450,
+      "fnRateIdPresent": 0.019932457235151604
+    },
+    "msaa": {
+      "fpRate": 0,
+      "fnRate": 0.0365979003010058,
+      "fnInterior": 7,
+      "fnMaxRefAlpha": 125,
+      "fnIdPresent": 546,
+      "fnIdAbsent": 451,
+      "fnRateIdPresent": 0.02004258130827399
+    },
+    "mismatchRate": 0.03929161747343565,
+    "p50Ms": 0,
+    "p95Ms": 0.09999990463256836,
+    "p99Ms": 0.10000038146972656,
+    "pass": false
+  },
+  "fbo": {
+    "geom": {
+      "fpRate": 0.1522648851038837,
+      "fnRate": 0.015307246164011454,
+      "fnInterior": 149,
+      "fnMaxRefAlpha": 255,
+      "fnIdPresent": 220,
+      "fnIdAbsent": 197,
+      "fnRateIdPresent": 0.008075765362308201
+    },
+    "msaa": {
+      "fpRate": 0.1521180530063872,
+      "fnRate": 0.015307246164011454,
+      "fnInterior": 149,
+      "fnMaxRefAlpha": 255,
+      "fnIdPresent": 220,
+      "fnIdAbsent": 197,
+      "fnRateIdPresent": 0.008075765362308201
+    },
+    "mismatchRate": 0.13355371900826446,
+    "p50Ms": 0,
+    "p95Ms": 0.09999990463256836,
+    "p99Ms": 0.10000038146972656,
+    "pass": false
+  },
+  "poses": [
+    {
+      "pose": 0,
+      "samples": 2058,
+      "boundary": 1030,
+      "ambiguous": 468,
+      "ambiguousCoverageOnly": 250,
+      "ambiguousIdOnly": 218,
+      "parts": {
+        "body": 403,
+        "ticklish": 333,
+        "hair": 54,
+        "arm": 17,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 7628,
+        "body": 92142,
+        "face": 237,
+        "hair": 9178,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 123320,
+        "msaa": 123319
+      },
+      "refDisagree": {
+        "idOnly": 6622,
+        "coverageOnly": 20757,
+        "idPixels": 109185
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 59,
+          "fnIdPresent": 35,
+          "fnIdAbsent": 24,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 92
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 59,
+          "fnIdPresent": 35,
+          "fnIdAbsent": 24,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 92
+        },
+        "mismatch": 66,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 63,
+          "fnIdPresent": 36,
+          "fnIdAbsent": 27,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 95
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 63,
+          "fnIdPresent": 36,
+          "fnIdAbsent": 27,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 95
+        },
+        "mismatch": 68,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 309,
+          "fn": 0,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 0
+        },
+        "msaa": {
+          "fp": 309,
+          "fn": 0,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 0
+        },
+        "mismatch": 210,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 1,
+      "samples": 2022,
+      "boundary": 1012,
+      "ambiguous": 457,
+      "ambiguousCoverageOnly": 220,
+      "ambiguousIdOnly": 237,
+      "parts": {
+        "ticklish": 306,
+        "body": 422,
+        "hair": 57,
+        "arm": 17,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 7437,
+        "body": 91342,
+        "face": 226,
+        "hair": 9214,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122403,
+        "msaa": 122404
+      },
+      "refDisagree": {
+        "idOnly": 6579,
+        "coverageOnly": 20763,
+        "idPixels": 108219
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 68,
+          "fnIdPresent": 37,
+          "fnIdAbsent": 31,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 100
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 68,
+          "fnIdPresent": 37,
+          "fnIdAbsent": 31,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 100
+        },
+        "mismatch": 71,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 73,
+          "fnIdPresent": 40,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 100
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 73,
+          "fnIdPresent": 40,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 100
+        },
+        "mismatch": 75,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 281,
+          "fn": 104,
+          "fnIdPresent": 49,
+          "fnIdAbsent": 55,
+          "fnInterior": 22,
+          "fnMaxRefAlpha": 255
+        },
+        "msaa": {
+          "fp": 281,
+          "fn": 104,
+          "fnIdPresent": 49,
+          "fnIdAbsent": 55,
+          "fnInterior": 22,
+          "fnMaxRefAlpha": 255
+        },
+        "mismatch": 248,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 2,
+      "samples": 1928,
+      "boundary": 965,
+      "ambiguous": 416,
+      "ambiguousCoverageOnly": 208,
+      "ambiguousIdOnly": 208,
+      "parts": {
+        "ticklish": 234,
+        "body": 409,
+        "hair": 43,
+        "arm": 16,
+        "face": 16
+      },
+      "idPartPixels": {
+        "arm": 7333,
+        "body": 92347,
+        "face": 233,
+        "hair": 9170,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122951,
+        "msaa": 122952
+      },
+      "refDisagree": {
+        "idOnly": 6699,
+        "coverageOnly": 20567,
+        "idPixels": 109083
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 59,
+          "fnIdPresent": 33,
+          "fnIdAbsent": 26,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 79
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 59,
+          "fnIdPresent": 33,
+          "fnIdAbsent": 26,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 79
+        },
+        "mismatch": 63,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 60,
+          "fnIdPresent": 33,
+          "fnIdAbsent": 27,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 99
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 60,
+          "fnIdPresent": 33,
+          "fnIdAbsent": 27,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 99
+        },
+        "mismatch": 63,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 299,
+          "fn": 94,
+          "fnIdPresent": 55,
+          "fnIdAbsent": 39,
+          "fnInterior": 35,
+          "fnMaxRefAlpha": 255
+        },
+        "msaa": {
+          "fp": 299,
+          "fn": 94,
+          "fnIdPresent": 55,
+          "fnIdAbsent": 39,
+          "fnInterior": 35,
+          "fnMaxRefAlpha": 255
+        },
+        "mismatch": 245,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 3,
+      "samples": 1700,
+      "boundary": 851,
+      "ambiguous": 377,
+      "ambiguousCoverageOnly": 239,
+      "ambiguousIdOnly": 138,
+      "parts": {
+        "arm": 25,
+        "ticklish": 144,
+        "body": 280,
+        "hair": 39,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 8422,
+        "body": 95325,
+        "face": 228,
+        "hair": 9174,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 138329,
+        "msaa": 138326
+      },
+      "refDisagree": {
+        "idOnly": 7461,
+        "coverageOnly": 32641,
+        "idPixels": 113149
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 64,
+          "fnIdPresent": 32,
+          "fnIdAbsent": 32,
+          "fnInterior": 3,
+          "fnMaxRefAlpha": 86
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 64,
+          "fnIdPresent": 32,
+          "fnIdAbsent": 32,
+          "fnInterior": 3,
+          "fnMaxRefAlpha": 86
+        },
+        "mismatch": 48,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 66,
+          "fnIdPresent": 32,
+          "fnIdAbsent": 34,
+          "fnInterior": 3,
+          "fnMaxRefAlpha": 66
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 66,
+          "fnIdPresent": 32,
+          "fnIdAbsent": 34,
+          "fnInterior": 3,
+          "fnMaxRefAlpha": 66
+        },
+        "mismatch": 48,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 252,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 13
+        },
+        "msaa": {
+          "fp": 252,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 13
+        },
+        "mismatch": 184,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 4,
+      "samples": 3300,
+      "boundary": 1651,
+      "ambiguous": 713,
+      "ambiguousCoverageOnly": 343,
+      "ambiguousIdOnly": 370,
+      "parts": {
+        "ticklish": 1067,
+        "body": 620,
+        "hair": 66,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 9947,
+        "body": 88917,
+        "face": 227,
+        "hair": 9160,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 121755,
+        "msaa": 121760
+      },
+      "refDisagree": {
+        "idOnly": 6801,
+        "coverageOnly": 20305,
+        "idPixels": 108251
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 120,
+          "fnIdPresent": 72,
+          "fnIdAbsent": 48,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 101
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 122,
+          "fnIdPresent": 73,
+          "fnIdAbsent": 49,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 101
+        },
+        "mismatch": 95,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 123,
+          "fnIdPresent": 70,
+          "fnIdAbsent": 53,
+          "fnInterior": 2,
+          "fnMaxRefAlpha": 125
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 125,
+          "fnIdPresent": 71,
+          "fnIdAbsent": 54,
+          "fnInterior": 2,
+          "fnMaxRefAlpha": 125
+        },
+        "mismatch": 93,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 570,
+          "fn": 21,
+          "fnIdPresent": 9,
+          "fnIdAbsent": 12,
+          "fnInterior": 5,
+          "fnMaxRefAlpha": 255
+        },
+        "msaa": {
+          "fp": 568,
+          "fn": 21,
+          "fnIdPresent": 9,
+          "fnIdAbsent": 12,
+          "fnInterior": 5,
+          "fnMaxRefAlpha": 255
+        },
+        "mismatch": 355,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 5,
+      "samples": 2120,
+      "boundary": 1061,
+      "ambiguous": 506,
+      "ambiguousCoverageOnly": 264,
+      "ambiguousIdOnly": 242,
+      "parts": {
+        "body": 419,
+        "ticklish": 365,
+        "hair": 57,
+        "arm": 25,
+        "face": 16
+      },
+      "idPartPixels": {
+        "arm": 7626,
+        "body": 92149,
+        "face": 239,
+        "hair": 9149,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 123394,
+        "msaa": 123396
+      },
+      "refDisagree": {
+        "idOnly": 6624,
+        "coverageOnly": 20855,
+        "idPixels": 109163
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 78,
+          "fnIdPresent": 45,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 111
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 78,
+          "fnIdPresent": 45,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 111
+        },
+        "mismatch": 76,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 76,
+          "fnIdPresent": 39,
+          "fnIdAbsent": 37,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 85
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 76,
+          "fnIdPresent": 39,
+          "fnIdAbsent": 37,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 85
+        },
+        "mismatch": 73,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 315,
+          "fn": 61,
+          "fnIdPresent": 31,
+          "fnIdAbsent": 30,
+          "fnInterior": 26,
+          "fnMaxRefAlpha": 255
+        },
+        "msaa": {
+          "fp": 315,
+          "fn": 61,
+          "fnIdPresent": 31,
+          "fnIdAbsent": 30,
+          "fnInterior": 26,
+          "fnMaxRefAlpha": 255
+        },
+        "mismatch": 231,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 6,
+      "samples": 2504,
+      "boundary": 1253,
+      "ambiguous": 548,
+      "ambiguousCoverageOnly": 258,
+      "ambiguousIdOnly": 290,
+      "parts": {
+        "body": 510,
+        "ticklish": 635,
+        "hair": 39,
+        "arm": 18,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 9910,
+        "body": 90776,
+        "face": 236,
+        "hair": 8794,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122952,
+        "msaa": 122951
+      },
+      "refDisagree": {
+        "idOnly": 7095,
+        "coverageOnly": 20331,
+        "idPixels": 109716
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 97,
+          "fnIdPresent": 54,
+          "fnIdAbsent": 43,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 109
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 98,
+          "fnIdPresent": 55,
+          "fnIdAbsent": 43,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 109
+        },
+        "mismatch": 67,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 103,
+          "fnIdPresent": 56,
+          "fnIdAbsent": 47,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 108
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 104,
+          "fnIdPresent": 57,
+          "fnIdAbsent": 47,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 108
+        },
+        "mismatch": 68,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 400,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 20
+        },
+        "msaa": {
+          "fp": 399,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 20
+        },
+        "mismatch": 220,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 7,
+      "samples": 3302,
+      "boundary": 1652,
+      "ambiguous": 703,
+      "ambiguousCoverageOnly": 351,
+      "ambiguousIdOnly": 352,
+      "parts": {
+        "ticklish": 1071,
+        "body": 595,
+        "hair": 62,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 10256,
+        "body": 88536,
+        "face": 167,
+        "hair": 8889,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 121209,
+        "msaa": 121208
+      },
+      "refDisagree": {
+        "idOnly": 6781,
+        "coverageOnly": 20142,
+        "idPixels": 107848
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 120,
+          "fnIdPresent": 74,
+          "fnIdAbsent": 46,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 111
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 121,
+          "fnIdPresent": 75,
+          "fnIdAbsent": 46,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 111
+        },
+        "mismatch": 93,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 126,
+          "fnIdPresent": 73,
+          "fnIdAbsent": 53,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 94
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 127,
+          "fnIdPresent": 74,
+          "fnIdAbsent": 53,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 94
+        },
+        "mismatch": 91,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 495,
+          "fn": 0,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 0
+        },
+        "msaa": {
+          "fp": 494,
+          "fn": 0,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 0
+        },
+        "mismatch": 293,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 8,
+      "samples": 2276,
+      "boundary": 1139,
+      "ambiguous": 517,
+      "ambiguousCoverageOnly": 258,
+      "ambiguousIdOnly": 259,
+      "parts": {
+        "ticklish": 435,
+        "hair": 66,
+        "body": 445,
+        "arm": 32,
+        "face": 16
+      },
+      "idPartPixels": {
+        "arm": 7535,
+        "body": 91618,
+        "face": 242,
+        "hair": 9104,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122527,
+        "msaa": 122526
+      },
+      "refDisagree": {
+        "idOnly": 6660,
+        "coverageOnly": 20688,
+        "idPixels": 108499
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 70,
+          "fnIdPresent": 41,
+          "fnIdAbsent": 29,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 95
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 70,
+          "fnIdPresent": 41,
+          "fnIdAbsent": 29,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 95
+        },
+        "mismatch": 67,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 69,
+          "fnIdPresent": 39,
+          "fnIdAbsent": 30,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 75
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 69,
+          "fnIdPresent": 39,
+          "fnIdAbsent": 30,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 75
+        },
+        "mismatch": 63,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 300,
+          "fn": 1,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 1,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 11
+        },
+        "msaa": {
+          "fp": 300,
+          "fn": 1,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 1,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 11
+        },
+        "mismatch": 187,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 9,
+      "samples": 1900,
+      "boundary": 951,
+      "ambiguous": 430,
+      "ambiguousCoverageOnly": 246,
+      "ambiguousIdOnly": 184,
+      "parts": {
+        "ticklish": 239,
+        "body": 366,
+        "hair": 46,
+        "arm": 17,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 7440,
+        "body": 91580,
+        "face": 158,
+        "hair": 9250,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122834,
+        "msaa": 122839
+      },
+      "refDisagree": {
+        "idOnly": 6547,
+        "coverageOnly": 20953,
+        "idPixels": 108428
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 62,
+          "fnIdPresent": 35,
+          "fnIdAbsent": 27,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 89
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 62,
+          "fnIdPresent": 35,
+          "fnIdAbsent": 27,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 89
+        },
+        "mismatch": 65,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 67,
+          "fnIdPresent": 36,
+          "fnIdAbsent": 31,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 89
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 67,
+          "fnIdPresent": 36,
+          "fnIdAbsent": 31,
+          "fnInterior": 1,
+          "fnMaxRefAlpha": 89
+        },
+        "mismatch": 65,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 303,
+          "fn": 1,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 1,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 11
+        },
+        "msaa": {
+          "fp": 303,
+          "fn": 1,
+          "fnIdPresent": 0,
+          "fnIdAbsent": 1,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 11
+        },
+        "mismatch": 203,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 10,
+      "samples": 2038,
+      "boundary": 1020,
+      "ambiguous": 478,
+      "ambiguousCoverageOnly": 235,
+      "ambiguousIdOnly": 243,
+      "parts": {
+        "body": 409,
+        "ticklish": 316,
+        "hair": 50,
+        "arm": 17,
+        "face": 17
+      },
+      "idPartPixels": {
+        "arm": 7420,
+        "body": 91036,
+        "face": 225,
+        "hair": 9201,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 122149,
+        "msaa": 122146
+      },
+      "refDisagree": {
+        "idOnly": 6555,
+        "coverageOnly": 20822,
+        "idPixels": 107882
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 76,
+          "fnIdPresent": 43,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 75
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 76,
+          "fnIdPresent": 43,
+          "fnIdAbsent": 33,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 75
+        },
+        "mismatch": 64,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 82,
+          "fnIdPresent": 47,
+          "fnIdAbsent": 35,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 87
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 82,
+          "fnIdPresent": 47,
+          "fnIdAbsent": 35,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 87
+        },
+        "mismatch": 67,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 320,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 21
+        },
+        "msaa": {
+          "fp": 320,
+          "fn": 1,
+          "fnIdPresent": 1,
+          "fnIdAbsent": 0,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 21
+        },
+        "mismatch": 183,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    },
+    {
+      "pose": 11,
+      "samples": 2094,
+      "boundary": 1048,
+      "ambiguous": 454,
+      "ambiguousCoverageOnly": 240,
+      "ambiguousIdOnly": 214,
+      "parts": {
+        "body": 388,
+        "ticklish": 393,
+        "arm": 17,
+        "hair": 44,
+        "face": 16
+      },
+      "idPartPixels": {
+        "arm": 9999,
+        "body": 90136,
+        "face": 230,
+        "hair": 8949,
+        "head": 0
+      },
+      "refOpaque": {
+        "geom": 123387,
+        "msaa": 123389
+      },
+      "refDisagree": {
+        "idOnly": 7151,
+        "coverageOnly": 21224,
+        "idPixels": 109314
+      },
+      "cpu": {
+        "geom": {
+          "fp": 0,
+          "fn": 83,
+          "fnIdPresent": 43,
+          "fnIdAbsent": 40,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 89
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 83,
+          "fnIdPresent": 43,
+          "fnIdAbsent": 40,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 89
+        },
+        "mismatch": 59,
+        "timesMs": []
+      },
+      "cpuTexelCenter": {
+        "geom": {
+          "fp": 0,
+          "fn": 85,
+          "fnIdPresent": 42,
+          "fnIdAbsent": 43,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 85
+        },
+        "msaa": {
+          "fp": 0,
+          "fn": 85,
+          "fnIdPresent": 42,
+          "fnIdAbsent": 43,
+          "fnInterior": 0,
+          "fnMaxRefAlpha": 85
+        },
+        "mismatch": 58,
+        "timesMs": []
+      },
+      "fbo": {
+        "geom": {
+          "fp": 304,
+          "fn": 132,
+          "fnIdPresent": 73,
+          "fnIdAbsent": 59,
+          "fnInterior": 61,
+          "fnMaxRefAlpha": 255
+        },
+        "msaa": {
+          "fp": 304,
+          "fn": 132,
+          "fnIdPresent": 73,
+          "fnIdAbsent": 59,
+          "fnInterior": 61,
+          "fnMaxRefAlpha": 255
+        },
+        "mismatch": 269,
+        "timesMs": []
+      },
+      "pressAlphaAgrees": true
+    }
+  ],
+  "gate": {
+    "fp": 0.005,
+    "fn": 0.005,
+    "p95Ms": 0.2,
+    "samples": 20000,
+    "boundaryShare": 0.5,
+    "perPart": 200
+  },
+  "verdict": "FAIL",
+  "ships": "fbo",
+  "evidenceFavours": "cpu",
+  "escalation": "R3-6 rules in the FBO path because the CPU predicate missed the gate, but over the same samples the CPU path has the lower worst-case error rate (3.509 % CPU vs 15.226 % FBO) and neither passes. The ruling assumed the fallback would be more accurate; the measurement says it is not, so which path Task 13 wires into HoverTracker is a controller decision, not an implementation one. Press is unaffected (R3-6b, 1-px GPU read).",
+  "fpRate": 0.1522648851038837,
+  "fnRate": 0.015307246164011454,
+  "mismatchRate": 0.13355371900826446,
+  "p50Ms": 0,
+  "p95Ms": 0.09999990463256836,
+  "p99Ms": 0.10000038146972656,
+  "cpuMismatchBreakdown": {
+    "toNone": 548,
+    "fromNone": 0,
+    "partVsPart": 286,
+    "partVsPartRate": 0.013506493506493506
+  }
+}
