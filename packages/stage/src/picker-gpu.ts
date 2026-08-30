@@ -1,5 +1,5 @@
 import type { CubismMatrix44 } from '@framework/math/cubismmatrix44';
-import { PART_ATTRIBUTION_MIN, type PickSource } from './picker';
+import { ENTER_ALPHA, PART_ATTRIBUTION_MIN, type PickResult, type Picker, type PickSource } from './picker';
 
 export interface PendingPress { pressId: number; deviceX: number; deviceY: number }
 export interface PressRead { pressId: number; alpha: number }
@@ -183,3 +183,98 @@ function renderIdPassImpl(gl: WebGL2RenderingContext, input: IdPassInput): IdPas
 }
 /** Oracle only (§6.5). `null` outside a DEV build. */
 export const renderIdPass: ((gl: WebGL2RenderingContext, input: IdPassInput) => IdPass) | null = DEV ? renderIdPassImpl : null;
+
+/**
+ * §6.6. Same surface as Picker. Alpha comes from a quarter-scale FBO refreshed by an async fence
+ * every FBO_REFRESH_MS; the part comes from the CPU predicate's mesh steps (delegated to a Picker
+ * built with EMPTY textures replaced by opaque 1x1 ones, so steps 1–5 and 10 run without sampling).
+ */
+export class FboPicker {
+  private fbo: WebGLFramebuffer | null = null;
+  private tex: WebGLTexture | null = null;
+  private pbo: WebGLBuffer | null = null;
+  private sync: WebGLSync | null = null;
+  private w = 0; private h = 0;
+  private lastReadMs = -Infinity;
+  private forceCapture = true;
+  private readonly mask: { data: Uint8Array; w: number; h: number } = { data: new Uint8Array(0), w: 0, h: 0 };
+  private disposed = false;
+
+  constructor(
+    private readonly model: { draw(p: CubismMatrix44, fb: WebGLFramebuffer | null, vp: number[]): void },
+    private readonly meshPicker: Picker,
+    private readonly surface: { width: number; height: number; getBoundingClientRect(): { left: number; top: number; width: number; height: number } },
+  ) {}
+
+  /** Forced re-capture on motion start and resize(). */
+  invalidate(): void { this.forceCapture = true; }
+
+  /** Called from Live2DStage.frame(): re-draws the model into the quarter-scale FBO. */
+  capture(gl: WebGL2RenderingContext, projection: CubismMatrix44): void {
+    if (this.disposed) return;
+    const w = Math.max(1, Math.round(this.surface.width * FBO_SCALE)), h = Math.max(1, Math.round(this.surface.height * FBO_SCALE));
+    if (!this.fbo || w !== this.w || h !== this.h) {
+      this.release(gl);
+      this.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, this.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      this.fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.tex, 0);
+      this.pbo = gl.createBuffer(); this.w = w; this.h = h; this.forceCapture = true;
+    }
+    if (!this.forceCapture && this.sync) return; // a readback is in flight; keep the FBO stable
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    this.model.draw(projection, this.fbo, [0, 0, w, h]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.forceCapture = false;
+  }
+
+  /** Starts an async readback if none is in flight and FBO_REFRESH_MS has elapsed; completes a finished one. */
+  poll(gl: WebGL2RenderingContext, nowMs: number): void {
+    if (this.disposed || !this.fbo || !this.pbo) return;
+    if (this.sync) {
+      const st = gl.clientWaitSync(this.sync, 0, 0);
+      if (st === gl.ALREADY_SIGNALED || st === gl.CONDITION_SATISFIED) {
+        gl.deleteSync(this.sync); this.sync = null;
+        if (this.mask.data.length !== this.w * this.h * 4) this.mask.data = new Uint8Array(this.w * this.h * 4);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.mask.data);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        this.mask.w = this.w; this.mask.h = this.h;
+      }
+      return;
+    }
+    if (nowMs - this.lastReadMs < FBO_REFRESH_MS) return;
+    if (typeof gl.fenceSync !== 'function') { console.warn('[picker] fenceSync unavailable: hover precision degraded to bounding boxes'); this.disposed = true; return; }
+    this.lastReadMs = nowMs;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, this.w * this.h * 4, gl.STREAM_READ);
+    gl.readPixels(0, 0, this.w, this.h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  }
+
+  pick(clientX: number, clientY: number, projection: CubismMatrix44): PickResult {
+    const mesh = this.meshPicker.pick(clientX, clientY, projection);
+    const { data, w, h } = this.mask;
+    if (w === 0) return mesh;
+    const r = this.surface.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return { alpha: 0, part: null, modelX: 0, modelY: 0 };
+    const x = Math.min(w - 1, Math.max(0, Math.floor(((clientX - r.left) / r.width) * w)));
+    const y = Math.min(h - 1, Math.max(0, Math.floor(((clientY - r.top) / r.height) * h)));
+    const alpha = data[((h - 1 - y) * w + x) * 4 + 3];
+    const part = alpha >= ENTER_ALPHA ? (mesh.part ?? this.meshPicker['map'].hitPartDefault) : null;
+    return { alpha, part, modelX: mesh.modelX, modelY: mesh.modelY };
+  }
+
+  dispose(gl: WebGL2RenderingContext): void { this.release(gl); this.disposed = true; }
+  private release(gl: WebGL2RenderingContext): void {
+    if (this.sync) gl.deleteSync(this.sync);
+    if (this.pbo) gl.deleteBuffer(this.pbo);
+    if (this.fbo) gl.deleteFramebuffer(this.fbo);
+    if (this.tex) gl.deleteTexture(this.tex);
+    this.sync = null; this.pbo = null; this.fbo = null; this.tex = null;
+  }
+}

@@ -1,7 +1,7 @@
 {
   "cwd": "D:\\ds",
   "runDir": "D:\\ds\\.claude\\worktrees\\wf_53266240-b22-5",
-  "date": "2026-08-30T19:55:16.491Z",
+  "date": "2026-08-30T20:04:21.705Z",
   "hardware": "Windows 10.0.26200 (Windows 11 Home 10.0.26200), CPU 12th Gen Intel(R) Core(TM) i7-12700K, GPU/driver ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver), display 3840x2160 @ 150 % (devicePixelRatio 1.5)",
   "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
   "dpr": 1.5,
@@ -9,248 +9,382 @@
     "w": 630,
     "h": 1080
   },
-  "samples": 26736,
-  "boundaryShare": 0.5004488330341114,
-  "fpRate": 0,
-  "fnRate": 0.033812088569718735,
-  "mismatchRate": 0.1874625972471574,
-  "fnInterior": 8,
-  "fnMaxRefAlpha": 126,
-  "p50Ms": 0,
-  "p95Ms": 0.09999990463256836,
-  "p99Ms": 0.10000038146972656,
+  "samples": 27202,
+  "boundaryShare": 0.5004411440335269,
   "parts": {
-    "body": 7721,
-    "ticklish": 5833,
-    "hair": 638,
+    "body": 7800,
+    "ticklish": 6086,
+    "hair": 629,
     "arm": 201,
     "face": 200
+  },
+  "cpu": {
+    "fpRate": 0,
+    "fnRate": 0.03496066465701051,
+    "mismatchRate": 0.18811116829644878,
+    "fnInterior": 7,
+    "fnMaxRefAlpha": 118,
+    "p50Ms": 0,
+    "p95Ms": 0.09999990463256836,
+    "p99Ms": 0.10000038146972656,
+    "pass": false
+  },
+  "fbo": {
+    "fpRate": 0.15043011543268878,
+    "fnRate": 0.03183589441952798,
+    "mismatchRate": 0.2025218733916624,
+    "fnInterior": 352,
+    "fnMaxRefAlpha": 255,
+    "p50Ms": 0,
+    "p95Ms": 0.09999990463256836,
+    "p99Ms": 0.10000038146972656,
+    "pass": false
   },
   "poses": [
     {
       "pose": 0,
       "samples": 2024,
       "boundary": 1013,
-      "fp": 0,
-      "fn": 62,
-      "mismatch": 372,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 82,
       "parts": {
-        "body": 593,
-        "ticklish": 362,
-        "hair": 56,
+        "body": 597,
+        "ticklish": 364,
+        "hair": 54,
         "arm": 17,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 72,
+        "mismatch": 377,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 86,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 294,
+        "fn": 1,
+        "mismatch": 373,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 30,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 1,
       "samples": 2040,
       "boundary": 1021,
-      "fp": 0,
-      "fn": 84,
-      "mismatch": 408,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 103,
       "parts": {
-        "body": 637,
-        "ticklish": 355,
+        "body": 608,
+        "ticklish": 358,
         "hair": 55,
         "face": 17,
         "arm": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 69,
+        "mismatch": 408,
+        "fnInterior": 1,
+        "fnMaxRefAlpha": 118,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 291,
+        "fn": 102,
+        "mismatch": 480,
+        "fnInterior": 22,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 2,
       "samples": 1928,
       "boundary": 965,
-      "fp": 0,
-      "fn": 45,
-      "mismatch": 362,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 79,
       "parts": {
-        "body": 587,
-        "ticklish": 277,
-        "hair": 43,
+        "body": 580,
+        "hair": 45,
+        "ticklish": 278,
         "arm": 16,
         "face": 16
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 55,
+        "mismatch": 363,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 79,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 296,
+        "fn": 96,
+        "mismatch": 413,
+        "fnInterior": 33,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 3,
       "samples": 1700,
       "boundary": 851,
-      "fp": 0,
-      "fn": 70,
-      "mismatch": 349,
-      "fnInterior": 7,
-      "fnMaxRefAlpha": 87,
       "parts": {
-        "ticklish": 219,
-        "hair": 34,
-        "body": 490,
-        "arm": 22,
+        "ticklish": 199,
+        "body": 480,
+        "arm": 25,
+        "hair": 41,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 75,
+        "mismatch": 342,
+        "fnInterior": 3,
+        "fnMaxRefAlpha": 87,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 189,
+        "fn": 130,
+        "mismatch": 391,
+        "fnInterior": 66,
+        "fnMaxRefAlpha": 250,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 4,
       "samples": 3300,
       "boundary": 1651,
-      "fp": 0,
-      "fn": 122,
-      "mismatch": 611,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 116,
       "parts": {
-        "ticklish": 1140,
-        "body": 884,
-        "hair": 83,
+        "ticklish": 1128,
+        "body": 897,
+        "hair": 67,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 119,
+        "mismatch": 606,
+        "fnInterior": 1,
+        "fnMaxRefAlpha": 111,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 568,
+        "fn": 21,
+        "mismatch": 602,
+        "fnInterior": 5,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 5,
-      "samples": 2156,
-      "boundary": 1079,
-      "fp": 0,
-      "fn": 79,
-      "mismatch": 429,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 111,
+      "samples": 2120,
+      "boundary": 1061,
       "parts": {
-        "body": 643,
-        "hair": 58,
-        "ticklish": 432,
-        "arm": 28,
+        "body": 635,
+        "hair": 56,
+        "ticklish": 417,
+        "arm": 25,
         "face": 16
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 72,
+        "mismatch": 421,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 111,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 318,
+        "fn": 63,
+        "mismatch": 417,
+        "fnInterior": 27,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 6,
-      "samples": 2430,
-      "boundary": 1216,
-      "fp": 0,
-      "fn": 74,
-      "mismatch": 415,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 126,
+      "samples": 2502,
+      "boundary": 1252,
       "parts": {
-        "body": 684,
-        "ticklish": 637,
-        "hair": 44,
-        "arm": 17,
+        "body": 729,
+        "ticklish": 671,
+        "hair": 40,
+        "arm": 18,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 97,
+        "mismatch": 474,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 109,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 381,
+        "fn": 104,
+        "mismatch": 512,
+        "fnInterior": 61,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 7,
       "samples": 3302,
       "boundary": 1652,
-      "fp": 0,
-      "fn": 113,
-      "mismatch": 606,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 111,
       "parts": {
+        "body": 886,
         "ticklish": 1133,
-        "body": 889,
-        "hair": 67,
+        "hair": 61,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 112,
+        "mismatch": 559,
+        "fnInterior": 1,
+        "fnMaxRefAlpha": 100,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 533,
+        "fn": 44,
+        "mismatch": 583,
+        "fnInterior": 12,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 8,
-      "samples": 2098,
-      "boundary": 1050,
-      "fp": 0,
-      "fn": 81,
-      "mismatch": 411,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 111,
+      "samples": 2282,
+      "boundary": 1142,
       "parts": {
-        "body": 627,
-        "ticklish": 367,
-        "hair": 58,
-        "arm": 33,
+        "body": 655,
+        "ticklish": 478,
+        "hair": 65,
+        "arm": 32,
         "face": 16
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 69,
+        "mismatch": 430,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 95,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 329,
+        "fn": 88,
+        "mismatch": 487,
+        "fnInterior": 38,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 9,
-      "samples": 1902,
-      "boundary": 952,
-      "fp": 0,
-      "fn": 54,
-      "mismatch": 343,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 79,
+      "samples": 1934,
+      "boundary": 968,
       "parts": {
-        "ticklish": 273,
-        "body": 577,
-        "hair": 43,
+        "body": 575,
+        "ticklish": 290,
+        "hair": 47,
         "face": 17,
         "arm": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 54,
+        "mismatch": 337,
+        "fnInterior": 1,
+        "fnMaxRefAlpha": 83,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 253,
+        "fn": 77,
+        "mismatch": 420,
+        "fnInterior": 24,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 10,
-      "samples": 1918,
-      "boundary": 960,
-      "fp": 0,
-      "fn": 55,
-      "mismatch": 375,
-      "fnInterior": 0,
-      "fnMaxRefAlpha": 91,
+      "samples": 1966,
+      "boundary": 984,
       "parts": {
+        "ticklish": 320,
         "body": 580,
-        "ticklish": 297,
-        "hair": 44,
+        "hair": 52,
         "arm": 17,
         "face": 17
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 71,
+        "mismatch": 390,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 75,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 353,
+        "fn": 6,
+        "mismatch": 351,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 203,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     },
     {
       "pose": 11,
-      "samples": 1938,
-      "boundary": 970,
-      "fp": 0,
-      "fn": 65,
-      "mismatch": 331,
-      "fnInterior": 1,
-      "fnMaxRefAlpha": 89,
+      "samples": 2104,
+      "boundary": 1053,
       "parts": {
-        "body": 530,
-        "ticklish": 341,
-        "hair": 53,
+        "body": 578,
+        "ticklish": 450,
+        "hair": 46,
         "arm": 17,
         "face": 16
       },
-      "timesMs": [],
+      "cpu": {
+        "fp": 0,
+        "fn": 86,
+        "mismatch": 410,
+        "fnInterior": 0,
+        "fnMaxRefAlpha": 95,
+        "timesMs": []
+      },
+      "fbo": {
+        "fp": 287,
+        "fn": 134,
+        "mismatch": 480,
+        "fnInterior": 64,
+        "fnMaxRefAlpha": 255,
+        "timesMs": []
+      },
       "pressAlphaAgrees": true
     }
   ],
@@ -263,5 +397,13 @@
     "perPart": 200
   },
   "verdict": "FAIL",
-  "ships": "fbo"
+  "ships": "fbo",
+  "evidenceFavours": "cpu",
+  "escalation": "R3-6 rules in the FBO path because the CPU predicate missed the gate, but over the same samples the CPU path has the lower worst-case error rate (3.496 % CPU vs 15.043 % FBO) and neither passes. The ruling assumed the fallback would be more accurate; the measurement says it is not, so which path Task 13 wires into HoverTracker is a controller decision, not an implementation one. Press is unaffected (R3-6b, 1-px GPU read).",
+  "fpRate": 0.15043011543268878,
+  "fnRate": 0.03183589441952798,
+  "mismatchRate": 0.2025218733916624,
+  "p50Ms": 0,
+  "p95Ms": 0.09999990463256836,
+  "p99Ms": 0.10000038146972656
 }

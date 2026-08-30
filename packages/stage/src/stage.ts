@@ -11,7 +11,7 @@ import {
 import { CompanionModel, Priority } from './companion-model';
 import { ViewportFit, withOffscreenFrame } from './frame';
 import { TextMouthDriver, type MouthDriver } from './mouth';
-import { GpuPressReader, type PressRead } from './picker-gpu';
+import { FboPicker, GpuPressReader, type PressRead } from './picker-gpu';
 import type { Rng } from './rng';
 import { Ticker } from './ticker';
 import { ViewTransform } from './view';
@@ -53,6 +53,8 @@ export class Live2DStage {
   readonly pressReader = new GpuPressReader();
   /** Receives every serviced press read on the frame after the pointer-down (§6.3, §7.2 step 1). */
   onPressRead: ((r: PressRead) => void) | null = null;
+  /** §6.6: set by the pet renderer when the CPU predicate misses the §6.5 gate; null keeps frame() unchanged. */
+  fboPicker: FboPicker | null = null;
   /** §5.14 item 5: the matrix the last drawn frame used; resize()'s matrix before the first frame. */
   private lastProjection = new CubismMatrix44();
 
@@ -148,6 +150,7 @@ export class Live2DStage {
     this.applyFit(w, h);
     this.model.setRenderTargetSize(w, h);
     this.lastProjection = this.projection(w, h);
+    this.fboPicker?.invalidate();
   }
 
   /**
@@ -227,6 +230,8 @@ export class Live2DStage {
       // is the frame just drawn and preserveDrawingBuffer stays off.
       const read = this.pressReader.service(gl);
       if (read && this.onPressRead) this.onPressRead(read);
+      // §6.6: the quarter-scale hover mask, refreshed behind an async fence.
+      if (this.fboPicker) { this.fboPicker.capture(gl, projection); this.fboPicker.poll(gl, performance.now()); }
     });
   }
 
