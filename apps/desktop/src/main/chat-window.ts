@@ -4,6 +4,7 @@ import { Channels } from '@ds/protocol';
 import { isAllowedPetUrl, rendererUrl } from './app-protocol';
 import { placeBubble, preferredSideFor } from './bubble-place';
 import { sendTo } from './ipc';
+import { isAbortedLoad } from './pet-window';
 // contracts.md 6.1: the numbers live in the renderer's chat-metrics.ts, which T8 owns; main
 // re-exports them so the sizer and the composer cannot drift.
 import {
@@ -25,7 +26,29 @@ export function isChatComposing(): boolean {
   return composing;
 }
 
-export function createChatWindow(): BrowserWindow {
+/**
+ * G2-6: the chat window's lifecycle hooks. `onLoadFailure` is the startup policy shared with the
+ * pet; `onUnrecoverable` fires when the renderer died a second time after the one reload — the
+ * composer is the only way to talk to her, so index.ts routes it to `fatal()`.
+ */
+export interface ChatWindowHooks {
+  onLoadFailure(err: unknown): void;
+  onUnrecoverable(): void;
+}
+
+/**
+ * The `chat:opened` an `openChat` during the first load is still waiting to send. Cleared when the
+ * renderer dies (G2-6): a reloaded page must not receive a stale open for a window that was hidden.
+ */
+let pendingOpened: { win: BrowserWindow; cb: () => void } | null = null;
+function clearPendingOpened(): void {
+  if (!pendingOpened) return;
+  const { win, cb } = pendingOpened;
+  pendingOpened = null;
+  if (!win.isDestroyed()) win.webContents.removeListener('did-finish-load', cb);
+}
+
+export function createChatWindow(hooks: ChatWindowHooks): BrowserWindow {
   const win = new BrowserWindow({
     width: CHAT_WIDTH,
     height: CHAT_BASE_H,
@@ -46,8 +69,13 @@ export function createChatWindow(): BrowserWindow {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
-  guardChatWebContents(win);
-  void win.loadURL(rendererUrl('chat'));
+  guardChatWebContents(win, hooks);
+  // G2-6: never `void` — a missing chat.html used to leave a transparent, focusable window that
+  // opened on the hotkey and showed nothing.
+  win.loadURL(rendererUrl('chat')).catch((err: unknown) => {
+    if (isAbortedLoad(err)) return;
+    hooks.onLoadFailure(err);
+  });
   win.once('ready-to-show', () => {
     /* do NOT show here */
   });
@@ -69,7 +97,7 @@ export function createChatWindow(): BrowserWindow {
  * `ipc.ts isFromWindow` as the second line. There is no click-through arm here: the chat window is
  * never click-through.
  */
-function guardChatWebContents(win: BrowserWindow): void {
+function guardChatWebContents(win: BrowserWindow, hooks: ChatWindowHooks): void {
   const wc = win.webContents;
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   const denyForeign = (details: { url: string; preventDefault: () => void }): void => {
@@ -79,6 +107,27 @@ function guardChatWebContents(win: BrowserWindow): void {
   };
   wc.on('will-navigate', denyForeign);
   wc.on('will-redirect', denyForeign);
+  // G2-6: hide the dead window, clear the composing guard and any pending `chat:opened`, reload
+  // once; a second death is fatal — there is no other way to talk to her.
+  let reloaded = false;
+  wc.on('render-process-gone', (_event, details) => {
+    console.warn('[chat] render process gone', details.reason);
+    clearPendingOpened();
+    closeChat(win);
+    if (win.isDestroyed()) return;
+    if (reloaded) {
+      console.error('[chat] renderer died again after a reload');
+      hooks.onUnrecoverable();
+      return;
+    }
+    reloaded = true;
+    wc.reload();
+  });
+  wc.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3 || !reloaded) return;
+    console.error('[chat] reload after a crash failed: %s (%d)', errorDescription, errorCode);
+    hooks.onUnrecoverable();
+  });
 }
 
 /**
@@ -111,7 +160,13 @@ export function openChat(win: BrowserWindow, pet: BrowserWindow, focusComposer: 
   // On the very first open the page may still be loading, and a `chat:opened` sent now would land
   // on nobody — the composer would come up unfocused exactly once per run.
   if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', () => sendTo(win, Channels.chatOpened, { focusComposer }));
+    clearPendingOpened();
+    const cb = (): void => {
+      pendingOpened = null;
+      sendTo(win, Channels.chatOpened, { focusComposer });
+    };
+    pendingOpened = { win, cb };
+    win.webContents.once('did-finish-load', cb);
   } else {
     sendTo(win, Channels.chatOpened, { focusComposer });
   }

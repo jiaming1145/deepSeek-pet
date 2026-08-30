@@ -82,6 +82,8 @@ type TurnListener = (payload: unknown) => void;
 class FakeTurnRunner {
   static instances: FakeTurnRunner[] = [];
   readonly listeners = new Map<string, Set<TurnListener>>();
+  turnId: string | null = null;
+  state: 'idle' | 'thinking' | 'speaking' = 'idle';
   cancelCalls = 0;
   cancelGate: Promise<void> = Promise.resolve();
   readonly shown: Array<[string, number]> = [];
@@ -203,6 +205,8 @@ let keyListeners: Array<(s: { present: boolean; source: string }) => void>;
 let keyStore: KeyStore;
 let appendImpl: () => Promise<void>;
 let appends: Array<[string, string, unknown]>;
+/** G2-2: what the fake store's `trimSettled()` hands back — pending when a trim is "on the wire". */
+let trimGate: Promise<void>;
 let store: HistoryStore;
 let openKeyWindow: ReturnType<typeof vi.fn>;
 
@@ -259,11 +263,13 @@ beforeEach(() => {
   } as unknown as KeyStore;
   appends = [];
   appendImpl = () => Promise.resolve();
+  trimGate = Promise.resolve();
   store = {
     append: (role: string, content: string, meta: unknown) => {
       appends.push([role, content, meta]);
       return appendImpl();
     },
+    trimSettled: () => trimGate,
     list: () => [],
     deleteTurn: () => 0,
     lastMessageTs: () => null,
@@ -531,6 +537,147 @@ describe('BrainService', () => {
     calls = [];
     service.bubbleHidden();
     expect(calls).toEqual(['clickThrough:true']);
+    await service.dispose();
+  });
+
+  it('G2-2: dispose() also waits for an in-flight trim/summarise before resolving', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    let releaseTrim: () => void = () => {};
+    trimGate = new Promise<void>((resolve) => {
+      releaseTrim = resolve;
+    });
+    const service = makeService();
+    service.start();
+    let disposed = false;
+    const disposing = service.dispose().then(() => {
+      disposed = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runner().cancelCalls).toBe(1);
+    expect(disposed).toBe(false); // cancel settled at once; the trim is what holds the barrier
+    releaseTrim();
+    await disposing;
+    expect(disposed).toBe(true);
+  });
+
+  it('CX-6: bubbleCrashed() mid-playback cancels the turn, drops the pin/timers/greeting and takes the window down', async () => {
+    vi.useFakeTimers();
+    const service = makeService(); // first run: the greeting is pending on the bubble's turnDone
+    service.start();
+    expect(bubble.payloads(Channels.brainSentence)).toHaveLength(1); // the greeting was broadcast
+    runner().emit('state', { state: 'thinking', turnId: 't1' });
+    runner().emit('sentence', { turnId: 't1', seq: 0, text: '你好。', emotion: 'neutral' });
+    ipcHandlers.get(Channels.bubbleHover)!({ inside: true }, bubble); // pinned
+    ipcHandlers.get(Channels.playbackTurnDone)!({ turnId: 't1' }, bubble); // hide owed, deferred by the pin
+    calls = [];
+    bubbleVisible.length = 0;
+
+    service.bubbleCrashed();
+    expect(runner().cancelCalls).toBe(1);
+    expect(bubbleVisible).toEqual([false]);
+    // The greeting can never report its turnDone now; a late one must not persist it.
+    ipcHandlers.get(Channels.playbackTurnDone)!({ turnId: 'first-mes' }, bubble);
+    await Promise.resolve();
+    expect(appends).toHaveLength(0);
+    expect(getKv(db, KV_FIRST_RUN_DONE)).toBe(null);
+
+    // Nothing brings the window back on its own (the late turnDone above may re-arm a harmless
+    // hide of an already hidden window), and the pin is gone: the next turn behaves normally.
+    bubbleVisible.length = 0;
+    vi.advanceTimersByTime(10_000);
+    expect(bubbleVisible).not.toContain(true);
+    bubbleVisible.length = 0;
+    runner().emit('state', { state: 'thinking', turnId: 't2' });
+    expect(bubbleVisible).toEqual([true]);
+    runner().emit('sentence', { turnId: 't2', seq: 0, text: '再见。', emotion: 'neutral' });
+    ipcHandlers.get(Channels.playbackTurnDone)!({ turnId: 't2' }, bubble);
+    vi.advanceTimersByTime(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
+    expect(bubbleVisible.at(-1)).toBe(false);
+    await service.dispose();
+  });
+
+  it('CX-6: bubbleCrashed() after dispose() is inert', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    await service.dispose();
+    bubbleVisible.length = 0;
+    service.bubbleCrashed();
+    expect(bubbleVisible).toEqual([]);
+  });
+
+  it('CX-6: replaceBubble() routes every later send and placement to the new window', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    const fresh = new FakeWindow('bubble2');
+    service.replaceBubble(fresh as unknown as BrowserWindow);
+    runner().emit('state', { state: 'thinking', turnId: 't1' });
+    runner().emit('sentence', { turnId: 't1', seq: 0, text: '你好。', emotion: 'neutral' });
+    expect(fresh.payloads(Channels.brainState)).toHaveLength(1);
+    expect(fresh.payloads(Channels.brainSentence)).toHaveLength(1);
+    expect(fresh.payloads(Channels.bubblePlace)).toHaveLength(1); // reposition(true) on the show
+    expect(bubble.payloads(Channels.brainState)).toHaveLength(0);
+    await service.dispose();
+  });
+
+  it('G2-5: hover-inside → hide → show — cursor OUTSIDE: no re-emitted hover, the next hide lands on schedule', async () => {
+    vi.useFakeTimers();
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    runner().emit('state', { state: 'thinking', turnId: 't1' });
+    runner().emit('sentence', { turnId: 't1', seq: 0, text: '你好。', emotion: 'neutral' });
+    ipcHandlers.get(Channels.bubbleHover)!({ inside: true }, bubble);
+    ipcHandlers.get(Channels.playbackTurnDone)!({ turnId: 't1' }, bubble);
+    // Verdict hide while the window was ALREADY down (a lock that landed between two replays):
+    // index.ts now calls bubbleHidden() regardless, so the pin cannot survive.
+    bubble.visible = false;
+    calls = [];
+    service.bubbleHidden();
+    expect(calls).toEqual(['clickThrough:true']);
+    // Show again (verdict cleared, brain still wants it): the renderer is resynced by index.ts and,
+    // with the cursor outside, re-emits nothing. The owed hide fires on schedule.
+    bubble.visible = true;
+    bubbleVisible.length = 0;
+    vi.advanceTimersByTime(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
+    expect(bubbleVisible.at(-1)).toBe(false);
+    await service.dispose();
+  });
+
+  it('G2-5: hover-inside → hide → show — cursor INSIDE: the re-emitted hover re-pins and defers the hide until it leaves', async () => {
+    vi.useFakeTimers();
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    runner().emit('state', { state: 'thinking', turnId: 't1' });
+    runner().emit('sentence', { turnId: 't1', seq: 0, text: '你好。', emotion: 'neutral' });
+    ipcHandlers.get(Channels.bubbleHover)!({ inside: true }, bubble);
+    ipcHandlers.get(Channels.playbackTurnDone)!({ turnId: 't1' }, bubble);
+    bubble.visible = false;
+    service.bubbleHidden();
+    bubble.visible = true;
+    // The resync makes the renderer recompute its DOM hit: the pointer is still on the band.
+    calls = [];
+    ipcHandlers.get(Channels.bubbleHover)!({ inside: true }, bubble);
+    expect(calls).toEqual(['clickThrough:false']);
+    bubbleVisible.length = 0;
+    vi.advanceTimersByTime(10 * (BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS));
+    expect(bubbleVisible).toEqual([]); // pinned: the hide is deferred, not forgotten
+    ipcHandlers.get(Channels.bubbleHover)!({ inside: false }, bubble);
+    vi.advanceTimersByTime(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
+    expect(bubbleVisible.at(-1)).toBe(false);
+    await service.dispose();
+  });
+
+  it('CX-3: an auth failure asks index.ts for the key window through the gated dep, never show()+focus() itself', async () => {
+    setKv(db, KV_FIRST_RUN_DONE, '1');
+    const service = makeService();
+    service.start();
+    runner().emit('error', { turnId: 't1', code: 'auth', message: 'bad key' });
+    expect(openKeyWindow).toHaveBeenCalledWith('auth');
+    expect(key.listeners.size).toBe(0); // the service never touches the key window's show/focus
     await service.dispose();
   });
 });

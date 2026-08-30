@@ -43,6 +43,7 @@ const OWNED_SEND_CHANNELS = [
 
 export interface BrainServiceDeps {
   pet: BrowserWindow;
+  /** Replaceable (CX-6 / CX-7): index.ts recreates a window whose renderer cannot be brought back. */
   bubble: BrowserWindow;
   chat: BrowserWindow;
   key: BrowserWindow;
@@ -77,6 +78,13 @@ export class BrainService {
   private onBubbleLoaded: (() => void) | null = null;
   /** G-9: the greeting was broadcast and awaits the bubble's `playback:turnDone` to be persisted. */
   private firstMesPending = false;
+  /**
+   * CX-6 / CX-7: the IPC allow-lists are held as live arrays, not literals — `onFromAny` and
+   * `handleInvoke` look the sender up at event time, so `replaceBubble`/`replaceKey` can swap a
+   * recreated window in without re-registering every channel.
+   */
+  private readonly bubbleWins: BrowserWindow[] = [];
+  private readonly keyWins: BrowserWindow[] = [];
 
   constructor(deps: BrainServiceDeps) {
     this.deps = deps;
@@ -86,7 +94,11 @@ export class BrainService {
   }
 
   start(): void {
-    const { pet, bubble, chat, key, store, keyStore } = this.deps;
+    const { pet, chat, store, keyStore } = this.deps;
+    const bubble = this.bubbleWins;
+    const key = this.keyWins;
+    bubble.push(this.deps.bubble);
+    key.push(this.deps.key);
 
     this.offKey = keyStore.onChange(() => this.rebuildClient());
     this.rebuildClient();
@@ -110,7 +122,7 @@ export class BrainService {
       }
     });
 
-    handleInvoke(InvokeChannels.keySet, [key], async ({ apiKey }) => {
+    handleInvoke(InvokeChannels.keySet, key, async ({ apiKey }) => {
       try {
         keyStore.set(apiKey);
         return { ok: true as const };
@@ -119,7 +131,7 @@ export class BrainService {
       }
     });
 
-    handleInvoke(InvokeChannels.keyTest, [key], async ({ apiKey }) => {
+    handleInvoke(InvokeChannels.keyTest, key, async ({ apiKey }) => {
       // With an apiKey: test that literal key. Without: test the stored one (contracts.md §2.4).
       const probe: ChatClient | null = apiKey ? new DeepSeekClient({ apiKey }) : this.client;
       if (!probe) {
@@ -133,7 +145,7 @@ export class BrainService {
       return res;
     });
 
-    handleInvoke(InvokeChannels.keyClear, [key], async () => {
+    handleInvoke(InvokeChannels.keyClear, key, async () => {
       keyStore.clear();
       return { ok: true as const };
     });
@@ -172,22 +184,22 @@ export class BrainService {
     chat.on('show', this.onChatVisibilityChanged);
     chat.on('hide', this.onChatVisibilityChanged);
     // Two relays, because the mouth lives in the pet window while the reveal lives in the bubble.
-    onFromAny([chat], Channels.speechComplete, (p) => sendTo(bubble, Channels.speechComplete, p));
-    onFromAny([bubble], Channels.speechMouth, (p) => sendTo(pet, Channels.speechMouth, p));
+    onFromAny([chat], Channels.speechComplete, (p) => sendTo(this.deps.bubble, Channels.speechComplete, p));
+    onFromAny(bubble, Channels.speechMouth, (p) => sendTo(pet, Channels.speechMouth, p));
 
-    onFromAny([bubble], Channels.playbackSentenceDone, ({ turnId, seq }) => {
+    onFromAny(bubble, Channels.playbackSentenceDone, ({ turnId, seq }) => {
       if (turnId === FIRST_MES_TURN_ID) return;
       this.runner?.sentenceShown(turnId, seq);
     });
-    onFromAny([bubble], Channels.playbackTurnDone, ({ turnId }) => {
+    onFromAny(bubble, Channels.playbackTurnDone, ({ turnId }) => {
       if (turnId === FIRST_MES_TURN_ID) void this.commitFirstMessage();
       else this.runner?.turnShown(turnId);
       this.scheduleBubbleHide(BUBBLE_LINGER_MS + BUBBLE_HIDE_DELAY_MS);
     });
 
-    onFromAny([bubble], Channels.bubbleSize, (size) => {
-      const placement = placeBubbleWindow(bubble, pet, size, this.composerRect());
-      sendTo(bubble, Channels.bubblePlace, {
+    onFromAny(bubble, Channels.bubbleSize, (size) => {
+      const placement = placeBubbleWindow(this.deps.bubble, pet, size, this.composerRect());
+      sendTo(this.deps.bubble, Channels.bubblePlace, {
         // The renderer lays out inside the maxima and reports what it actually needs (§5.4 rule 2).
         maxWidth: BUBBLE_MAX.width,
         maxHeight: BUBBLE_MAX.height,
@@ -201,8 +213,8 @@ export class BrainService {
     // the pointer rests on a band the renderer is still holding up — so §5.2's "pinned defers the
     // turn-level auto-hide" and "pointerleave re-arms a full LINGER_MS" would be true in jsdom and
     // false end to end, and T7's hover acceptance would be unprovable in the Electron lane.
-    onFromAny([bubble], Channels.bubbleHover, ({ inside }) => {
-      setBubbleClickThrough(bubble, !inside);
+    onFromAny(bubble, Channels.bubbleHover, ({ inside }) => {
+      setBubbleClickThrough(this.deps.bubble, !inside);
       this.bubblePinned = inside;
       if (inside) {
         // Defer, do not forget: clear the timer but leave the debt, so the leave can re-arm it.
@@ -214,12 +226,12 @@ export class BrainService {
     });
 
     // ---- first message (§6.6) ------------------------------------------------------------
-    if (bubble.webContents.isLoading()) {
+    if (this.deps.bubble.webContents.isLoading()) {
       this.onBubbleLoaded = () => {
         this.onBubbleLoaded = null;
         if (!this.disposed) this.maybeFirstMessage();
       };
-      bubble.webContents.once('did-finish-load', this.onBubbleLoaded);
+      this.deps.bubble.webContents.once('did-finish-load', this.onBubbleLoaded);
     } else {
       this.maybeFirstMessage();
     }
@@ -291,6 +303,47 @@ export class BrainService {
   }
 
   /**
+   * CX-6: the bubble renderer is gone. Called from the window's `render-process-gone` BEFORE the
+   * page is reloaded. Whatever was playing can never report `playback:sentenceDone` /
+   * `playback:turnDone` again, so the runner would sit in `speaking` forever and the pet with it:
+   * the turn is retired as interrupted (turnDone + idle emitted, the shown prefix persisted as
+   * `[中断]`), every bubble-side state is reset — pin, timers, the owed hide, the pending greeting —
+   * and the window is taken down; the reload's `bubble:size` handshake re-places it and the next
+   * turn shows it again.
+   */
+  bubbleCrashed(): void {
+    if (this.disposed) return;
+    console.warn('[brain] bubble renderer lost mid-turn; retiring the turn as interrupted');
+    const runner = this.runner;
+    if (runner) {
+      const turnId = runner.turnId;
+      // `void`: the retire's writes are awaited by dispose() on quit, not here (I-9).
+      void runner.cancel();
+      // A turn whose stream already finished is settled — `cancel()` is a no-op on it — and sits in
+      // `speaking` until the bubble acknowledges the reveal, which a dead bubble never will. The
+      // acknowledgement is given on its behalf; its reply was fully written at settle time.
+      if (turnId !== null && runner.state !== 'idle') runner.turnShown(turnId);
+    }
+    this.firstMesPending = false;
+    this.bubblePinned = false;
+    this.cancelBubbleHide();
+    this.emittedThisTurn = 0;
+    this.deps.setBubbleVisible(false); // -> index.ts hides it and calls bubbleHidden() (click-through)
+  }
+
+  /** CX-6: a recreated bubble window takes the old one's place in every send and allow-list. */
+  replaceBubble(win: BrowserWindow): void {
+    this.deps.bubble = win;
+    this.bubbleWins.splice(0, this.bubbleWins.length, win);
+  }
+
+  /** CX-7: same for the key window, recreated on the next open after its renderer died. */
+  replaceKey(win: BrowserWindow): void {
+    this.deps.key = win;
+    this.keyWins.splice(0, this.keyWins.length, win);
+  }
+
+  /**
    * I-9: a shutdown BARRIER, not a fire-and-forget. `before-quit` awaits it before `db.close()`,
    * because `TurnRunner.cancel()` retires the turn asynchronously — the `[中断]` assistant row and
    * the metrics row are written in later microtasks, and a closed handle under them threw
@@ -319,6 +372,9 @@ export class BrainService {
     // turnDone/idle the retire emits. `TurnRunner.cancel(): Promise<void>` (BRAIN lane) resolves
     // after retire's writes settle; awaiting a `void` from an older turn.ts is harmless.
     await this.runner?.cancel();
+    // G2-2: a summarisation the retire (or an earlier turn) started is still on the wire; its
+    // commit must land before index.ts closes the db, or be fenced by `HistoryStore.close()`.
+    await this.deps.store.trimSettled();
     for (const off of this.offRunner) off();
     this.offRunner = [];
     this.runner = null;
@@ -367,12 +423,14 @@ export class BrainService {
   }
 
   private attachRunner(runner: TurnRunner): void {
-    const { pet, bubble, chat } = this.deps;
+    const { pet, chat } = this.deps;
+    // Read at event time, not captured: the bubble window can be recreated under us (CX-6).
+    const bubble = (): BrowserWindow => this.deps.bubble;
 
     this.offRunner.push(
       runner.on('state', (p) => {
         sendTo(pet, Channels.brainState, p);
-        sendTo(bubble, Channels.brainState, p);
+        sendTo(bubble(), Channels.brainState, p);
         sendTo(chat, Channels.brainState, p);
         if (p.state === 'thinking') {
           this.emittedThisTurn = 0;
@@ -395,7 +453,7 @@ export class BrainService {
         this.emittedThisTurn++;
         console.log('[brain] sentence seq=%d emotion=%s %s', ev.seq, ev.emotion, ev.text);
         sendTo(pet, Channels.brainSentence, ev);
-        sendTo(bubble, Channels.brainSentence, ev);
+        sendTo(bubble(), Channels.brainSentence, ev);
       }),
     );
 
@@ -403,7 +461,7 @@ export class BrainService {
       runner.on('turnDone', (p) => {
         console.log('[brain] turnDone turn=%s totalMs=%d regenerated=%s', p.turnId, p.totalMs, p.regenerated);
         sendTo(pet, Channels.brainTurnDone, p);
-        sendTo(bubble, Channels.brainTurnDone, p);
+        sendTo(bubble(), Channels.brainTurnDone, p);
         sendTo(chat, Channels.brainTurnDone, p);
       }),
     );
