@@ -66,9 +66,15 @@ export function fromPersisted(p: SimPersisted, nowMono: number, _nowWall: number
     sinceInteractionMs: Math.min(p.state.sinceInteractionMs, D.NEGLECT_WINDOW_MS),   // preflight F-5
     gate: {
       ...p.state.gate,
-      // CONCERN C-11: `SimStateSchema` declares this `.nonnegative()`, and a restart starts at a
-      // small nowMono, so the exact rebase is usually negative and would not parse. Clamping at 0
-      // can only push the earliest eligible instant LATER, never earlier — the safe direction.
+      // CONCERN C-11 — NEEDS A RULING; the fix is BLOCKED outside this owner group.
+      // `SimStateSchema` declares this `.nonnegative()` (Task 3's `state.ts`), and a restart starts
+      // at a small nowMono, so the exact rebase `nowMono - elapsed` is normally negative and would
+      // not parse. Clamping at 0 can only push the earliest eligible instant LATER, never earlier —
+      // the safe direction — but it RE-ARMS THE FULL 20-MINUTE WINDOW: a restart 15 min after a
+      // proactive line makes the pet wait 20 more minutes instead of 5. §3.12 asks for
+      // `nowMono + remainingMs`, which needs one of (a) Task 3 relaxing `.nonnegative()`,
+      // (b) a `gate.rateUntilMono` deadline field (Task 3's schema), or (c) Task 12 offsetting the
+      // injected mono origin. None of the three is inside Task 9's owner group.
       lastDisplayedMono: r.proactiveRate === null ? null : Math.max(0, nowMono - (D.PROACTIVE_RATE_WINDOW_MS - r.proactiveRate)),
       backoffUntilMono: r.proactiveBackoff === null ? null : nowMono + r.proactiveBackoff,
       intent: p.intent === null ? null : { ...p.intent, reservedMono: nowMono, deferUntilMono: nowMono + (r.proactiveDefer ?? 0) },
@@ -76,10 +82,17 @@ export function fromPersisted(p: SimPersisted, nowMono: number, _nowWall: number
   };
 }
 
-/** §3.12 discard-on-mismatch. The caller logs `console.warn('[sim] snapshot discarded:', discarded)`. */
+/**
+ * §3.12 discard-on-mismatch. The caller logs `console.warn('[sim] snapshot discarded:', discarded)`.
+ *
+ * ABSENCE IS NOT CORRUPTION (fix round 1, finding 5): first launch and every kv reset hand this
+ * `null`/`undefined`, and returning a `discarded` reason there would print a corruption-flavoured
+ * warning on every clean start. Those two cases return `discarded: null` with a fresh state.
+ */
 export function restoreSim(raw: unknown, nowMono: number, nowWall: number, opts?: { seed?: number }):
   { state: SimState; discarded: string | null } {
-  if (raw !== null && typeof raw === 'object' && (raw as { version?: unknown }).version !== SIM_SNAPSHOT_VERSION)
+  if (raw === null || raw === undefined) return { state: initialSimState(nowMono, nowWall, opts), discarded: null };
+  if (typeof raw === 'object' && (raw as { version?: unknown }).version !== SIM_SNAPSHOT_VERSION)
     return { state: initialSimState(nowMono, nowWall, opts), discarded: `version ${String((raw as { version?: unknown }).version)} != ${SIM_SNAPSHOT_VERSION}` };
   const parsed = SimPersistedSchema.safeParse(raw);
   if (!parsed.success) return { state: initialSimState(nowMono, nowWall, opts), discarded: parsed.error.issues.map(i => i.path.join('.') + ': ' + i.message).join('; ') || 'unparseable' };

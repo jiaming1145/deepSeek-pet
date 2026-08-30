@@ -1,9 +1,13 @@
 // packages/sim/src/proactive.ts — pure; ProactiveController (main) owns the side effects.
-import type { ProactiveBucket } from '@ds/protocol';
+import type { ProactiveBucket, ProactiveVerdict } from '@ds/protocol';
 import { SIM_DEFAULTS, type SimState } from './state.ts';
 import { localHour, nextLocalMidnight } from './phases.ts';
 import { livelinessMap } from './liveliness.ts';
 import { nextRandom } from './rng.ts';   // Task 3's export, verified (see Interfaces)
+// One home for the meal tuple and the 20-min cue window (§5.13). The reducer declares them; a
+// benign ES cycle (reduce.ts imports `backoffDelay` from here) — neither side reads the other's
+// bindings during module evaluation, only inside function bodies.
+import { MEALS, MEAL_CUE_WINDOW_MS } from './reduce.ts';
 
 const D = SIM_DEFAULTS;
 
@@ -20,9 +24,20 @@ export interface GateInput {
   roll: number;
 }
 
+/**
+ * §3.10.5: the gate's verdicts are a STRICT SUBSET of `ProactiveVerdict` (which also carries the
+ * arms only the controller can reach). This tuple is the single source of `GateVerdict`'s arms, and
+ * `satisfies readonly ProactiveVerdict[]` makes a seventh arm a compile error unless the protocol
+ * list carries it. `proactive.test.ts` asserts the containment at runtime as well.
+ */
+export const GATE_VERDICTS = [
+  'eligible', 'rateLimited', 'unansweredCap', 'personaCap', 'suppressed', 'muted',
+] as const satisfies readonly ProactiveVerdict[];
+export type GateVerdictName = (typeof GATE_VERDICTS)[number];
+
 export type GateVerdict =
   | { verdict: 'eligible' }
-  | { verdict: 'rateLimited' | 'unansweredCap' | 'personaCap' | 'suppressed' | 'muted';
+  | { verdict: Exclude<GateVerdictName, 'eligible'>;
       reason: GateReason; nextEligibleAt: number | null };
 
 export const GATE_REASONS = [
@@ -100,8 +115,6 @@ export interface BucketExternals {
   hasCallbackMaterial: boolean;
 }
 
-const MEALS = ['breakfast', 'lunch', 'dinner'] as const;
-
 export function bucketFor(state: SimState, ext?: BucketExternals): ProactiveBucket | null {
   if (state.phase === 'morning' && !state.firedToday.morningGreeting) return 'greeting';
   if (state.phase === 'night' && state.presentationMode === 'awake') return 'night';
@@ -109,7 +122,7 @@ export function bucketFor(state: SimState, ext?: BucketExternals): ProactiveBuck
   for (const m of MEALS) {
     if (!state.firedToday[m]) continue;
     const at = D.MEAL_HOURS[m] * 3_600_000 + state.mealJitterMs[m];
-    if (dayMs >= at && dayMs < at + 1_200_000) return 'meal';
+    if (dayMs >= at && dayMs < at + MEAL_CUE_WINDOW_MS) return 'meal';
   }
   if (ext && ext.returnedAwayMs !== null && ext.returnedAwayMs >= 21_600_000 && !ext.spokenSinceReturn) return 'longGap';
   if (ext && ext.hasCallbackMaterial) return 'callback';

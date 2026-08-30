@@ -35,6 +35,13 @@ describe('§12.7 pure boundary fixtures', () => {
     expect(r.log[2]!.displayed).toBe(2);                               // DST back within the same date: no reset
     expect(r.log[7]!.displayed).toBe(0);                               // C-7: A->B->A hands the SAME quota back? see concern
   });
+  it('B-03 oscillation: phaseChanged fires at most once per localDate per marker (§3.9)', () => {
+    const r = B03.runNightOscillation();
+    expect(r.dates.size).toBe(1);                 // one localDate for the whole oscillation
+    expect(r.phaseChanged).toEqual(['night']);    // crossed 22:00 forward twice, emitted once
+    expect(r.nightEntry).toBe(true);
+    expect(r.phase).toBe('night');                // the field still tracks the wall clock
+  });
   it('B-10 midnight: caps and earnedToday reset, distinctDaysSeen +1, gate reopens', () => {
     const r = B10.run();
     expect(r.gateBefore.verdict).toBe('unansweredCap');
