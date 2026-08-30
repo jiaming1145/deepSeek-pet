@@ -148,3 +148,74 @@ describe('M-9: dev hooks are gated on !app.isPackaged', () => {
     expect(rendererUrl('chat')).toBe('app://local/chat.html');
   });
 });
+
+describe('G2-1: the dev origin table — only an http(s) loopback URL without credentials is a key', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['plain', 'http://localhost:5173', 'http://localhost:5173'],
+    ['upper-case host', 'http://LOCALHOST:5173', 'http://localhost:5173'],
+    ['trailing slash', 'http://localhost:5173/', 'http://localhost:5173'],
+    ['with a path', 'http://localhost:5173/pet.html', 'http://localhost:5173'],
+    ['default port', 'http://localhost', 'http://localhost'],
+    ['explicit default port', 'http://localhost:80', 'http://localhost'],
+    ['https', 'https://localhost:5173', 'https://localhost:5173'],
+    ['IPv4 loopback', 'http://127.0.0.1:5173', 'http://127.0.0.1:5173'],
+    ['IPv6 loopback', 'http://[::1]:5173', 'http://[::1]:5173'],
+  ])('accepts %s (%s)', (_label, devUrl, key) => {
+    expect(allowedPetOrigins(devUrl)).toEqual(['app://local', key]);
+    expect(isAllowedPetUrl(`${key}/pet.html`, devUrl)).toBe(true);
+  });
+
+  it.each([
+    ['file: (would make every file: document trusted)', 'file:///a'],
+    ['a remote host', 'http://evil.example:5173'],
+    ['a loopback look-alike', 'http://localhost.evil:5173'],
+    ['a non-loopback IP', 'http://10.0.0.1:5173'],
+    ['userinfo', 'http://user:pw@localhost:5173'],
+    ['a bare username', 'http://user@localhost:5173'],
+    ['app://local.evil', 'app://local.evil'],
+    ['a foreign scheme', 'ws://localhost:5173'],
+    ['malformed', 'not a url'],
+    ['a scheme-relative value', '//localhost:5173'],
+  ])('rejects %s (%s) and grants nothing beyond app://local', (_label, devUrl) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(allowedPetOrigins(devUrl)).toEqual(['app://local']);
+    expect(isAllowedPetUrl(devUrl, devUrl)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    // Once per value: the guard is consulted on every IPC event and must not spam the log.
+    allowedPetOrigins(devUrl);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('app://local as the dev URL widens nothing (it is granted anyway, never as a dev key)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(allowedPetOrigins('app://local')).toEqual(['app://local']);
+    expect(allowedPetOrigins('app://local/')).toEqual(['app://local']);
+  });
+
+  it('file:///a never authorises file:///b (or file:///a)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(isAllowedPetUrl('file:///b', 'file:///a')).toBe(false);
+    expect(isAllowedPetUrl('file:///a', 'file:///a')).toBe(false);
+  });
+
+  it('a port mismatch against an accepted dev origin is rejected', () => {
+    expect(isAllowedPetUrl('http://localhost:5174/pet.html', 'http://localhost:5173')).toBe(false);
+    expect(isAllowedPetUrl('http://localhost/pet.html', 'http://localhost:5173')).toBe(false);
+  });
+
+  it('a packaged build ignores even a valid loopback ELECTRON_RENDERER_URL', () => {
+    electronApp.isPackaged = true;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173';
+    try {
+      expect(allowedPetOrigins()).toEqual(['app://local']);
+      expect(isAllowedPetUrl('http://localhost:5173/pet.html')).toBe(false);
+    } finally {
+      electronApp.isPackaged = false;
+      delete process.env.ELECTRON_RENDERER_URL;
+    }
+  });
+});

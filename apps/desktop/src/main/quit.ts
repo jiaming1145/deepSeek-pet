@@ -47,12 +47,20 @@ export function createBeforeQuit(deps: QuitDeps): {
     } catch (err) {
       log(`[quit] drain failed: ${err instanceof Error ? err.message : String(err)}`);
     }
+    // Each step isolated: a throwing `closeDb` (node:sqlite ERR_INVALID_STATE on a handle that is
+    // already closed) used to leave `phase` at 'draining' — every later before-quit prevented, the
+    // app unable to quit — and surface as an unhandled rejection from `void run()`.
+    step('teardownAfterDrain', () => deps.teardownAfterDrain());
+    step('closeDb', () => deps.closeDb());
+    phase = 'done';
+    deps.quit();
+  };
+
+  const step = (name: string, fn: () => void): void => {
     try {
-      deps.teardownAfterDrain();
-    } finally {
-      deps.closeDb();
-      phase = 'done';
-      deps.quit();
+      fn();
+    } catch (err) {
+      log(`[quit] ${name} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 

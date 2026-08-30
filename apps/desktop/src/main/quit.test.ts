@@ -86,4 +86,42 @@ describe('I-9: before-quit sequence', () => {
     await vi.waitFor(() => expect(q.phase).toBe('done'));
     expect(calls).toEqual(['log:[quit] drain failed: boom', 'after', 'closeDb', 'quit']);
   });
+
+  it('a throwing closeDb is logged, phase still reaches done and the app still quits', async () => {
+    const calls: string[] = [];
+    const q = createBeforeQuit({
+      teardownSync: () => {},
+      drain: () => Promise.resolve(),
+      teardownAfterDrain: () => calls.push('after'),
+      closeDb: () => {
+        throw new Error('ERR_INVALID_STATE');
+      },
+      quit: () => calls.push('quit'),
+      log: (line) => calls.push(`log:${line}`),
+    });
+    q.handler({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(q.phase).toBe('done'));
+    expect(calls).toEqual(['after', 'log:[quit] closeDb failed: ERR_INVALID_STATE', 'quit']);
+    // A later before-quit (the one quit() raises) is let through, not prevented forever.
+    let prevented = 0;
+    q.handler({ preventDefault: () => prevented++ });
+    expect(prevented).toBe(0);
+  });
+
+  it('a throwing teardownAfterDrain still closes the db and quits', async () => {
+    const calls: string[] = [];
+    const q = createBeforeQuit({
+      teardownSync: () => {},
+      drain: () => Promise.resolve(),
+      teardownAfterDrain: () => {
+        throw new Error('destroy failed');
+      },
+      closeDb: () => calls.push('closeDb'),
+      quit: () => calls.push('quit'),
+      log: (line) => calls.push(`log:${line}`),
+    });
+    q.handler({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(q.phase).toBe('done'));
+    expect(calls).toEqual(['log:[quit] teardownAfterDrain failed: destroy failed', 'closeDb', 'quit']);
+  });
 });
