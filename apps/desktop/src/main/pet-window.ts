@@ -35,6 +35,14 @@ export type PetWindowOptions = {
   onReadyToShow: () => void;
   /** Called when the renderer document fails to load (bad build, dev server down, bad app:// URL). */
   onLoadFailure: (err: unknown) => void;
+  /**
+   * §7.7: called when the renderer is lost (render-process-gone) or replaced (a main-frame
+   * navigation). index.ts wires it to `WindowMotionController.cancel()`, which ends a live drag
+   * with `cancelled`, clears the hover-switch suspension and restores the click-through state —
+   * otherwise a renderer that died mid-drag would leave `suspendHoverSwitching(true)` set for the
+   * life of the process and the recovered renderer's `avatar:hover` would be ignored.
+   */
+  onRendererReset?: () => void;
 };
 
 export function createPetWindow(options: PetWindowOptions): BrowserWindow {
@@ -66,7 +74,7 @@ export function createPetWindow(options: PetWindowOptions): BrowserWindow {
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
   setClickThrough(win, true);
-  guardPetWebContents(win);
+  guardPetWebContents(win, options);
 
   // Registered *before* the load is observed, so a synchronous rejection cannot arrive first.
   win.once('ready-to-show', options.onReadyToShow);
@@ -105,7 +113,7 @@ export function isAbortedLoad(err: unknown): boolean {
   return !!e && (e.errno === -3 || e.code === 'ERR_ABORTED');
 }
 
-function guardPetWebContents(win: BrowserWindow): void {
+function guardPetWebContents(win: BrowserWindow, options: PetWindowOptions): void {
   const wc = win.webContents;
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   const denyForeign = (details: { url: string; preventDefault: () => void }) => {
@@ -118,11 +126,14 @@ function guardPetWebContents(win: BrowserWindow): void {
   // arrives here instead (dev server only in practice — app://local is our own handler).
   wc.on('will-redirect', denyForeign);
   wc.on('did-start-navigation', (details) => {
-    if (details.isMainFrame) setClickThrough(win, true);
+    if (!details.isMainFrame) return;
+    setClickThrough(win, true);
+    options.onRendererReset?.();
   });
   wc.on('render-process-gone', (_event, details) => {
     console.warn('[pet] render process gone', details.reason);
     setClickThrough(win, true);
+    options.onRendererReset?.();
   });
 }
 
@@ -185,6 +196,11 @@ export function setClickThrough(win: ClickThroughTarget, ignore: boolean): void 
   else win.setIgnoreMouseEvents(false);
 }
 
+/**
+ * Phase 1/2's per-delta move. Phase 3 (§7.7) moves `setPosition` ownership to
+ * `WindowMotionController`; the `avatar:drag` handler that called this is deleted by the index.ts
+ * wiring (§2.9), after which this function has no caller and is removed in that same change.
+ */
 export function moveBy(win: BrowserWindow, dx: number, dy: number): void {
   if (win.isDestroyed()) return;
   const [x, y] = win.getPosition();
