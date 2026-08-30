@@ -321,7 +321,9 @@ describe('TurnRunner — turn commit and interruption', () => {
 
   it('keeps only the acknowledged sentence when a new send interrupts speaking', async () => {
     const h = harness([
-      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。'], hang: true },
+      // G-12: a terminal run at a chunk edge may still grow, so a delta must follow it before the
+      // lookahead can release sentence 0.
+      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], hang: true },
       { chunks: ['<|ACT emotion=sad|>好吧。'] },
     ]);
     const first = await h.runner.send('我回来了。');
@@ -341,7 +343,7 @@ describe('TurnRunner — turn commit and interruption', () => {
 
   it('cancel() commits the user row and appends nothing the user never saw', async () => {
     const h = harness([
-      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。'], hang: true },
+      { chunks: ['<|ACT emotion=happy|>回来啦。', '<|ACT emotion=curious|>今天怎么样。', '嗯'], hang: true },
     ]);
     await h.runner.send('我回来了。');
     await until(() => h.sentences.length === 1, 'the first released sentence');

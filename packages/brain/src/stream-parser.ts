@@ -20,6 +20,7 @@ export class StreamParser {
     const out: SentenceEvent[] = [];
     for (const item of this.tags.push(chunk)) {
       if (item.kind === 'tag') {
+        for (const s of this.sentences.settle()) out.push(this.emit(s));
         if (item.tag.kind === 'act') { this.emotion = item.tag.emotion; this.motion = item.tag.motion; this.motionUsed = false; this.sawAct = true; }
         else this.pendingPause = item.tag.seconds;
       } else if (item.kind === 'text') {
