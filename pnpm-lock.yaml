@@ -23,6 +23,12 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@ds/brain':
+        specifier: workspace:*
+        version: link:../../packages/brain
+      '@ds/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@ds/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

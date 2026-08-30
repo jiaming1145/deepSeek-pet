@@ -1,0 +1,12 @@
+
+> @ds/desktop@0.1.0 typecheck D:\ds\apps\desktop
+> tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && tsc -p tsconfig.ui.json
+
+
+> @ds/brain@0.1.0 typecheck D:\ds\packages\brain
+> tsc -p tsconfig.json
+
+
+> @ds/memory@0.1.0 typecheck D:\ds\packages\memory
+> tsc -p tsconfig.json
+

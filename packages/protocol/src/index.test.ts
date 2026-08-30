@@ -8,7 +8,7 @@ import {
   LintResultSchema,
   LintRuleSchema,
   LintSeveritySchema,
-  MAIN_TO_RENDERER,
+  MAIN_TO_PET,
   MessageKindSchema,
   RoleSchema,
   SentenceEventSchema,
@@ -36,7 +36,7 @@ describe('protocol', () => {
   });
 
   it('carries debug:toggle main→renderer with an empty payload', () => {
-    expect(MAIN_TO_RENDERER).toContain(Channels.debugToggle);
+    expect(MAIN_TO_PET).toContain(Channels.debugToggle);
     expect(parseEvent(Channels.debugToggle, {})).toEqual({ ok: true, data: {} });
   });
 });
