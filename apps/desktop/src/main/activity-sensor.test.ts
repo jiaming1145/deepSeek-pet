@@ -501,7 +501,7 @@ describe('fix round 1 — the ONE sensing timer survives its subscribers and its
 });
 
 describe('§10.7 — every capability PRIVACY-SENSING.md denies is absent from the source', () => {
-  it('grep over apps/desktop/src and packages returns nothing', () => {
+  it('rg over apps/desktop/src and packages returns nothing', () => {
     const root = new URL('../../../../', import.meta.url);
     // FIX ROUND 1, finding 7: the clipboard term is `clipboard[?.]*read`, not the bare token.
     // PRIVACY-SENSING.md denies READING the clipboard (「不读剪贴板」) and says nothing about a
@@ -511,13 +511,13 @@ describe('§10.7 — every capability PRIVACY-SENSING.md denies is absent from t
     // see. The narrowed term denies exactly what the statement denies -- `clipboard.readText`,
     // `clipboard.read` and `navigator.clipboard?.readText` all match it -- so the denial and the
     // grep are back in step and the allow-list is down to this file alone (the brief's item).
-    const pattern = 'SetWindowsHookEx\\|WH_KEYBOARD\\|RIDEV_INPUTSINK\\|GetAsyncKeyState\\|clipboard[?.]*read\\|GetWindowText\\|desktopCapturer\\|capturePage';
+    const pattern = 'SetWindowsHookEx|WH_KEYBOARD|RIDEV_INPUTSINK|GetAsyncKeyState|clipboard[?.]*read|GetWindowText|desktopCapturer|capturePage';
     let out = '';
     try {
-      out = execFileSync('grep', ['-rn', pattern, 'apps/desktop/src', 'packages'], { cwd: root, encoding: 'utf8' });
+      out = execFileSync('rg', ['-n', pattern, 'apps/desktop/src', 'packages'], { cwd: root, encoding: 'utf8' });
     } catch (e) {
       const err = e as { status?: number; stdout?: string };
-      if (err.status !== 1) throw e;          // grep exit 1 = no match; anything else is a real error
+      if (err.status !== 1) throw e;          // rg exit 1 = no match; anything else is a real error
       out = err.stdout ?? '';
     }
     // This file names the pattern once, in the string above; nothing else may.
