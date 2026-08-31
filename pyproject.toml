@@ -1,0 +1,57 @@
+[project]
+name = "live2d-production-pipeline"
+version = "0.1.0"
+description = "Deterministic Live2D art-production, QA, PSD packaging, and Cubism handoff tools."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "jsonschema>=4.25,<5",
+  "numpy>=2.2,<3",
+  "opencv-python-headless>=4.11,<5",
+  "pillow>=11,<13",
+  "psd-tools>=1.10,<2",
+  "pydantic>=2.11,<3",
+  "typer>=0.16,<1",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+  "types-jsonschema>=4.25,<5",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = [
+  ".claude",
+  ".agents",
+  "node_modules",
+  "vendor",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+exclude = [
+  "^\\.claude/",
+  "^\\.agents/",
+  "^node_modules/",
+  "^vendor/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "runs"]
+addopts = "-ra"
