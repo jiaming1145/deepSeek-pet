@@ -22,7 +22,9 @@ def validate_skill(path: Path) -> list[str]:
             data[key.strip()] = value.strip()
     expected = path.parent.name
     if data.get("name") != expected:
-        errors.append(f"{path}: name {data.get('name')!r} does not match folder {expected!r}")
+        errors.append(
+            f"{path}: name {data.get('name')!r} does not match folder {expected!r}"
+        )
     if not data.get("description"):
         errors.append(f"{path}: missing description")
     return errors
@@ -73,7 +75,10 @@ def main() -> None:
 
     if errors:
         raise SystemExit("\n".join(errors))
-    print(f"validated {len(skills)} skills, {len(prompt_files)} prompts, and all JSON files")
+    print(
+        f"validated {len(skills)} skills, {len(prompt_files)} prompts, "
+        "and all JSON files"
+    )
 
 
 if __name__ == "__main__":

@@ -21,7 +21,9 @@ def main() -> None:
     shutil.copy2(TEMPLATE, PLUGIN / ".codex-plugin" / "plugin.json")
     shutil.copytree(SOURCE_SKILLS, PLUGIN / "skills")
 
-    manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    manifest = json.loads(
+        (PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
+    )
     if manifest.get("skills") != "./skills/":
         raise SystemExit("plugin manifest must point to ./skills/")
 

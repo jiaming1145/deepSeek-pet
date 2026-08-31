@@ -54,4 +54,5 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "runs"]
+norecursedirs = ["runs/*/00_intake/research"]
 addopts = "-ra"

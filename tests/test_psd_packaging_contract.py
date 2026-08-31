@@ -90,21 +90,27 @@ def test_uxp_writer_has_authoritative_and_no_overwrite_controls() -> None:
     assert "core.executeAsModal" in script
     assert "saveAs.psd" in script
     assert "overwrite: false" in script
-    assert "fs.getFileForOpening" in script
-    assert "fs.getFolder" in script
-    assert "main();" in script
+    assert "fs.getEntryWithUrl" in script
+    assert "AUTO_PATHS" in script
+    assert "await main();" in script
 
 
-def test_blocked_validation_is_honest_and_has_no_artifact_failures() -> None:
+def test_psd_and_real_cubism_import_validation_pass() -> None:
     reports = sorted((PSD_ROOT / "qa").glob("psd_validation_attempt_*.json"))
     assert reports
     report = load_json(reports[-1])
-    assert report["status"] == "blocked_external_validation"
-    assert report["gate_advanced"] is False
+    assert report["status"] == "pass"
+    assert report["gate_advanced"] is True
     assert report["failures"] == []
-    assert report["applications"]["photoshop"] is None
+    assert report["blockers"] == []
+    assert report["applications"]["photoshop"] is not None
     assert report["applications"]["cubism_editor"] is not None
     assert report["applications"]["creative_cloud"] is not None
+    assert report["cubism_smoke_test"]["status"] == "pass"
+    assert all(report["cubism_smoke_test"]["checks"].values())
+    assert report["files"]["import_psd"]["sha256"] == sha256(
+        PSD_ROOT / "deepseek_whalechan_import.psd"
+    )
 
 
 def test_runtime_scaffold_matches_ai_expression_and_motion_contract() -> None:
@@ -165,7 +171,13 @@ def test_run_manifest_registry_is_unique_and_hash_valid() -> None:
         assert artifact.stat().st_size == record["bytes"], record["path"]
         assert sha256(artifact) == record["sha256"], record["path"]
 
-    assert run["state"] == "parts_approved"
-    assert run["next_allowed_transition"] == "psd_validated"
+    assert run["state"] == "psd_validated"
+    assert run["active_stage"] == "05_cubism"
+    assert run["current_cubism_handoff"].endswith(
+        "05_cubism/revisions/v005/handoff_index.json"
+    )
+    assert run["next_allowed_transition"] == "cubism_ready"
     assert run["blocked"]["recoverable"] is True
-    assert run["blocked"]["evidence"].endswith("psd_validation_attempt_004.json")
+    assert run["blocked"]["evidence"].endswith(
+        "05_cubism/revisions/v005/rigging_checklist.json"
+    )
