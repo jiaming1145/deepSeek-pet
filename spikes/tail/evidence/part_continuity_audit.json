@@ -1,0 +1,2340 @@
+{
+ "orphans": [
+  {
+   "part": "apron_waist_frill",
+   "components": 4,
+   "main_px": 50478,
+   "main_bbox": [
+    1104,
+    1507,
+    4248,
+    4475
+   ],
+   "orphan_px": 50232,
+   "orphan_bbox": [
+    1636,
+    2035,
+    4248,
+    4483
+   ]
+  },
+  {
+   "part": "apron_waist_frill",
+   "components": 4,
+   "main_px": 50478,
+   "main_bbox": [
+    1104,
+    1507,
+    4248,
+    4475
+   ],
+   "orphan_px": 25825,
+   "orphan_bbox": [
+    1388,
+    1775,
+    4240,
+    4315
+   ]
+  },
+  {
+   "part": "bonnet_base",
+   "components": 14,
+   "main_px": 24007,
+   "main_bbox": [
+    1688,
+    1895,
+    2044,
+    2255
+   ],
+   "orphan_px": 23967,
+   "orphan_bbox": [
+    1236,
+    1447,
+    2084,
+    2283
+   ]
+  },
+  {
+   "part": "brow_l",
+   "components": 4,
+   "main_px": 2000,
+   "main_bbox": [
+    1664,
+    1715,
+    2980,
+    3075
+   ],
+   "orphan_px": 912,
+   "orphan_bbox": [
+    1724,
+    1771,
+    2956,
+    3091
+   ]
+  },
+  {
+   "part": "brow_l",
+   "components": 4,
+   "main_px": 2000,
+   "main_bbox": [
+    1664,
+    1715,
+    2980,
+    3075
+   ],
+   "orphan_px": 640,
+   "orphan_bbox": [
+    1888,
+    1947,
+    3008,
+    3087
+   ]
+  },
+  {
+   "part": "brow_l",
+   "components": 4,
+   "main_px": 2000,
+   "main_bbox": [
+    1664,
+    1715,
+    2980,
+    3075
+   ],
+   "orphan_px": 336,
+   "orphan_bbox": [
+    1856,
+    1887,
+    2952,
+    3007
+   ]
+  },
+  {
+   "part": "brow_r",
+   "components": 2,
+   "main_px": 13272,
+   "main_bbox": [
+    1292,
+    1427,
+    2932,
+    3119
+   ],
+   "orphan_px": 11950,
+   "orphan_bbox": [
+    1108,
+    1247,
+    2936,
+    3103
+   ]
+  },
+  {
+   "part": "bubble_fx_l",
+   "components": 43,
+   "main_px": 22084,
+   "main_bbox": [
+    2574,
+    2741,
+    3518,
+    3685
+   ],
+   "orphan_px": 9798,
+   "orphan_bbox": [
+    2734,
+    2845,
+    3406,
+    3517
+   ]
+  },
+  {
+   "part": "bubble_fx_l",
+   "components": 43,
+   "main_px": 22084,
+   "main_bbox": [
+    2574,
+    2741,
+    3518,
+    3685
+   ],
+   "orphan_px": 4936,
+   "orphan_bbox": [
+    2550,
+    2629,
+    3314,
+    3393
+   ]
+  },
+  {
+   "part": "bubble_fx_r",
+   "components": 43,
+   "main_px": 22084,
+   "main_bbox": [
+    394,
+    561,
+    3518,
+    3685
+   ],
+   "orphan_px": 9798,
+   "orphan_bbox": [
+    554,
+    665,
+    3406,
+    3517
+   ]
+  },
+  {
+   "part": "bubble_fx_r",
+   "components": 43,
+   "main_px": 22084,
+   "main_bbox": [
+    394,
+    561,
+    3518,
+    3685
+   ],
+   "orphan_px": 4936,
+   "orphan_bbox": [
+    370,
+    449,
+    3314,
+    3393
+   ]
+  },
+  {
+   "part": "chest_bow_knot",
+   "components": 5,
+   "main_px": 24598,
+   "main_bbox": [
+    1480,
+    1651,
+    3700,
+    3915
+   ],
+   "orphan_px": 1264,
+   "orphan_bbox": [
+    1544,
+    1587,
+    3872,
+    3911
+   ]
+  },
+  {
+   "part": "chest_bow_knot",
+   "components": 5,
+   "main_px": 24598,
+   "main_bbox": [
+    1480,
+    1651,
+    3700,
+    3915
+   ],
+   "orphan_px": 1104,
+   "orphan_bbox": [
+    1540,
+    1595,
+    3664,
+    3703
+   ]
+  },
+  {
+   "part": "chest_bow_knot",
+   "components": 5,
+   "main_px": 24598,
+   "main_bbox": [
+    1480,
+    1651,
+    3700,
+    3915
+   ],
+   "orphan_px": 960,
+   "orphan_bbox": [
+    1544,
+    1583,
+    3932,
+    3963
+   ]
+  },
+  {
+   "part": "chest_bow_loop_l",
+   "components": 10,
+   "main_px": 60752,
+   "main_bbox": [
+    1568,
+    1947,
+    3600,
+    4007
+   ],
+   "orphan_px": 12416,
+   "orphan_bbox": [
+    1912,
+    1999,
+    3752,
+    4115
+   ]
+  },
+  {
+   "part": "chest_bow_loop_l",
+   "components": 10,
+   "main_px": 60752,
+   "main_bbox": [
+    1568,
+    1947,
+    3600,
+    4007
+   ],
+   "orphan_px": 928,
+   "orphan_bbox": [
+    1556,
+    1603,
+    3664,
+    3695
+   ]
+  },
+  {
+   "part": "chest_bow_loop_l",
+   "components": 10,
+   "main_px": 60752,
+   "main_bbox": [
+    1568,
+    1947,
+    3600,
+    4007
+   ],
+   "orphan_px": 304,
+   "orphan_bbox": [
+    1572,
+    1591,
+    3728,
+    3759
+   ]
+  },
+  {
+   "part": "chest_bow_loop_r",
+   "components": 8,
+   "main_px": 73824,
+   "main_bbox": [
+    1148,
+    1539,
+    3600,
+    4107
+   ],
+   "orphan_px": 1072,
+   "orphan_bbox": [
+    1532,
+    1587,
+    3660,
+    3695
+   ]
+  },
+  {
+   "part": "chest_bow_tail_l",
+   "components": 5,
+   "main_px": 30000,
+   "main_bbox": [
+    1540,
+    2003,
+    3952,
+    4163
+   ],
+   "orphan_px": 1232,
+   "orphan_bbox": [
+    1616,
+    1679,
+    3892,
+    3927
+   ]
+  },
+  {
+   "part": "chest_bow_tail_l",
+   "components": 5,
+   "main_px": 30000,
+   "main_bbox": [
+    1540,
+    2003,
+    3952,
+    4163
+   ],
+   "orphan_px": 1200,
+   "orphan_bbox": [
+    1544,
+    1583,
+    3992,
+    4031
+   ]
+  },
+  {
+   "part": "chest_bow_tail_l",
+   "components": 5,
+   "main_px": 30000,
+   "main_bbox": [
+    1540,
+    2003,
+    3952,
+    4163
+   ],
+   "orphan_px": 1104,
+   "orphan_bbox": [
+    1544,
+    1583,
+    3936,
+    3971
+   ]
+  },
+  {
+   "part": "chest_bow_tail_l",
+   "components": 5,
+   "main_px": 30000,
+   "main_bbox": [
+    1540,
+    2003,
+    3952,
+    4163
+   ],
+   "orphan_px": 1072,
+   "orphan_bbox": [
+    1544,
+    1579,
+    4064,
+    4103
+   ]
+  },
+  {
+   "part": "chest_gem",
+   "components": 9,
+   "main_px": 1616,
+   "main_bbox": [
+    1548,
+    1595,
+    3792,
+    3847
+   ],
+   "orphan_px": 1488,
+   "orphan_bbox": [
+    1536,
+    1607,
+    3712,
+    3783
+   ]
+  },
+  {
+   "part": "chest_gem",
+   "components": 9,
+   "main_px": 1616,
+   "main_bbox": [
+    1548,
+    1595,
+    3792,
+    3847
+   ],
+   "orphan_px": 1312,
+   "orphan_bbox": [
+    1548,
+    1591,
+    3728,
+    3771
+   ]
+  },
+  {
+   "part": "chest_gem",
+   "components": 9,
+   "main_px": 1616,
+   "main_bbox": [
+    1548,
+    1595,
+    3792,
+    3847
+   ],
+   "orphan_px": 1136,
+   "orphan_bbox": [
+    1536,
+    1603,
+    3660,
+    3695
+   ]
+  },
+  {
+   "part": "collar_frill_l",
+   "components": 9,
+   "main_px": 169955,
+   "main_bbox": [
+    1540,
+    1975,
+    3600,
+    4163
+   ],
+   "orphan_px": 352,
+   "orphan_bbox": [
+    1624,
+    1663,
+    3664,
+    3683
+   ]
+  },
+  {
+   "part": "collar_frill_r",
+   "components": 15,
+   "main_px": 148938,
+   "main_bbox": [
+    1172,
+    1587,
+    3636,
+    4163
+   ],
+   "orphan_px": 8468,
+   "orphan_bbox": [
+    1320,
+    1587,
+    3600,
+    3771
+   ]
+  },
+  {
+   "part": "collar_frill_r",
+   "components": 15,
+   "main_px": 148938,
+   "main_bbox": [
+    1172,
+    1587,
+    3636,
+    4163
+   ],
+   "orphan_px": 6016,
+   "orphan_bbox": [
+    1344,
+    1567,
+    3600,
+    3643
+   ]
+  },
+  {
+   "part": "collar_frill_r",
+   "components": 15,
+   "main_px": 148938,
+   "main_bbox": [
+    1172,
+    1587,
+    3636,
+    4163
+   ],
+   "orphan_px": 1024,
+   "orphan_bbox": [
+    1532,
+    1583,
+    3660,
+    3703
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 9552,
+   "orphan_bbox": [
+    1272,
+    1491,
+    4232,
+    4319
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 9504,
+   "orphan_bbox": [
+    2088,
+    2207,
+    3652,
+    3771
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 6336,
+   "orphan_bbox": [
+    924,
+    1007,
+    3584,
+    3679
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 6256,
+   "orphan_bbox": [
+    964,
+    1055,
+    3680,
+    3771
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 5664,
+   "orphan_bbox": [
+    2188,
+    2271,
+    3584,
+    3671
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 1808,
+   "orphan_bbox": [
+    1656,
+    1699,
+    4216,
+    4263
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 1616,
+   "orphan_bbox": [
+    1424,
+    1467,
+    4212,
+    4263
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 528,
+   "orphan_bbox": [
+    1188,
+    1227,
+    4256,
+    4311
+   ]
+  },
+  {
+   "part": "dress_torso",
+   "components": 55,
+   "main_px": 292091,
+   "main_bbox": [
+    1160,
+    1979,
+    3636,
+    4319
+   ],
+   "orphan_px": 413,
+   "orphan_bbox": [
+    708,
+    739,
+    3656,
+    3691
+   ]
+  },
+  {
+   "part": "eye_white_l",
+   "components": 24,
+   "main_px": 98540,
+   "main_bbox": [
+    1620,
+    2031,
+    3008,
+    3471
+   ],
+   "orphan_px": 3408,
+   "orphan_bbox": [
+    1796,
+    1863,
+    3188,
+    3255
+   ]
+  },
+  {
+   "part": "eye_white_l",
+   "components": 24,
+   "main_px": 98540,
+   "main_bbox": [
+    1620,
+    2031,
+    3008,
+    3471
+   ],
+   "orphan_px": 368,
+   "orphan_bbox": [
+    1880,
+    1907,
+    3384,
+    3407
+   ]
+  },
+  {
+   "part": "eye_white_r",
+   "components": 23,
+   "main_px": 95352,
+   "main_bbox": [
+    1108,
+    1515,
+    3000,
+    3471
+   ],
+   "orphan_px": 1152,
+   "orphan_bbox": [
+    1232,
+    1271,
+    3416,
+    3463
+   ]
+  },
+  {
+   "part": "eye_white_r",
+   "components": 23,
+   "main_px": 95352,
+   "main_bbox": [
+    1108,
+    1515,
+    3000,
+    3471
+   ],
+   "orphan_px": 736,
+   "orphan_bbox": [
+    1212,
+    1243,
+    3392,
+    3451
+   ]
+  },
+  {
+   "part": "fin_ear_l",
+   "components": 110,
+   "main_px": 149841,
+   "main_bbox": [
+    2108,
+    2783,
+    2952,
+    3439
+   ],
+   "orphan_px": 3792,
+   "orphan_bbox": [
+    2076,
+    2147,
+    2848,
+    2943
+   ]
+  },
+  {
+   "part": "fin_ear_r",
+   "components": 162,
+   "main_px": 134527,
+   "main_bbox": [
+    422,
+    1027,
+    2908,
+    3435
+   ],
+   "orphan_px": 4320,
+   "orphan_bbox": [
+    988,
+    1063,
+    2848,
+    2943
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 198755,
+   "orphan_bbox": [
+    744,
+    1215,
+    2152,
+    2959
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 127080,
+   "orphan_bbox": [
+    1248,
+    1883,
+    4112,
+    4327
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 32783,
+   "orphan_bbox": [
+    1904,
+    2075,
+    3556,
+    3823
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 31904,
+   "orphan_bbox": [
+    1064,
+    1243,
+    3564,
+    3819
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 3120,
+   "orphan_bbox": [
+    1808,
+    1903,
+    2040,
+    2111
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 2838,
+   "orphan_bbox": [
+    2500,
+    2554,
+    2828,
+    2923
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 770,
+   "orphan_bbox": [
+    1242,
+    1270,
+    1992,
+    2049
+   ]
+  },
+  {
+   "part": "hair_back_base",
+   "components": 223,
+   "main_px": 306021,
+   "main_bbox": [
+    1764,
+    2503,
+    2176,
+    2975
+   ],
+   "orphan_px": 336,
+   "orphan_bbox": [
+    1853,
+    1899,
+    2036,
+    2063
+   ]
+  },
+  {
+   "part": "hair_back_outer_l",
+   "components": 206,
+   "main_px": 360586,
+   "main_bbox": [
+    2360,
+    2834,
+    3388,
+    4691
+   ],
+   "orphan_px": 15339,
+   "orphan_bbox": [
+    2632,
+    2823,
+    3212,
+    3359
+   ]
+  },
+  {
+   "part": "hair_front_base",
+   "components": 3,
+   "main_px": 376384,
+   "main_bbox": [
+    1056,
+    1975,
+    2112,
+    2691
+   ],
+   "orphan_px": 336,
+   "orphan_bbox": [
+    1548,
+    1583,
+    2684,
+    2699
+   ]
+  },
+  {
+   "part": "hand_l",
+   "components": 96,
+   "main_px": 40950,
+   "main_bbox": [
+    2232,
+    2519,
+    4532,
+    4875
+   ],
+   "orphan_px": 950,
+   "orphan_bbox": [
+    2444,
+    2487,
+    4916,
+    4967
+   ]
+  },
+  {
+   "part": "hand_l",
+   "components": 96,
+   "main_px": 40950,
+   "main_bbox": [
+    2232,
+    2519,
+    4532,
+    4875
+   ],
+   "orphan_px": 806,
+   "orphan_bbox": [
+    2388,
+    2443,
+    4880,
+    4903
+   ]
+  },
+  {
+   "part": "hand_r",
+   "components": 104,
+   "main_px": 34784,
+   "main_bbox": [
+    644,
+    927,
+    4564,
+    4851
+   ],
+   "orphan_px": 606,
+   "orphan_bbox": [
+    728,
+    775,
+    4884,
+    4903
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 2048,
+   "orphan_bbox": [
+    2208,
+    2279,
+    4984,
+    5059
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 1728,
+   "orphan_bbox": [
+    2172,
+    2195,
+    5008,
+    5103
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 1456,
+   "orphan_bbox": [
+    2284,
+    2343,
+    4864,
+    4943
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 1424,
+   "orphan_bbox": [
+    1680,
+    1907,
+    5196,
+    5219
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 736,
+   "orphan_bbox": [
+    1984,
+    2099,
+    5140,
+    5179
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 656,
+   "orphan_bbox": [
+    1536,
+    1627,
+    5232,
+    5239
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 528,
+   "orphan_bbox": [
+    2040,
+    2075,
+    5048,
+    5067
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 512,
+   "orphan_bbox": [
+    2024,
+    2043,
+    5020,
+    5055
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 496,
+   "orphan_bbox": [
+    2004,
+    2035,
+    5060,
+    5079
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 400,
+   "orphan_bbox": [
+    2036,
+    2051,
+    5072,
+    5103
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 336,
+   "orphan_bbox": [
+    2292,
+    2311,
+    4860,
+    4887
+   ]
+  },
+  {
+   "part": "hip_bow_l",
+   "components": 35,
+   "main_px": 10368,
+   "main_bbox": [
+    2084,
+    2271,
+    4892,
+    5051
+   ],
+   "orphan_px": 320,
+   "orphan_bbox": [
+    2340,
+    2375,
+    4948,
+    4995
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 1824,
+   "orphan_bbox": [
+    852,
+    923,
+    4984,
+    5047
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 1632,
+   "orphan_bbox": [
+    932,
+    959,
+    5004,
+    5091
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 1344,
+   "orphan_bbox": [
+    1192,
+    1419,
+    5184,
+    5215
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 880,
+   "orphan_bbox": [
+    832,
+    867,
+    4856,
+    4903
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 640,
+   "orphan_bbox": [
+    1072,
+    1099,
+    5012,
+    5051
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 528,
+   "orphan_bbox": [
+    1492,
+    1567,
+    5228,
+    5239
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 496,
+   "orphan_bbox": [
+    1032,
+    1111,
+    5132,
+    5163
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 480,
+   "orphan_bbox": [
+    1080,
+    1111,
+    5052,
+    5071
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 480,
+   "orphan_bbox": [
+    1044,
+    1075,
+    5036,
+    5059
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 368,
+   "orphan_bbox": [
+    1060,
+    1075,
+    5064,
+    5095
+   ]
+  },
+  {
+   "part": "hip_bow_r",
+   "components": 28,
+   "main_px": 9472,
+   "main_bbox": [
+    864,
+    1039,
+    4884,
+    5043
+   ],
+   "orphan_px": 304,
+   "orphan_bbox": [
+    824,
+    835,
+    4900,
+    4931
+   ]
+  },
+  {
+   "part": "iris_l",
+   "components": 4,
+   "main_px": 36158,
+   "main_bbox": [
+    1720,
+    1935,
+    3116,
+    3375
+   ],
+   "orphan_px": 560,
+   "orphan_bbox": [
+    1940,
+    1983,
+    3176,
+    3199
+   ]
+  },
+  {
+   "part": "iris_r",
+   "components": 7,
+   "main_px": 36798,
+   "main_bbox": [
+    1204,
+    1431,
+    3100,
+    3375
+   ],
+   "orphan_px": 560,
+   "orphan_bbox": [
+    1152,
+    1195,
+    3176,
+    3199
+   ]
+  },
+  {
+   "part": "lower_lash_l",
+   "components": 3,
+   "main_px": 4944,
+   "main_bbox": [
+    1944,
+    2027,
+    3336,
+    3443
+   ],
+   "orphan_px": 2832,
+   "orphan_bbox": [
+    1844,
+    1911,
+    3336,
+    3395
+   ]
+  },
+  {
+   "part": "lower_lash_l",
+   "components": 3,
+   "main_px": 4944,
+   "main_bbox": [
+    1944,
+    2027,
+    3336,
+    3443
+   ],
+   "orphan_px": 1856,
+   "orphan_bbox": [
+    1748,
+    1799,
+    3336,
+    3383
+   ]
+  },
+  {
+   "part": "lower_lash_r",
+   "components": 3,
+   "main_px": 6400,
+   "main_bbox": [
+    1100,
+    1215,
+    3336,
+    3459
+   ],
+   "orphan_px": 2896,
+   "orphan_bbox": [
+    1228,
+    1299,
+    3336,
+    3395
+   ]
+  },
+  {
+   "part": "lower_lash_r",
+   "components": 3,
+   "main_px": 6400,
+   "main_bbox": [
+    1100,
+    1215,
+    3336,
+    3459
+   ],
+   "orphan_px": 1424,
+   "orphan_bbox": [
+    1336,
+    1379,
+    3340,
+    3383
+   ]
+  },
+  {
+   "part": "mouth_highlight",
+   "components": 2,
+   "main_px": 1072,
+   "main_bbox": [
+    1572,
+    1631,
+    3492,
+    3531
+   ],
+   "orphan_px": 784,
+   "orphan_bbox": [
+    1572,
+    1619,
+    3480,
+    3507
+   ]
+  },
+  {
+   "part": "question_mark",
+   "components": 72,
+   "main_px": 38569,
+   "main_bbox": [
+    2266,
+    2545,
+    2562,
+    2929
+   ],
+   "orphan_px": 3240,
+   "orphan_bbox": [
+    2370,
+    2433,
+    2974,
+    3037
+   ]
+  },
+  {
+   "part": "side_lock_root_l",
+   "components": 3,
+   "main_px": 6208,
+   "main_bbox": [
+    2128,
+    2239,
+    3336,
+    3439
+   ],
+   "orphan_px": 4112,
+   "orphan_bbox": [
+    2076,
+    2139,
+    2876,
+    2983
+   ]
+  },
+  {
+   "part": "side_lock_root_r",
+   "components": 2,
+   "main_px": 6144,
+   "main_bbox": [
+    892,
+    1003,
+    3336,
+    3439
+   ],
+   "orphan_px": 4880,
+   "orphan_bbox": [
+    996,
+    1063,
+    2856,
+    2975
+   ]
+  },
+  {
+   "part": "skirt_back",
+   "components": 27,
+   "main_px": 388549,
+   "main_bbox": [
+    1064,
+    2067,
+    4752,
+    5403
+   ],
+   "orphan_px": 75706,
+   "orphan_bbox": [
+    2400,
+    2643,
+    4960,
+    5399
+   ]
+  },
+  {
+   "part": "skirt_back",
+   "components": 27,
+   "main_px": 388549,
+   "main_bbox": [
+    1064,
+    2067,
+    4752,
+    5403
+   ],
+   "orphan_px": 1841,
+   "orphan_bbox": [
+    636,
+    671,
+    5024,
+    5115
+   ]
+  },
+  {
+   "part": "skirt_front_l",
+   "components": 58,
+   "main_px": 341143,
+   "main_bbox": [
+    1876,
+    2527,
+    4492,
+    5339
+   ],
+   "orphan_px": 1857,
+   "orphan_bbox": [
+    2445,
+    2524,
+    4764,
+    4839
+   ]
+  },
+  {
+   "part": "skirt_front_l",
+   "components": 58,
+   "main_px": 341143,
+   "main_bbox": [
+    1876,
+    2527,
+    4492,
+    5339
+   ],
+   "orphan_px": 1120,
+   "orphan_bbox": [
+    2272,
+    2307,
+    4696,
+    4759
+   ]
+  },
+  {
+   "part": "skirt_front_l",
+   "components": 58,
+   "main_px": 341143,
+   "main_bbox": [
+    1876,
+    2527,
+    4492,
+    5339
+   ],
+   "orphan_px": 576,
+   "orphan_bbox": [
+    2324,
+    2355,
+    4748,
+    4783
+   ]
+  },
+  {
+   "part": "skirt_front_l",
+   "components": 58,
+   "main_px": 341143,
+   "main_bbox": [
+    1876,
+    2527,
+    4492,
+    5339
+   ],
+   "orphan_px": 352,
+   "orphan_bbox": [
+    2444,
+    2467,
+    4764,
+    4791
+   ]
+  },
+  {
+   "part": "skirt_front_r",
+   "components": 81,
+   "main_px": 323111,
+   "main_bbox": [
+    622,
+    1251,
+    4488,
+    5327
+   ],
+   "orphan_px": 1969,
+   "orphan_bbox": [
+    637,
+    711,
+    4764,
+    4839
+   ]
+  },
+  {
+   "part": "skirt_front_r",
+   "components": 81,
+   "main_px": 323111,
+   "main_bbox": [
+    622,
+    1251,
+    4488,
+    5327
+   ],
+   "orphan_px": 560,
+   "orphan_bbox": [
+    680,
+    707,
+    4764,
+    4803
+   ]
+  },
+  {
+   "part": "sleepy_marks",
+   "components": 108,
+   "main_px": 12200,
+   "main_bbox": [
+    2206,
+    2353,
+    2850,
+    3001
+   ],
+   "orphan_px": 9668,
+   "orphan_bbox": [
+    2330,
+    2453,
+    2706,
+    2833
+   ]
+  },
+  {
+   "part": "sleepy_marks",
+   "components": 108,
+   "main_px": 12200,
+   "main_bbox": [
+    2206,
+    2353,
+    2850,
+    3001
+   ],
+   "orphan_px": 7136,
+   "orphan_bbox": [
+    2426,
+    2525,
+    2582,
+    2685
+   ]
+  },
+  {
+   "part": "sleeve_lower_l",
+   "components": 87,
+   "main_px": 16814,
+   "main_bbox": [
+    2136,
+    2411,
+    4520,
+    4695
+   ],
+   "orphan_px": 3136,
+   "orphan_bbox": [
+    2140,
+    2367,
+    4448,
+    4603
+   ]
+  },
+  {
+   "part": "sleeve_lower_r",
+   "components": 99,
+   "main_px": 17885,
+   "main_bbox": [
+    744,
+    1011,
+    4536,
+    4695
+   ],
+   "orphan_px": 2960,
+   "orphan_bbox": [
+    796,
+    1015,
+    4448,
+    4599
+   ]
+  },
+  {
+   "part": "sleeve_lower_r",
+   "components": 99,
+   "main_px": 17885,
+   "main_bbox": [
+    744,
+    1011,
+    4536,
+    4695
+   ],
+   "orphan_px": 416,
+   "orphan_bbox": [
+    596,
+    611,
+    4084,
+    4131
+   ]
+  },
+  {
+   "part": "sleeve_lower_r",
+   "components": 99,
+   "main_px": 17885,
+   "main_bbox": [
+    744,
+    1011,
+    4536,
+    4695
+   ],
+   "orphan_px": 320,
+   "orphan_bbox": [
+    1132,
+    1163,
+    4404,
+    4435
+   ]
+  },
+  {
+   "part": "sleeve_upper_l",
+   "components": 39,
+   "main_px": 20671,
+   "main_bbox": [
+    1868,
+    1987,
+    3824,
+    4155
+   ],
+   "orphan_px": 4912,
+   "orphan_bbox": [
+    2084,
+    2163,
+    3696,
+    3779
+   ]
+  },
+  {
+   "part": "sleeve_upper_l",
+   "components": 39,
+   "main_px": 20671,
+   "main_bbox": [
+    1868,
+    1987,
+    3824,
+    4155
+   ],
+   "orphan_px": 960,
+   "orphan_bbox": [
+    2140,
+    2183,
+    3856,
+    3899
+   ]
+  },
+  {
+   "part": "sleeve_upper_l",
+   "components": 39,
+   "main_px": 20671,
+   "main_bbox": [
+    1868,
+    1987,
+    3824,
+    4155
+   ],
+   "orphan_px": 432,
+   "orphan_bbox": [
+    2160,
+    2191,
+    4104,
+    4175
+   ]
+  },
+  {
+   "part": "sleeve_upper_l",
+   "components": 39,
+   "main_px": 20671,
+   "main_bbox": [
+    1868,
+    1987,
+    3824,
+    4155
+   ],
+   "orphan_px": 320,
+   "orphan_bbox": [
+    1980,
+    1995,
+    3856,
+    3891
+   ]
+  },
+  {
+   "part": "sleeve_upper_r",
+   "components": 22,
+   "main_px": 15297,
+   "main_bbox": [
+    1160,
+    1263,
+    3896,
+    4135
+   ],
+   "orphan_px": 5936,
+   "orphan_bbox": [
+    1008,
+    1087,
+    3724,
+    3827
+   ]
+  },
+  {
+   "part": "sleeve_upper_r",
+   "components": 22,
+   "main_px": 15297,
+   "main_bbox": [
+    1160,
+    1263,
+    3896,
+    4135
+   ],
+   "orphan_px": 400,
+   "orphan_bbox": [
+    976,
+    999,
+    4076,
+    4151
+   ]
+  },
+  {
+   "part": "sparkle_l",
+   "components": 18,
+   "main_px": 16652,
+   "main_bbox": [
+    2262,
+    2493,
+    2618,
+    2849
+   ],
+   "orphan_px": 2404,
+   "orphan_bbox": [
+    2510,
+    2565,
+    2794,
+    2849
+   ]
+  },
+  {
+   "part": "sparkle_r",
+   "components": 18,
+   "main_px": 16652,
+   "main_bbox": [
+    638,
+    869,
+    2618,
+    2849
+   ],
+   "orphan_px": 2404,
+   "orphan_bbox": [
+    886,
+    941,
+    2794,
+    2849
+   ]
+  },
+  {
+   "part": "tail_fluke_upper",
+   "components": 242,
+   "main_px": 299731,
+   "main_bbox": [
+    2924,
+    3487,
+    4240,
+    5067
+   ],
+   "orphan_px": 21788,
+   "orphan_bbox": [
+    2568,
+    2787,
+    4068,
+    4339
+   ]
+  },
+  {
+   "part": "tail_fluke_upper",
+   "components": 242,
+   "main_px": 299731,
+   "main_bbox": [
+    2924,
+    3487,
+    4240,
+    5067
+   ],
+   "orphan_px": 1814,
+   "orphan_bbox": [
+    2548,
+    2591,
+    4360,
+    4455
+   ]
+  },
+  {
+   "part": "tail_splash_fx",
+   "components": 39,
+   "main_px": 20084,
+   "main_bbox": [
+    3430,
+    3517,
+    4054,
+    4341
+   ],
+   "orphan_px": 20084,
+   "orphan_bbox": [
+    3266,
+    3353,
+    3914,
+    4201
+   ]
+  },
+  {
+   "part": "tail_splash_fx",
+   "components": 39,
+   "main_px": 20084,
+   "main_bbox": [
+    3430,
+    3517,
+    4054,
+    4341
+   ],
+   "orphan_px": 20084,
+   "orphan_bbox": [
+    3094,
+    3181,
+    4026,
+    4313
+   ]
+  },
+  {
+   "part": "underskirt_frill_l",
+   "components": 21,
+   "main_px": 146219,
+   "main_bbox": [
+    1712,
+    2643,
+    5280,
+    5583
+   ],
+   "orphan_px": 336,
+   "orphan_bbox": [
+    2576,
+    2603,
+    5312,
+    5331
+   ]
+  },
+  {
+   "part": "upper_lash_l",
+   "components": 15,
+   "main_px": 18144,
+   "main_bbox": [
+    1720,
+    2035,
+    3068,
+    3195
+   ],
+   "orphan_px": 768,
+   "orphan_bbox": [
+    1676,
+    1739,
+    3068,
+    3171
+   ]
+  },
+  {
+   "part": "upper_lash_r",
+   "components": 22,
+   "main_px": 14736,
+   "main_bbox": [
+    1108,
+    1399,
+    3064,
+    3195
+   ],
+   "orphan_px": 464,
+   "orphan_bbox": [
+    1388,
+    1403,
+    3068,
+    3139
+   ]
+  }
+ ],
+ "seams": [
+  {
+   "chain": "spine",
+   "a": "hip_base",
+   "b": "torso_base",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "spine",
+   "a": "torso_base",
+   "b": "neck",
+   "overlap_px": 3424,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "spine",
+   "a": "neck",
+   "b": "head_base",
+   "overlap_px": 28766,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "arm_l",
+   "a": "shoulder_l",
+   "b": "upper_arm_l",
+   "overlap_px": 3584,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "arm_l",
+   "a": "upper_arm_l",
+   "b": "forearm_l",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "arm_l",
+   "a": "forearm_l",
+   "b": "hand_l",
+   "overlap_px": 18847,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "arm_r",
+   "a": "shoulder_r",
+   "b": "upper_arm_r",
+   "overlap_px": 2832,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "arm_r",
+   "a": "upper_arm_r",
+   "b": "forearm_r",
+   "overlap_px": 208,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "arm_r",
+   "a": "forearm_r",
+   "b": "hand_r",
+   "overlap_px": 15942,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "sleeve_l",
+   "a": "sleeve_upper_l",
+   "b": "sleeve_lower_l",
+   "overlap_px": 64,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "sleeve_l",
+   "a": "sleeve_lower_l",
+   "b": "cuff_l",
+   "overlap_px": 8690,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "sleeve_r",
+   "a": "sleeve_upper_r",
+   "b": "sleeve_lower_r",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "sleeve_r",
+   "a": "sleeve_lower_r",
+   "b": "cuff_r",
+   "overlap_px": 8052,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "leg_l",
+   "a": "hip_base",
+   "b": "thigh_l",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "leg_l",
+   "a": "thigh_l",
+   "b": "lower_leg_l",
+   "overlap_px": 32,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "leg_l",
+   "a": "lower_leg_l",
+   "b": "foot_l",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "leg_r",
+   "a": "hip_base",
+   "b": "thigh_r",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "leg_r",
+   "a": "thigh_r",
+   "b": "lower_leg_r",
+   "overlap_px": 32,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "leg_r",
+   "a": "lower_leg_r",
+   "b": "foot_r",
+   "overlap_px": 0,
+   "x_gap_px": 0,
+   "status": "TORN (touching, 0 overlap)"
+  },
+  {
+   "chain": "hosiery_l",
+   "a": "stocking_l",
+   "b": "shoe_l",
+   "overlap_px": 19390,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "hosiery_r",
+   "a": "stocking_r",
+   "b": "shoe_r",
+   "overlap_px": 19577,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "tail",
+   "a": "tail_root",
+   "b": "tail_stock",
+   "overlap_px": 0,
+   "x_gap_px": 80,
+   "status": "TORN (gap 80 px)"
+  },
+  {
+   "chain": "tail",
+   "a": "tail_stock",
+   "b": "tail_fluke_upper",
+   "overlap_px": 17036,
+   "x_gap_px": 0,
+   "status": "OK"
+  },
+  {
+   "chain": "tail_lower",
+   "a": "tail_stock",
+   "b": "tail_fluke_lower",
+   "overlap_px": 13863,
+   "x_gap_px": 0,
+   "status": "OK"
+  }
+ ]
+}
