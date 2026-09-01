@@ -1,0 +1,255 @@
+<!doctype html><html><head><meta charset="utf-8"><title>tail spike</title>
+<style>
+ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+ canvas{display:block;width:100%;height:100%}
+ #hud{position:fixed;left:8px;top:8px;font:11px ui-monospace,Consolas,monospace;color:#9fe;
+      text-shadow:0 1px 2px #000;line-height:1.5;pointer-events:none;white-space:pre}
+</style></head><body>
+<canvas id="c"></canvas><div id="hud"></div>
+<script>
+// ---------------------------------------------------------------------------
+// Tail spike: 6-bone chain + CPU linear-blend skinning over the REAL extracted
+// parts. The solver below is a verbatim port of stepTailFixed() from
+// packages/stage/src/interaction-rig.ts so the spike tests our actual code.
+// ---------------------------------------------------------------------------
+const TAIL_SEGMENT_COUNT = 6, FIXED_STEP = 1/120, MAX_FRAME = 0.05;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+
+class TailSolver {
+  constructor(){ this.tail=new Float64Array(6); this.vel=new Float64Array(6);
+    this.acc=0; this.timeS=0; this.mood=0; this.moodTarget=0;
+    this.grabbed=false; this.dragging=false; this.lagX=0; this.lagY=0;
+    this.anchor={x:0,y:0}; this._px=0; }
+  release(){ if(this.grabbed){ const kick=clamp(this.lagX/120,-1,1);
+      for(let i=0;i<6;i++) this.vel[i]+=kick*(7-i)*0.8; }
+    this.grabbed=false; this.dragging=false; }
+  tick(dt){ dt=clamp(dt,0,MAX_FRAME); this.timeS+=dt;
+    this.mood += (this.moodTarget-this.mood)*(1-Math.exp(-6*dt));
+    this.acc=Math.min(0.1,this.acc+dt);
+    while(this.acc>=FIXED_STEP){ this.step(FIXED_STEP); this.acc-=FIXED_STEP; }
+    return this.tail; }
+  step(dt){
+    const tailGrab = this.grabbed && this.dragging;
+    const pullX = clamp(this.lagX/120 + this.anchor.x*0.2, -1, 1);
+    const pullY = clamp(this.lagY/120 - this.anchor.y*0.1, -1, 1);
+    const grabTarget = clamp(pullX*0.86 - pullY*0.28, -1, 1);
+    const idleTarget = Math.sin(this.timeS*1.7)*0.08 + this.mood*0.22;
+    for(let i=0;i<TAIL_SEGMENT_COUNT;i++){
+      const desired = i===0 ? (tailGrab?grabTarget:idleTarget)
+                            : this.tail[i-1]*(tailGrab?0.9:0.76);
+      const stiffness = tailGrab ? 56-i*4 : 30-i*2;
+      const damping = 8.5+i*0.45;
+      const a = (desired-this.tail[i])*stiffness - this.vel[i]*damping;
+      this.vel[i]+=a*dt;
+      this.tail[i]=clamp(this.tail[i]+this.vel[i]*dt,-1,1);
+    }
+  }
+}
+
+// --- rig ------------------------------------------------------------------
+// Joints measured off the canonical art (source px / 4 = canvas px).
+const J = [[575,1295],[607,1292],[640,1287],[675,1279],[710,1269],[740,1257],[775,1250]];
+const DEG = Math.PI/180;
+function solveBones(angles){
+  const P=[J[0].slice()], A=[angles[0]*32*DEG];
+  for(let i=1;i<6;i++){
+    const dx=J[i][0]-J[i-1][0], dy=J[i][1]-J[i-1][1], c=Math.cos(A[i-1]), s=Math.sin(A[i-1]);
+    P.push([P[i-1][0]+dx*c-dy*s, P[i-1][1]+dx*s+dy*c]);
+    A.push(A[i-1]+angles[i]*32*DEG);
+  }
+  return {P,A};
+}
+const xform=(b,i,x,y)=>{ const dx=x-J[i][0], dy=y-J[i][1], c=Math.cos(b.A[i]), s=Math.sin(b.A[i]);
+  return [b.P[i][0]+dx*c-dy*s, b.P[i][1]+dx*s+dy*c]; };
+
+// --- gl -------------------------------------------------------------------
+const cv=document.getElementById('c');
+const gl=cv.getContext('webgl2',{alpha:true,premultipliedAlpha:false,antialias:true});
+const VS='#version 300 es\n'+
+'in vec2 aPos; in vec2 aUV; uniform vec4 uView; out vec2 vUV;\n'+
+'void main(){ vUV=aUV; gl_Position=vec4((aPos.x-uView.x)*uView.z, -(aPos.y-uView.y)*uView.w, 0., 1.); }';
+const FS='#version 300 es\n'+
+'precision highp float; in vec2 vUV; uniform sampler2D uTex; out vec4 o;\n'+
+'void main(){ vec4 t=texture(uTex,vUV); o=vec4(t.rgb*t.a, t.a); }';
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
+  if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram();
+gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+gl.bindAttribLocation(prog,0,'aPos'); gl.bindAttribLocation(prog,1,'aUV');
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const uView=gl.getUniformLocation(prog,'uView');
+gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+
+function mkTex(img){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;}
+
+class Mesh{
+  constructor(tex,rect,nx,ny){ this.tex=tex; this.rect=rect;
+    const pos=[],uv=[],idx=[];
+    for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
+      const u=i/nx, v=j/ny;
+      pos.push(rect.x+u*rect.w, rect.y+v*rect.h); uv.push(u,v);
+    }
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+      const a=j*(nx+1)+i,b=a+1,c=a+nx+1,d=c+1; idx.push(a,b,c, b,d,c);
+    }
+    this.rest=new Float32Array(pos); this.pos=new Float32Array(pos);
+    this.vao=gl.createVertexArray(); gl.bindVertexArray(this.vao);
+    this.pb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.pb);
+    gl.bufferData(gl.ARRAY_BUFFER,this.pos,gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+    const ub=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,ub);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(uv),gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,2,gl.FLOAT,false,0,0);
+    const ib=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+    this.count=idx.length; gl.bindVertexArray(null);
+  }
+  skin(b,rigid){
+    const X0=J[0][0], X1=J[6][0], span=X1-X0;
+    for(let k=0;k<this.rest.length;k+=2){
+      const x=this.rest[k], y=this.rest[k+1];
+      let p;
+      if(rigid){ p=xform(b,0,x,y); }
+      else{
+        const t=clamp((x-X0)/span,0,1)*(TAIL_SEGMENT_COUNT-1);
+        const i0=Math.min(TAIL_SEGMENT_COUNT-1,Math.floor(t)), f=t-i0;
+        const i1=Math.min(TAIL_SEGMENT_COUNT-1,i0+1);
+        const a=xform(b,i0,x,y), c=xform(b,i1,x,y);
+        p=[a[0]*(1-f)+c[0]*f, a[1]*(1-f)+c[1]*f];
+      }
+      // Weight-pin the root end: the part's cut edge is only ~20 canvas px behind
+      // skirt_back, so any rotation there exposes a straight texture boundary.
+      // Ramping the bone influence in over that overlap is what a rigger does by
+      // painting weights; here it is a smoothstep on x.
+      if(pinRoot){
+        let w=clamp((x-PIN_X0)/(PIN_X1-PIN_X0),0,1); w=w*w*(3-2*w);
+        p=[x+(p[0]-x)*w, y+(p[1]-y)*w];
+      }
+      this.pos[k]=p[0]; this.pos[k+1]=p[1];
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.pb);
+    gl.bufferSubData(gl.ARRAY_BUFFER,0,this.pos);
+  }
+  rigidTo(b,i){
+    for(let k=0;k<this.rest.length;k+=2){
+      const p=xform(b,i,this.rest[k],this.rest[k+1]);
+      this.pos[k]=p[0]; this.pos[k+1]=p[1];
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.pb);
+    gl.bufferSubData(gl.ARRAY_BUFFER,0,this.pos);
+  }
+  draw(){ gl.bindTexture(gl.TEXTURE_2D,this.tex); gl.bindVertexArray(this.vao);
+    gl.drawElements(gl.TRIANGLES,this.count,gl.UNSIGNED_SHORT,0); }
+  reset(){ this.pos.set(this.rest); gl.bindBuffer(gl.ARRAY_BUFFER,this.pb);
+    gl.bufferSubData(gl.ARRAY_BUFFER,0,this.pos); }
+}
+
+const load=(src)=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});
+const solver=new TailSolver();
+let rigid=false, meshes=null, backdrop=null, man=null;
+let pinRoot=true;
+const PIN_X0=641, PIN_X1=700;
+let zoom=0.72;
+const stats={frames:0,sumMs:0,maxMs:0};
+
+(async function main(){
+  man = await (await fetch('parts/manifest.json')).json();
+  const imgs={};
+  const files={backdrop:man.backdrop.file};
+  for(const p in man.parts) files[p]=man.parts[p].file;
+  const names=Object.keys(files);
+  await Promise.all(names.map(async n=>{ imgs[n]=await load('parts/'+files[n]); }));
+  const R=(o)=>({x:o.x,y:o.y,w:o.w,h:o.h});
+  backdrop = new Mesh(mkTex(imgs.backdrop), R(man.backdrop), 1, 1);
+  meshes = {
+    root : new Mesh(mkTex(imgs.tail_root),        R(man.parts.tail_root), 2, 2),
+    stock: new Mesh(mkTex(imgs.tail_stock),       R(man.parts.tail_stock), 24, 8),
+    fu   : new Mesh(mkTex(imgs.tail_fluke_upper), R(man.parts.tail_fluke_upper), 2, 2),
+    fl   : new Mesh(mkTex(imgs.tail_fluke_lower), R(man.parts.tail_fluke_lower), 2, 2),
+  };
+  window.__spikeReady = true;
+  requestAnimationFrame(frame);
+})().catch(e=>{ document.getElementById('hud').textContent='ERROR: '+e.message;
+                window.__spikeError=String(e&&e.stack||e); });
+
+let prev=0;
+function frame(t){
+  requestAnimationFrame(frame);
+  const dt=prev?Math.min(0.05,(t-prev)/1000):1/60; prev=t;
+  const t0=performance.now();
+
+  const angles=solver.tick(dt);
+  const b=solveBones(angles);
+
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const W=Math.round(cv.clientWidth*dpr), H=Math.round(cv.clientHeight*dpr);
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+  gl.viewport(0,0,W,H);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const bx=man.backdrop, pad=20;
+  const boxW=bx.w+pad*2+170, boxH=bx.h+pad*2;
+  const boxX=bx.x-pad, boxY=bx.y-pad;
+  const s=Math.min(W/boxW,H/boxH)*zoom;
+  const cx=boxX+boxW/2, cy=boxY+boxH/2;
+  gl.uniform4f(uView, cx, cy, 2*s/W, 2*s/H);
+
+  if(meshes){
+    meshes.root.skin(b,rigid);
+    meshes.stock.skin(b,rigid);
+    meshes.fu.rigidTo(b,rigid?0:5);
+    meshes.fl.rigidTo(b,rigid?0:5);
+    meshes.root.draw(); meshes.stock.draw(); meshes.fl.draw(); meshes.fu.draw();
+    backdrop.reset(); backdrop.draw();
+  }
+
+  const ms=performance.now()-t0;
+  stats.frames++; stats.sumMs+=ms; stats.maxMs=Math.max(stats.maxMs,ms);
+  if(stats.frames%15===0){
+    document.getElementById('hud').textContent =
+      'mode   '+(rigid?'RIGID (no mesh deform)':'SKINNED (6-bone LBS)')+'\n'+
+      'cpu    '+ms.toFixed(2)+' ms/frame  avg '+(stats.sumMs/stats.frames).toFixed(2)+
+      '  max '+stats.maxMs.toFixed(2)+'\n'+
+      'bones  '+Array.from(angles).map(v=>(v*32).toFixed(1).padStart(7)).join('')+'\n'+
+      'state  '+(solver.grabbed?(solver.dragging?'DRAG':'GRAB'):'idle')+
+      '  lagX '+solver.lagX.toFixed(0)+'  mood '+solver.mood.toFixed(2)+'\n'+
+      'keys   R rigid/skinned   M mood   drag mouse = pull tail';
+  }
+}
+
+addEventListener('pointerdown',e=>{ solver.grabbed=true; solver.dragging=true;
+  solver.anchor={x:0,y:0}; solver._px=e.clientX; });
+addEventListener('pointermove',e=>{ if(solver.dragging) solver.lagX=(e.clientX-solver._px)*2.2; });
+addEventListener('pointerup',()=>{ solver.release(); solver.lagX=0; });
+addEventListener('keydown',e=>{
+  if(e.key==='r'||e.key==='R') rigid=!rigid;
+  if(e.key==='p'||e.key==='P') pinRoot=!pinRoot;
+  if(e.key==='[') zoom=Math.max(0.3,zoom-0.04);
+  if(e.key===']') zoom=Math.min(1.6,zoom+0.04);
+  if(e.key==='m'||e.key==='M') solver.moodTarget = solver.moodTarget>0.5?-1:1;
+});
+
+window.spike = {
+  ready:()=>!!meshes,
+  setRigid:v=>{rigid=v},
+  setPin:v=>{pinRoot=v},
+  setZoom:v=>{zoom=v},
+  setMood:v=>{solver.moodTarget=v},
+  grab:(lagX)=>{solver.grabbed=true;solver.dragging=true;solver.lagX=lagX;},
+  release:()=>{solver.release();solver.lagX=0;},
+  reset:()=>{solver.tail.fill(0);solver.vel.fill(0);solver.timeS=0;solver.mood=0;
+             solver.moodTarget=0;solver.grabbed=false;solver.dragging=false;solver.lagX=0;},
+  angles:()=>Array.from(solver.tail).map(v=>v*32),
+  stats:()=>({frames:stats.frames,avgMs:stats.sumMs/Math.max(1,stats.frames),maxMs:stats.maxMs}),
+  resetStats:()=>{stats.frames=0;stats.sumMs=0;stats.maxMs=0;},
+  hud:v=>{document.getElementById('hud').style.display=v?'block':'none';},
+};
+</script></body></html>
