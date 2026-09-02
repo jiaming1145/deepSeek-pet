@@ -48,7 +48,9 @@ class TailSolver {
 
 // --- rig ------------------------------------------------------------------
 // Joints measured off the canonical art (source px / 4 = canvas px).
-const J = [[575,1295],[607,1292],[640,1287],[675,1279],[710,1269],[740,1257],[775,1250]];
+// Root under the skirt where the tail attaches to the body (v005 paints the tail back to x~521),
+// not where it first becomes visible at the hem. The skirt hides the pivot region.
+const J = [[535,1292],[580,1291],[625,1288],[670,1281],[715,1270],[755,1258],[790,1248]];
 const DEG = Math.PI/180;
 function solveBones(angles){
   const P=[J[0].slice()], A=[angles[0]*32*DEG];
@@ -155,7 +157,7 @@ class Mesh{
 const load=(src)=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});
 const solver=new TailSolver();
 let rigid=false, meshes=null, backdrop=null, man=null;
-let pinRoot=true;
+let pinRoot=false;   // v005 parts have no root gap; the skirt occludes the pivot
 const PIN_X0=641, PIN_X1=700;
 let zoom=0.72;
 const stats={frames:0,sumMs:0,maxMs:0};
