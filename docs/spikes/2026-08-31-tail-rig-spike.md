@@ -99,3 +99,62 @@ ramping weights across a seam is fiddly, visual, iterative work — it is precis
 rigging editor's weight painting and visual joint placement exist to make tractable.
 
 The renderer is the cheap half of a skeletal pivot. The rigging craft is the expensive half.
+
+## Resolution (2026-09-01)
+
+Parts revision **v005** rebuilds all 138 parts from the same approved canonical, anchors, zones
+and face rules, and replaces only the two mechanisms responsible for D1 and D2. v001 is untouched
+(138 of 138 final PNGs verified byte-identical to their recorded hashes). Scripts and their
+rationale: `tools/parts/`, executable copies in `runs/<run>/03_parts/revisions/v005/scripts/`.
+
+What changed in the extraction, in order of what it fixed:
+
+1. **Partition.** Seeded watershed inside the zones whose parts are separated by drawn outlines
+   (tail, hair, stocking/shoe); v001's ellipse-normalised nearest-anchor rule kept for the
+   one-fabric zones (dress, sleeves, skirt panels, frills, bows, bonnet), where equal-speed
+   flooding let the largest seed eat its neighbours. A neighbour-vote island cleanup reassigns
+   leaked fragments; a colour gate strips the white frill v001 had given `tail_root`.
+2. **Arms.** Since v001 the hair zone, which runs last and whose `blue` test accepts navy, had
+   given both sleeve bodies to `hair_back_strand_l/r` and `hair_back_inner_l`; the sleeve parts
+   held only their trim (154 and 99 work px). Dark pixels inside each arm polygon now go to that
+   arm's sleeve parts (6,736 and 6,694 work px).
+3. **Band.** Sized from the plan's own `motion_envelope` and `occluded_by` (64–320 source px),
+   grown geodesically so it can never jump across a lower part, placed only on solid pixels
+   (alpha ≥ 200 rather than exactly 255, which had turned 2.8% of the interior into hairline
+   walls), filled by continuing the part's own pixels and fading to its median colour, and kept
+   connected to the part's art.
+
+Measured on the finished revision, same audit script as the v001 numbers above:
+
+| seam | v001 | v005 |
+|---|---|---|
+| tail_root → tail_stock | 0 px (80 px gap) | 100,856 px |
+| tail_stock → tail_fluke_upper | 17,036 | 175,552 |
+| sleeve_upper_l → sleeve_lower_l | 64 | 109,632 |
+| sleeve_lower_l → cuff_l | 8,690 | 118,924 |
+| sleeve_upper_r → sleeve_lower_r | 0 | 101,216 |
+| stocking_l → shoe_l | 19,390 | 83,671 |
+| forearm_l → hand_l | 18,847 | 44,448 |
+| reassembly error vs canonical | 0.239 / 255 | 0.240 / 255 |
+
+The six seams the old audit still reports torn are all between hidden-only anatomy proxies
+(hip, torso, thigh, foot, upper arm, forearm), which have zero visible pixels and are not bound
+by a rig (`docs/DECISIONS.md` D-2026-09-01-03).
+
+**Continuity gate** (`qa_continuity.py`, now the parts gate): 184 touching pairs derived from the
+art, 0 leaked fragments, 0 torn seams, one active waiver (`skirt_front_l → hand_l`, 84%)
+where the hand nests inside the cuff and lower-z geometry makes a fuller band impossible
+without changing the at-rest composite. The
+gate had to learn three things on the way: a greyscale mask read as RGBA is alpha 255 everywhere
+(every check passed vacuously until a sanity assertion was added); a seam is only where two parts
+meet through solid pixels, so the zone is geodesic and excludes silhouette contacts; and face
+detail riding on face detail is one unit to a rig.
+
+**Spike on v005 parts** (`evidence/sheet_v005_tail.png`): one continuous tail in idle, pulled
+and mid-whip, no gap at the root, no stray fragment, 60 fps at 0.10–0.13 ms/frame. What remains
+visible under a 30° root swing is the band's own end at the skirt hem, which the weight ramp
+mostly hides; a longer envelope or rig-side weighting finishes it.
+
+Still open, deliberately: D5 (FX overlays default visible) is a stage-04 fix; D6 (flat-ellipse
+shadows) is moot since the owner rejected patch-based expressions (`03_parts/revisions/v003`);
+the hidden-only anatomy proxies should sit at zero opacity in any rig.

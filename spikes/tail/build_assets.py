@@ -2,8 +2,11 @@ import json, io, os
 from PIL import Image
 
 RUN = r'D:/ds/runs/deepseek_humanized_20260830_001'
-FINAL = RUN + '/03_parts/revisions/v001/final'
+import sys
+REV = sys.argv[1] if len(sys.argv) > 1 else 'v001'   # parts revision to render, e.g. v005
+FINAL = RUN + '/03_parts/revisions/%s/final' % REV
 OUT = os.path.dirname(os.path.abspath(__file__))
+print('parts revision:', REV)
 SCALE = 4  # 4096x8192 -> 1024x2048
 CW, CH = 4096 // SCALE, 8192 // SCALE
 TAIL = ['tail_root', 'tail_stock', 'tail_fluke_upper', 'tail_fluke_lower']
@@ -12,6 +15,7 @@ job = json.load(io.open(RUN + '/04_psd/revisions/v001/packager_job.json', encodi
 layers = [l for l in job['layers'] if l.get('imported')]
 layers.sort(key=lambda l: l['z_index'])   # back_to_front
 
+os.makedirs(os.path.join(OUT, 'parts'), exist_ok=True)
 backdrop = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
 drawn = skipped_fx = 0
 for l in layers:

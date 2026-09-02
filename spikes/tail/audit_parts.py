@@ -24,7 +24,8 @@ except ImportError:
 
 Image.MAX_IMAGE_PIXELS = None
 RUN = 'runs/deepseek_humanized_20260830_001'
-FINAL = os.path.join(RUN, '03_parts/revisions/v001/final')
+REV = sys.argv[1] if len(sys.argv) > 1 else 'v001'   # parts revision to audit
+FINAL = os.path.join(RUN, '03_parts/revisions/%s/final' % REV)
 
 # Parts that must deform as a continuous surface. Each tuple is a chain; consecutive
 # members need an overlap band or the seam tears. Taken from the deformer hierarchy in
@@ -128,7 +129,7 @@ def main():
     print('\nsummary: %d parts with disconnected art, %d of %d seams torn'
           % (len({o['part'] for o in orphans}), torn, len(seams)))
 
-    out = os.path.join('spikes', 'tail', 'evidence', 'part_continuity_audit.json')
+    out = os.path.join('spikes', 'tail', 'evidence', 'part_continuity_audit_%s.json' % REV)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     json.dump({'orphans': orphans, 'seams': seams}, open(out, 'w'), indent=1)
     print('wrote', out)
