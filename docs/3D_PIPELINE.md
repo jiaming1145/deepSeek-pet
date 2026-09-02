@@ -74,16 +74,16 @@ posed-tail sheet, then loads the VRM in the action lab (the real transparent win
 action and emotion, and copies those sheets into the same run folder:
 
 ```powershell
-python toolsrm\hookup_whalechan.py --glb spikes\model\generated\meshy\whalechan_meshy_<date>_rigged.glb --face-material "<regex for her face material, from probe.json>"
+python tools\vrm\hookup_whalechan.py --glb spikes\model\generated\meshy\whalechan_meshy_<date>_rigged.glb --face-material "<regex for her face material, from probe.json>"
 ```
 
-Outputs land in `toolsrm\out\whalechan\<timestamp>\`: `probe.json`, `chains.resolved.json`,
+Outputs land in `tools\vrm\out\whalechan\<timestamp>\`: `probe.json`, `chains.resolved.json`,
 `whalechan.vrm`, `manifest.json`, `build.log`, `renders\`, `compare_sheet.png`, `sheet_posed.png`,
 `window_sheet_actions.png`, `window_sheet_emotions.png`, `window_report.json`, `summary.json`. To
 look at her live afterwards:
 
 ```powershell
-cd D:\dspps\desktop
+cd D:\ds\apps\desktop
 npx electron ../../spikes/vrm/actions/main.js --vrm ../../tools/vrm/out/whalechan/<timestamp>/whalechan.vrm
 npx electron ../../spikes/vrm/main.js --vrm ../../tools/vrm/out/whalechan/<timestamp>/whalechan.vrm
 ```
