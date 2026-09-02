@@ -1,0 +1,28 @@
+{
+  "vrm": "D:\\ds\\tools\\vrm\\out\\build\\stock_character.vrm",
+  "reimport": "FINISHED",
+  "spec": "1.0",
+  "bones": 72,
+  "humanoid_mapped": 51,
+  "springs": [
+    [
+      "tail",
+      8
+    ],
+    [
+      "ear_L",
+      3
+    ],
+    [
+      "ear_R",
+      3
+    ],
+    [
+      "hair_tail",
+      7
+    ]
+  ],
+  "renders": [
+    "C:\\Users\\jiami\\AppData\\Local\\Temp\\claude\\D--ds\\6937fa24-7aae-458e-9817-d81b1ced4b57\\scratchpad\\bridge\\renders_stock4\\head_fixed_000_blink_head.png"
+  ]
+}

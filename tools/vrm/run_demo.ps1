@@ -40,7 +40,7 @@ Run-Blender "build_glb" "build_vrm.py" @(
   "--face-material", "^eye$",
   "--face-texture", (Join-Path $here "out\stock\face_atlas.png"),
   "--face-atlas", (Join-Path $here "out\stock\face_atlas.json"),
-  "--auto-morphs", "--name", "StockTest", "--author", "pipeline-test")
+  "--auto-morphs", "--outline-skip", "^body_bake$", "--name", "StockTest", "--author", "pipeline-test")
 
 # 4. re-import + renders (4 angles, head close-ups with expressions, posed chains)
 $vrm = Join-Path $here "out\build\stock_character.vrm"

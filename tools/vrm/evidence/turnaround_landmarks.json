@@ -1,0 +1,135 @@
+{
+  "units": "fractions of figure height H; x from centre (+ = character's left); depth from front plane",
+  "auto": {
+    "height_px": {
+      "front": 2699,
+      "right": 2699,
+      "back": 2699
+    },
+    "front_width_over_H": 0.593,
+    "back_width_over_H": 0.636,
+    "side_depth_over_H": 0.766,
+    "tail_fluke_z_range": [
+      0.152,
+      0.364
+    ],
+    "tail_tip_depth": 0.766,
+    "ahoge_z_range": [
+      0.911,
+      1.0
+    ],
+    "upper_body_half_width_over_H": 0.263
+  },
+  "read": {
+    "head": {
+      "top_z": 0.933,
+      "chin_z": 0.615,
+      "eye_z": 0.689,
+      "brow_z": 0.718,
+      "skull_back_depth": 0.501
+    },
+    "ahoge": {
+      "x": [
+        0.008,
+        0.052
+      ],
+      "depth": [
+        0.086,
+        0.205
+      ]
+    },
+    "ears": {
+      "z": [
+        0.648,
+        0.718
+      ],
+      "x_L": [
+        0.2,
+        0.304
+      ],
+      "x_R": [
+        -0.23,
+        -0.155
+      ],
+      "depth": [
+        0.235,
+        0.412
+      ]
+    },
+    "bangs": {
+      "z": [
+        0.674,
+        0.881
+      ],
+      "depth": [
+        -0.003,
+        0.146
+      ]
+    },
+    "sidelocks": {
+      "z": [
+        0.363,
+        0.778
+      ],
+      "x_R": [
+        -0.222,
+        -0.118
+      ],
+      "depth": [
+        0.16,
+        0.264
+      ]
+    },
+    "hair_back": {
+      "z": [
+        0.244,
+        0.881
+      ],
+      "depth": [
+        0.323,
+        0.538
+      ],
+      "x": [
+        0.281,
+        -0.222
+      ]
+    },
+    "arms": {
+      "shoulder_z": 0.563,
+      "hand_z": 0.37,
+      "shoulder_x": -0.104,
+      "hand_x": -0.252,
+      "arm_len_over_H": 0.243
+    },
+    "skirt": {
+      "z": [
+        0.2,
+        0.452
+      ],
+      "x": [
+        -0.178,
+        0.222
+      ],
+      "front_depth": -0.003,
+      "back_depth": 0.368,
+      "leg_front_depth": 0.116
+    },
+    "tail": {
+      "root_z_side": 0.185,
+      "hips_z": 0.318,
+      "root_depth": 0.353,
+      "exit_z_front": 0.185,
+      "exit_x_front": -0.044,
+      "fluke_x_front": -0.296,
+      "root_x_back": 0.029,
+      "fluke_x_back": -0.311,
+      "fluke_z_back": [
+        0.037,
+        0.244
+      ]
+    },
+    "legs": {
+      "sock_top_z": 0.2
+    }
+  }
+}

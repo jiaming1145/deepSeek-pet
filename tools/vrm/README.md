@@ -48,11 +48,19 @@ python tools\vrm\vrm_manifest.py runs\whalechan\whalechan.vrm
 
 # proof on the stock model (downloads Seed-san, ~4 min)
 powershell -ExecutionPolicy Bypass -File tools\vrm\run_demo.ps1
+
+# Whale-chan face kit -> one texture + state atlas, the stock rig wearing it, then the three-vrm proof
+python spikes\model\face\compose_face_texture.py
+& $B --background --python tools\vrm\build_vrm.py -- --input tools\vrm\out\stock\stock_rigged.glb `
+    --output tools\vrm\out\build\stock_whalechan_face.vrm --chains tools\vrm\out\stock\chains.json `
+    --face-material "^eye$" --face-texture spikes\model\face\face_texture.png `
+    --face-atlas spikes\model\face\face_atlas_states.json --auto-morphs --outline-skip "^body_bake$"
+cd apps\desktop; npx electron ..\..\spikes\vrm\face_check_main.js --capture   # -> spikes/model/face/evidence_runtime/
 ```
 
 `build_vrm.py` options: `--chains`, `--face-material REGEX` (default `face|skin_face|head`),
 `--face-texture PNG`, `--face-atlas JSON`, `--morph-map JSON`, `--auto-morphs`, `--height M`,
-`--force-tpose`, `--no-mtoon`, `--shade-tint r,g,b`, `--outline-width F`, `--name/--author/--version`,
+`--force-tpose`, `--no-mtoon`, `--shade-tint r,g,b`, `--outline-width F`, `--outline-skip REGEX`, `--name/--author/--version`,
 `--manifest PATH`, `--save-blend PATH`. Exit code is non-zero when a required humanoid bone is
 missing (the log lists every unmapped bone with the reason) or when the export fails.
 
@@ -103,7 +111,28 @@ are VRM presets (`blink blinkLeft blinkRight aa ih ou ee oh happy angry sad rela
 neutral lookUp lookDown lookLeft lookRight`) become preset expressions, anything else a custom
 expression. They are marked `isBinary` because a texture-transform at weight 0.5 slides the UV
 halfway, it does not crossfade - crossfading two face states in the runtime means either two
-overlaid face meshes with alpha, or an `isBinary` snap on the atlas plus a morph/alpha fade on top.
+overlaid face meshes with alpha, or an `isBinary` snap on the atlas plus a morph/alpha fade on top
+(`spikes/vrm/face_check.html` does the overlay version: a clone of the face primitive sampling the
+target cell, faded in with `opacity`).
+
+Because the binds are additive offsets on ONE material, every state also carries VRM overrides so
+that only one cell is ever selected: a state blocks the other categories (`overrideBlink`,
+`overrideMouth`, `overrideLookAt` = `block`) but never its own - three-vrm multiplies the weights
+of blink/blinkLeft/blinkRight, aa/ih/ou/ee/oh and lookUp/Down/Left/Right by `1 - sum(overrides)`,
+so a `blink` that blocked blink would zero itself (that was the first version of this script: blink
+and the visemes exported fine and did nothing in three-vrm). The face material never gets an MToon
+outline (the inverted hull of eye/mouth planes pokes through the skin), and its base-colour factor
+is forced to 1 when a texture is wired in.
+
+**Whale-chan's face kit** (`spikes/model/face/`) is not in this shape - it has separate eye / mouth /
+brow / fx atlases with anchors. `python spikes/model/face/compose_face_texture.py` composes one full
+face per expression state (30: the 18 presets plus sleepy affection panic shy smug pouty focused hurt
+confused shocked gentle cheerful) into `face_texture.png` (4096x4096, 5x6 grid of 819x682 cells,
+face 786x666 centred in each cell, flattened onto the skin colour, alpha 255) and writes
+`face_atlas_states.json` in exactly this format (plus cell / anchor / recipe metadata that this
+script ignores). Pass them as `--face-texture` / `--face-atlas`; the face island of the head mesh
+must be unwrapped to the face crop (`texture.face_in_cell_uv` in the JSON says where that sits
+inside the cell).
 
 ### Morph targets
 
@@ -153,9 +182,15 @@ explicit ones. A preset can carry both a morph bind and a texture bind (blink in
 * `--force-tpose` refuses meshes with shape keys.
 * The eye-look-at and first-person sections of VRM are left at defaults (three-vrm handles
   look-at procedurally from the head bone; adding eye bones is not automated).
-* MToon values are one uniform guess (shade tint 0.75,0.72,0.82, toony 0.9, outline 2.5 mm in a
-  base-colour-derived dark tint); per-material overrides are not exposed yet - edit the exported
-  VRM in Blender or extend `convert_to_mtoon`.
+* MToon values are one uniform guess (shade tint 0.75,0.72,0.82, toony 0.9, outline 1.2 mm in a
+  base-colour-derived dark tint); per-material overrides are not exposed beyond `--outline-skip` -
+  edit the exported VRM in Blender or extend `convert_to_mtoon`. The alpha mode of the input
+  materials (OPAQUE / MASK + cutoff / BLEND) is carried through the MToon conversion; BLEND
+  materials and the face material get no outline.
+* The inverted-hull outline of a modelled lip slit pokes through the mouth (Seed-san hides it with
+  an `outlineWidthMultiplyTexture` mask that a plain GLB cannot carry). If a generated head has a
+  real mouth slit, either `--outline-skip` the skin material or lower `--outline-width`; a head whose
+  mouth is painted in the face texture (Whale-chan) does not have the problem.
 * The Blender EEVEE preview brightens untextured MToon colours against a bright grey world; the
   exported factors are exact (see `evidence/*.manifest.json`), judge colours in three-vrm.
 * Licence reminder: Seed-san (VirtualCast, VRM Public License 1.0) is used as a pipeline test
