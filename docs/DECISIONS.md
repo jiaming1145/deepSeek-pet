@@ -111,3 +111,40 @@ walk, run and climb is a separate pipeline run and a separate approval. Climbing
 "world sense" module in the main process that publishes window rectangles and the work area as
 collision surfaces, reading geometry only, never titles, and it needs a line in
 `PRIVACY-SENSING.md`.
+
+---
+
+## D-2026-09-01-04 · The character is a toon-shaded 3D VRM, superseding D-2026-09-01-01
+
+**Decision.** The character is a chibi 3D humanoid in VRM 1.0, toon-shaded (MToon with outline),
+rendered by three.js and `@pixiv/three-vrm` inside the existing transparent Electron pet window.
+Body motion comes from animation clips (VRM Animation and Mixamo retargets) with procedural layers
+on top (look-at, blink, breathing, two-bone IK reach, foot planting, spring bones for hair, tail,
+skirt and ears). Her face is her drawn face used as the face texture, with eyes, brows and mouth as
+texture-transform expression states that crossfade. This supersedes the Spine decision.
+
+**Why.** The 2D cutout path was tried to the end of what it can do with a single front-view
+illustration (`spikes/character/`, 2026-09-01): a paper doll. Every motion the owner asked for,
+walking in any direction, climbing with hands and feet on real window edges, reaching with
+foreshortening, sitting, sleeping, eating with a prop, and rich blended expression, is an existing,
+mature technique in 3D and structurally impossible from one 2D view. 3D is also the only path
+where the AI can produce motions she was never animated for, via text-to-motion models on a
+humanoid skeleton.
+
+**How the model is made.** The owner cannot model and no 3D model of her exists publicly. The
+community reference kit (`Neko3000/deepseek-whalechan`, CC-BY-NC-SA 4.0) supplies a front, side and
+back turnaround of the same chibi. A clean A-pose turnaround is generated from it; a hosted
+multi-view image-to-3D generator with auto-rig (Tripo or Meshy; the local GPU is too small for the
+open models) produces the rigged mesh; Blender scripts (`tools/vrm/`) add the tail, ear, hair and
+skirt bone chains with spring physics, MToon, the face texture and expressions, and export the VRM.
+A human modeler can replace the body later without touching anything else.
+
+**What it rules out.** Spine, Rive, Cubism, DragonBones, the 2D cutout rig, and the v005 parts as
+things to be rigged. The v005 parts remain the face texture source and the reference.
+
+**What it leaves open.** Non-commercial and share-alike terms carried by anything derived from the
+community kit; the quality of generated hair and frills, expected to be softer than the drawing;
+the second illustration view is no longer needed.
+
+**Evidence.** `spikes/character/evidence/` (the rejected cutout result), the owner's ruling of
+2026-09-01, the community kit's overview sheet.

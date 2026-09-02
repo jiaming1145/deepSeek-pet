@@ -1,0 +1,31 @@
+{
+  "vrm": "D:\\ds\\tools\\vrm\\out\\build\\stock_character.vrm",
+  "reimport": "FINISHED",
+  "spec": "1.0",
+  "bones": 72,
+  "humanoid_mapped": 51,
+  "springs": [
+    [
+      "tail",
+      8
+    ],
+    [
+      "ear_L",
+      3
+    ],
+    [
+      "ear_R",
+      3
+    ],
+    [
+      "hair_tail",
+      7
+    ]
+  ],
+  "renders": [
+    "D:\\ds\\tools\\vrm\\out\\renders\\neutral_000.png",
+    "D:\\ds\\tools\\vrm\\out\\renders\\neutral_090.png",
+    "D:\\ds\\tools\\vrm\\out\\renders\\neutral_180.png",
+    "D:\\ds\\tools\\vrm\\out\\renders\\neutral_270.png"
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "$schema_note": "Maps docs/ACTION_VOCABULARY.md action ids to animation clips. status: 'covered' = licence-clean clip is in anim/ now; 'owner' = free clip that needs the owner's login (BOOTH or Mixamo); 'procedural' = stays computed at runtime (no clip wanted or none suits). Clip refs: quaternius:<clipName> in quaternius/…/AnimationLibrary_Godot_Standard.glb (CC0), vrma:<file> in anim/vrma/, mixamo:<file> in anim/mixamo/ (see OWNER_CARD_mixamo.md). 'primary' is what the runtime should play first; 'alternates' are fallbacks or mood variants; 'procedural_layer' is what stays procedural on top even when a clip plays (per ACTION_VOCABULARY realisation column).",
+  "generated": "2026-09-02",
+  "sources": {
+    "quaternius": { "file": "quaternius/Animation Library[Standard]/Godot/AnimationLibrary_Godot_Standard.glb", "licence": "CC0 1.0", "loader": "retarget/loadQuaterniusAnimations.js", "status": "downloaded" },
+    "vrma": { "dir": "vrma/", "licence": "per file, see SOURCES.md", "loader": "retarget/loadVRMAnimation.js", "status": "1 fixture downloaded; VRoid 7-pack is an owner step" },
+    "mixamo": { "dir": "mixamo/", "licence": "Adobe Mixamo (free, no redistribution of raw files)", "loader": "retarget/loadMixamoAnimation.js", "status": "owner step" }
+  },
+  "actions": {
+    "idle": {
+      "status": "covered",
+      "primary": "quaternius:Idle_Loop",
+      "alternates": ["quaternius:Idle_Talking_Loop", "mixamo:idle_breathing.fbx", "mixamo:idle_happy.fbx", "vrma:VRMA_01.vrma", "vrma:VRMA_06.vrma"],
+      "procedural_layer": ["breath", "weight shift", "tail sway", "blink", "look-at"],
+      "notes": "Idle_Loop is a 2.5 s standing loop with weight shift; owner alternates add mood variety."
+    },
+    "walk": {
+      "status": "covered",
+      "primary": "quaternius:Walk_Loop",
+      "alternates": ["quaternius:Walk_Formal_Loop", "mixamo:walk_front.fbx"],
+      "procedural_layer": ["foot IK to floor", "head look-at"],
+      "notes": "1.333 s loop, front-facing walk toward the viewer verified in preview/shots/quaternius_Walk_Loop_*.png. Hips translation is kept (root motion stays on `root`, which is unmapped, so the clip is effectively in place). Lateral walk waits on the side-view model per ACTION_VOCABULARY §5."
+    },
+    "run": {
+      "status": "covered",
+      "primary": "quaternius:Jog_Fwd_Loop",
+      "alternates": ["quaternius:Sprint_Loop"],
+      "procedural_layer": ["foot IK"],
+      "notes": "Not in the action vocabulary yet; listed because the task asked for run coverage."
+    },
+    "hop": {
+      "status": "covered",
+      "primary": "quaternius:Jump_Start",
+      "alternates": ["quaternius:Jump_Loop", "quaternius:Jump_Land", "mixamo:jump_small.fbx"],
+      "procedural_layer": ["vertical offset from the main process window motion", "landing squash"],
+      "notes": "A hop is Jump_Start (1.33 s) cut at take-off, then Jump_Land (1.27 s) from touchdown; the airborne part is the window moving. Jump_Loop is the airborne hold if a longer flight is needed."
+    },
+    "sit": {
+      "status": "covered",
+      "primary": "quaternius:Sitting_Idle_Loop",
+      "alternates": ["quaternius:Sitting_Enter", "quaternius:Sitting_Exit", "quaternius:Sitting_Talking_Loop", "mixamo:stand_to_sit.fbx", "mixamo:sit_idle.fbx", "mixamo:sit_to_stand.fbx"],
+      "procedural_layer": ["hips pinned to the edge height from world sense", "gaze"],
+      "notes": "Enter/Idle/Exit set covers the full transition. Chair height is baked into the clip's hips translation; the runtime should override hips y with the sensed edge."
+    },
+    "sleep": {
+      "status": "owner",
+      "primary": "mixamo:sleep_lie.fbx",
+      "alternates": ["quaternius:Death01 (hold last frame; lies on back, see preview/shots/quaternius_Death01_1.png)", "mixamo:lie_down.fbx"],
+      "procedural_layer": ["slow breath", "eyes closed expression", "tail sway damped"],
+      "notes": "Quaternius has no sleep clip; Death01's end pose is a usable lying pose as a stopgap but the fall itself is too violent for a sleep enter. Mixamo 'Sleeping Idle' + 'Lying Down' are the requested pair."
+    },
+    "wake": {
+      "status": "owner",
+      "primary": "mixamo:get_up.fbx",
+      "alternates": ["mixamo:yawn.fbx", "quaternius:Sitting_Exit (from a seated sleep)"],
+      "procedural_layer": ["expression blink/squint", "stretch overlay"],
+      "notes": "≤1.5 s per vocabulary; trim get_up.fbx or time-scale it."
+    },
+    "stretch": {
+      "status": "owner",
+      "primary": "mixamo:stretch_arms.fbx",
+      "alternates": ["mixamo:yawn.fbx"],
+      "procedural_layer": [],
+      "notes": "Quaternius Standard has no stretch. Until the Mixamo file lands, procedural (arms-up spline on both arms + spine extension)."
+    },
+    "climb": {
+      "status": "owner",
+      "primary": "mixamo:climb_ladder.fbx",
+      "alternates": ["mixamo:climb_wall.fbx"],
+      "procedural_layer": ["hands and feet IK-pinned to the sensed vertical edge", "gaze up"],
+      "notes": "Proposed action. Clip supplies the limb rhythm; IK does the contact. Also waits on the side/3-4 view."
+    },
+    "stumble": {
+      "status": "procedural",
+      "primary": null,
+      "alternates": ["quaternius:Hit_Chest (0.33 s flinch)", "quaternius:Hit_Head", "quaternius:Roll", "mixamo:stumble_back.fbx", "mixamo:fall_back.fbx"],
+      "procedural_layer": ["physics impulse from window motion drives everything"],
+      "notes": "Vocabulary says P → P. Hit_Chest/Hit_Head are good 0.3–0.4 s flinch overlays to blend at impact; Roll for a hard drop."
+    },
+    "recover": {
+      "status": "owner",
+      "primary": "mixamo:get_up.fbx",
+      "alternates": ["quaternius:Jump_Land (crouch-to-stand tail, 1.27 s)"],
+      "procedural_layer": ["expression"],
+      "notes": "≤1.2 s; Jump_Land's second half is a usable recover already (covered as a stopgap)."
+    },
+    "reach": {
+      "status": "procedural",
+      "primary": null,
+      "alternates": ["quaternius:Interact (2 s, one-arm reach forward)", "quaternius:PickUp_Table (0.83 s)", "mixamo:pick_up.fbx"],
+      "procedural_layer": ["two-bone IK on the nearer arm to the target point"],
+      "notes": "Primitive stays procedural per vocabulary; Interact is a reference for arm timing."
+    },
+    "inspect": {
+      "status": "procedural",
+      "primary": null,
+      "alternates": ["quaternius:Interact", "mixamo:look_around.fbx"],
+      "procedural_layer": ["reach + lean + gaze lock"],
+      "notes": "= reach + lean + gaze lock."
+    },
+    "wave": {
+      "status": "owner",
+      "primary": "vrma:VRMA_02.vrma",
+      "alternates": ["mixamo:wave.fbx", "mixamo:greeting.fbx"],
+      "procedural_layer": ["gaze to viewer"],
+      "notes": "VRoid 'Greeting' (VRMA_02) is a native .vrma, plays with zero retargeting once the owner downloads the 7-pack (SOURCES.md). No wave in Quaternius Standard; procedural arm wave until then."
+    },
+    "eat": {
+      "status": "owner",
+      "primary": "mixamo:eat.fbx",
+      "alternates": ["quaternius:PickUp_Table (grab phase)"],
+      "procedural_layer": ["hand IK to prop:food", "chew via facial controller"],
+      "notes": "Hero action #2 in authoring order; Mixamo 'Eating' is the requested base."
+    },
+    "drink": {
+      "status": "owner",
+      "primary": "mixamo:drink.fbx",
+      "alternates": [],
+      "procedural_layer": ["hand IK to prop:drink", "swallow via facial controller"],
+      "notes": ""
+    },
+    "celebrate": {
+      "status": "covered",
+      "primary": "quaternius:Dance_Loop",
+      "alternates": ["vrma:VRMA_03.vrma (peace sign)", "vrma:VRMA_05.vrma (spin)", "mixamo:celebrate_victory.fbx", "mixamo:cheer.fbx", "mixamo:dance_silly.fbx"],
+      "procedural_layer": ["happy expression", "tail wag"],
+      "notes": "Dance_Loop is a 1 s loop; play 2–3 cycles."
+    },
+    "tail_react": {
+      "status": "procedural",
+      "primary": null,
+      "alternates": [],
+      "procedural_layer": ["spring-bone / six-link tail solver"],
+      "notes": "No humanoid clip has a tail; VRM spring bones handle it."
+    }
+  },
+  "extra_coverage_requested_by_task": {
+    "dance": "quaternius:Dance_Loop (covered)",
+    "jump": "quaternius:Jump_Start / Jump_Loop / Jump_Land (covered)",
+    "run": "quaternius:Jog_Fwd_Loop / Sprint_Loop (covered)",
+    "look around": "mixamo:look_around.fbx (owner); quaternius:Idle_Talking_Loop has head motion (partial)",
+    "fall": "quaternius:Death01 / Roll (covered, crude); mixamo:fall_back.fbx (owner)",
+    "sleep/lie": "quaternius:Death01 end pose (stopgap); mixamo:sleep_lie.fbx (owner)",
+    "eat/drink": "mixamo:eat.fbx / drink.fbx (owner)",
+    "stretch": "mixamo:stretch_arms.fbx (owner)",
+    "climb": "mixamo:climb_ladder.fbx / climb_wall.fbx (owner)",
+    "crouch": "quaternius:Crouch_Idle_Loop / Crouch_Fwd_Loop (covered, unused)",
+    "push": "quaternius:Push_Loop (covered, unused; could serve 'reach' against a window edge)",
+    "kneel/fix": "quaternius:Fixing_Kneeling (covered, unused; 5.2 s)"
+  },
+  "quaternius_clip_inventory": ["A_TPose", "Crouch_Fwd_Loop", "Crouch_Idle_Loop", "Dance_Loop", "Death01", "Driving_Loop", "Fixing_Kneeling", "Hit_Chest", "Hit_Head", "Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Interact", "Jog_Fwd_Loop", "Jump_Land", "Jump_Loop", "Jump_Start", "PickUp_Table", "Pistol_Aim_Down", "Pistol_Aim_Neutral", "Pistol_Aim_Up", "Pistol_Idle_Loop", "Pistol_Reload", "Pistol_Shoot", "Punch_Cross", "Punch_Enter", "Punch_Jab", "Push_Loop", "Roll", "Roll_RM", "Sitting_Enter", "Sitting_Exit", "Sitting_Idle_Loop", "Sitting_Talking_Loop", "Spell_Simple_Enter", "Spell_Simple_Exit", "Spell_Simple_Idle_Loop", "Spell_Simple_Shoot", "Sprint_Loop", "Swim_Fwd_Loop", "Swim_Idle_Loop", "Sword_Attack", "Sword_Attack_RM", "Sword_Idle", "Walk_Formal_Loop", "Walk_Loop"]
+}

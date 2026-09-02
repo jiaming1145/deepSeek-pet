@@ -1,0 +1,63 @@
+/**
+ * Quaternius "Universal Animation Library" (CC0) rig -> VRM humanoid bone names.
+ * The rig is a Blender Rigify deform skeleton exported to glTF (Godot build) / FBX.
+ * Bone names verified with retarget/inspect-file.mjs on AnimationLibrary_Godot_Standard.glb.
+ * `root` is deliberately unmapped: it is the armature root / root-motion carrier.
+ */
+export const quaterniusVRMRigMap = {
+  'DEF-hips': 'hips',
+  'DEF-spine001': 'spine',
+  'DEF-spine002': 'chest',
+  'DEF-spine003': 'upperChest',
+  'DEF-neck': 'neck',
+  'DEF-head': 'head',
+
+  'DEF-shoulderL': 'leftShoulder',
+  'DEF-upper_armL': 'leftUpperArm',
+  'DEF-forearmL': 'leftLowerArm',
+  'DEF-handL': 'leftHand',
+  'DEF-thumb01L': 'leftThumbMetacarpal',
+  'DEF-thumb02L': 'leftThumbProximal',
+  'DEF-thumb03L': 'leftThumbDistal',
+  'DEF-f_index01L': 'leftIndexProximal',
+  'DEF-f_index02L': 'leftIndexIntermediate',
+  'DEF-f_index03L': 'leftIndexDistal',
+  'DEF-f_middle01L': 'leftMiddleProximal',
+  'DEF-f_middle02L': 'leftMiddleIntermediate',
+  'DEF-f_middle03L': 'leftMiddleDistal',
+  'DEF-f_ring01L': 'leftRingProximal',
+  'DEF-f_ring02L': 'leftRingIntermediate',
+  'DEF-f_ring03L': 'leftRingDistal',
+  'DEF-f_pinky01L': 'leftLittleProximal',
+  'DEF-f_pinky02L': 'leftLittleIntermediate',
+  'DEF-f_pinky03L': 'leftLittleDistal',
+
+  'DEF-shoulderR': 'rightShoulder',
+  'DEF-upper_armR': 'rightUpperArm',
+  'DEF-forearmR': 'rightLowerArm',
+  'DEF-handR': 'rightHand',
+  'DEF-thumb01R': 'rightThumbMetacarpal',
+  'DEF-thumb02R': 'rightThumbProximal',
+  'DEF-thumb03R': 'rightThumbDistal',
+  'DEF-f_index01R': 'rightIndexProximal',
+  'DEF-f_index02R': 'rightIndexIntermediate',
+  'DEF-f_index03R': 'rightIndexDistal',
+  'DEF-f_middle01R': 'rightMiddleProximal',
+  'DEF-f_middle02R': 'rightMiddleIntermediate',
+  'DEF-f_middle03R': 'rightMiddleDistal',
+  'DEF-f_ring01R': 'rightRingProximal',
+  'DEF-f_ring02R': 'rightRingIntermediate',
+  'DEF-f_ring03R': 'rightRingDistal',
+  'DEF-f_pinky01R': 'rightLittleProximal',
+  'DEF-f_pinky02R': 'rightLittleIntermediate',
+  'DEF-f_pinky03R': 'rightLittleDistal',
+
+  'DEF-thighL': 'leftUpperLeg',
+  'DEF-shinL': 'leftLowerLeg',
+  'DEF-footL': 'leftFoot',
+  'DEF-toeL': 'leftToes',
+  'DEF-thighR': 'rightUpperLeg',
+  'DEF-shinR': 'rightLowerLeg',
+  'DEF-footR': 'rightFoot',
+  'DEF-toeR': 'rightToes',
+};
