@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><title>vrm lab</title>
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file: 'unsafe-inline'; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' file: blob:"><title>vrm lab</title>
 <style>
  html,body{margin:0;height:100%;background:transparent;overflow:hidden}
  canvas{display:block}
@@ -9,10 +9,15 @@
 { "imports": {
   "three": "../../apps/desktop/node_modules/three/build/three.module.js",
   "three/addons/": "../../apps/desktop/node_modules/three/examples/jsm/",
+  "three/examples/jsm/": "../../apps/desktop/node_modules/three/examples/jsm/",
   "@pixiv/three-vrm": "../../apps/desktop/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
   "@pixiv/three-vrm-animation": "../../apps/desktop/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
 } }
 </script>
+<!-- ONE three instance: `three`, `three/addons/` and `three/examples/jsm/` (the specifier the shared
+     loaders in anim/retarget/ use) all map to apps/desktop's copy. `@pixiv/three-vrm-core` is NOT
+     mapped on purpose: three-vrm and three-vrm-animation bundle it and nothing in anim/retarget/
+     imports it directly; mapping it would load a second copy of the core classes. -->
 </head><body>
 <div id="hud"></div>
 <script>
@@ -22,21 +27,23 @@ window.addEventListener('unhandledrejection', (e) => { window.__error = String(e
 </script>
 <script type="module">
 // =====================================================================================
-// VRM lab: a stock VRM 1.0 model in the pet window with the procedural layers the 3D pet
-// needs, stacked in a fixed order every frame:
-//   reset normalized pose -> clip (mixer) -> idle arm pose -> breathing -> wave -> hop -> IK
-//   -> vrm.update(dt) (look-at, expressions, spring bones, normalized->raw copy)
+// VRM lab: a stock VRM 1.0 model in the pet window with the layers the 3D pet needs, stacked in a
+// fixed order every frame:
+//   reset normalized pose -> clip layer (AnimationMixer, crossfaded Quaternius / VRMA / Mixamo clips
+//   through the shared retargeter in anim/retarget/) -> procedural idle arm pose (only when no clip)
+//   -> breathing -> hop -> IK -> head-turn look-at (head/neck/chest) -> walk root motion
+//   -> vrm.update(dt) (eye look-at, expressions, spring bones, normalized->raw copy) -> render
 // =====================================================================================
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
-import { loadMixamoAnimation } from './lib/loadMixamoAnimation.js';
+import { loadQuaterniusAnimations, loadVRMAnimation, loadMixamoAnimation, attachLookAtProxy } from './anim/retarget/index.js';
 
 const DEG = Math.PI / 180, clamp = (v, a, b) => (v < a ? a : v > b ? b : v), lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
 const hud = document.getElementById('hud');
+const QUAT_GLB = './anim/quaternius/Animation%20Library%5BStandard%5D/Godot/AnimationLibrary_Godot_Standard.glb';
+const QUAT_CLIPS = ['Idle_Loop', 'Walk_Loop', 'Sitting_Enter', 'Sitting_Idle_Loop', 'Sitting_Exit', 'Jump_Start', 'Jump_Loop', 'Jump_Land', 'Interact'];
 
 // ------------------------------------------------------------------ renderer / scene
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: true });
@@ -55,14 +62,15 @@ window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeig
 // ------------------------------------------------------------------ load VRM
 const loader = new GLTFLoader();
 loader.register((p) => new VRMLoaderPlugin(p));
-loader.register((p) => new VRMAnimationLoaderPlugin(p));
-const gltf = await loader.loadAsync('./models/VRM1_Constraint_Twist_Sample.vrm');
+const VRM_URL = new URLSearchParams(location.search).get('vrm') || './models/VRM1_Constraint_Twist_Sample.vrm';
+const gltf = await loader.loadAsync(VRM_URL);
 const vrm = gltf.userData.vrm;
 VRMUtils.removeUnnecessaryVertices(gltf.scene);
 VRMUtils.combineSkeletons(gltf.scene);
 vrm.scene.traverse((o) => { o.frustumCulled = false; });
 scene.add(vrm.scene);
-const model = vrm.scene;            // root: hop/nudge move this
+attachLookAtProxy(vrm);            // VRMA lookAt tracks drive a proxy quaternion; add once, before creating VRMA clips
+const model = vrm.scene;            // root: hop/nudge/walk move this
 const hum = vrm.humanoid;
 const B = (n) => hum.getNormalizedBoneNode(n);
 const lookTarget = new THREE.Object3D(); scene.add(lookTarget);
@@ -76,24 +84,81 @@ const dist = (size.y * 1.3) / (2 * Math.tan(camera.fov * DEG / 2));   // 30% hea
 camera.position.set(0, center.y + size.y * 0.07, dist); camera.lookAt(0, center.y + size.y * 0.07, 0);
 const headY = B('head').getWorldPosition(new THREE.Vector3()).y;
 lookTarget.position.set(0, headY, dist);
+const halfW = dist * Math.tan(camera.fov * DEG / 2) * camera.aspect;   // visible half-width (m) at the model's depth
 
 // ------------------------------------------------------------------ state
 const S = {
-  breathe: true, blink: true, look: true, talk: false, hudOn: true,
+  breathe: true, blink: true, look: true, headTurn: true, talk: false, hudOn: true,
   expr: 'neutral', exprW: {}, exprTarget: {},           // expression crossfade (weights per preset)
-  action: 'idle', t: 0, actionDur: 2.0,                 // wave / hop / reach clocks
+  action: 'idle', t: 0, actionDur: 2.0,                 // hop / reach clocks
   reach: null,                                          // IK target (world)
   nudgeV: new THREE.Vector3(), nudgeP: new THREE.Vector3(),
-  mixer: new THREE.AnimationMixer(model), clip: null, clipName: null,
-  hop: { y: 0, sy: 1 }, wave: 0, mouse: { x: 0, y: 0 },
+  mixer: new THREE.AnimationMixer(model), current: null, clipName: null, clipQueue: null,
+  hop: { y: 0, sy: 1 }, mouse: { x: 0, y: 0 },
+  head: { yaw: 0, pitch: 0 },                           // smoothed head-turn state (radians)
+  walk: null,                                           // walk-across demo state
   forcedBlink: null, forcedVis: null,
 };
 const EXPR = ['neutral', 'happy', 'angry', 'sad', 'relaxed', 'surprised'];
 for (const e of EXPR) { S.exprW[e] = e === 'neutral' ? 1 : 0; S.exprTarget[e] = S.exprW[e]; }
 const VIS = ['aa', 'ih', 'ou', 'ee', 'oh'];
 
+// ------------------------------------------------------------------ clip library (shared loaders)
+const CLIPS = new Map();          // name -> AnimationClip (already retargeted onto this VRM)
+const clipLoad = {};
+{
+  const t0 = performance.now();
+  const q = await loadQuaterniusAnimations(QUAT_GLB, vrm, { names: QUAT_CLIPS });
+  for (const [n, c] of q) CLIPS.set('quaternius:' + n, c);
+  clipLoad.quaternius = { ms: +(performance.now() - t0).toFixed(0), clips: [...q.keys()], tracks: q.get('Walk_Loop')?.tracks.length, retarget: q.get('Walk_Loop')?.userData.retarget };
+}
+
+// One mixer, crossfades between actions. `play(name, opts)`: opts.loop (default true), opts.fade s,
+// opts.then = clip name to crossfade into when a one-shot finishes (default: idle loop).
+const FADE = 0.3;
+function play(name, opts = {}) {
+  const clip = CLIPS.get(name);
+  if (!clip) throw new Error('unknown clip ' + name);
+  const loop = opts.loop ?? true, fade = opts.fade ?? FADE;
+  const next = S.mixer.clipAction(clip);
+  next.enabled = true; next.setEffectiveTimeScale(opts.timeScale ?? 1); next.setEffectiveWeight(1);
+  next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); next.clampWhenFinished = !loop;
+  next.reset();
+  if (S.current && S.current !== next) { next.play(); S.current.crossFadeTo(next, fade, false); }
+  else if (S.current === next) { next.play(); }
+  else { next.fadeIn(fade).play(); }
+  S.current = next; S.clipName = name;
+  S.clipQueue = loop ? null : (opts.then === null ? null : (opts.then ?? 'quaternius:Idle_Loop'));
+  return { name, duration: clip.duration, tracks: clip.tracks.length, loop };
+}
+S.mixer.addEventListener('finished', (e) => {
+  if (e.action !== S.current) return;
+  const nextName = S.clipQueue; S.clipQueue = null;
+  if (nextName) play(nextName, CLIP_OPTS[nextName] ?? {});
+});
+// per-clip playback options for the queued follow-ups
+const CLIP_OPTS = { 'quaternius:Jump_Land': { loop: false, fade: 0.15 }, 'quaternius:Sitting_Idle_Loop': { fade: 0.35 }, 'quaternius:Idle_Loop': { fade: 0.35 } };
+function stopClips() { S.mixer.stopAllAction(); S.current = null; S.clipName = null; S.clipQueue = null; hum.resetNormalizedPose(); }
+async function playFile(kind, url) {
+  const key = kind + ':' + url.split('/').pop();
+  if (!CLIPS.has(key)) {
+    const clip = kind === 'vrma' ? await loadVRMAnimation(url, vrm, { name: key }) : await loadMixamoAnimation(url, vrm, { name: key });
+    CLIPS.set(key, clip);
+  }
+  return play(key, { loop: true });
+}
+// action vocabulary -> clip route
+const ACTIONS = {
+  idle: () => play('quaternius:Idle_Loop', { fade: 0.35 }),
+  walk: () => play('quaternius:Walk_Loop', { fade: 0.25 }),
+  sit: () => play('quaternius:Sitting_Enter', { loop: false, fade: 0.25, then: 'quaternius:Sitting_Idle_Loop' }),
+  stand: () => play('quaternius:Sitting_Exit', { loop: false, fade: 0.25 }),
+  jump: () => play('quaternius:Jump_Start', { loop: false, fade: 0.15, then: 'quaternius:Jump_Land' }),
+  wave: () => play('quaternius:Interact', { loop: false, fade: 0.25 }),   // no Wave in Quaternius Standard; Interact is the one-arm reach-forward greeting stand-in (ACTION_CLIPS.json)
+};
+
 // ------------------------------------------------------------------ mouse look
-window.addEventListener('mousemove', (e) => { S.mouse.x = (e.clientX / innerWidth) * 2 - 1; S.mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
+window.addEventListener('mousemove', (e) => { if (S.lookLock) return; S.mouse.x = (e.clientX / innerWidth) * 2 - 1; S.mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
 function applyLook() {
   // put the target on a plane a little in front of the face, spanning +-1.2 m
   lookTarget.position.set(S.mouse.x * 1.2, headY + S.mouse.y * 0.9, 1.2);
@@ -130,8 +195,8 @@ const rotZ = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(0, 0
 const rotX = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), a));
 const rotY = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(0, 1, 0), a));
 
-// VRM 1.0 rest is a T-pose: this brings the arms down to a relaxed stance, and is skipped
-// while a clip owns the arms.
+// VRM 1.0 rest is a T-pose: this brings the arms down to a relaxed stance. Only used when no
+// clip is playing (the normal state is the Idle_Loop clip).
 function idlePose() {
   rotZ('rightUpperArm', 68 * DEG); rotZ('leftUpperArm', -68 * DEG);
   rotZ('rightLowerArm', 8 * DEG); rotZ('leftLowerArm', -8 * DEG);
@@ -145,16 +210,6 @@ function breathing(dt) {
   rotX('neck', 1.0 * DEG * b); rotX('head', 0.8 * DEG * b);
   rotZ('spine', 0.6 * DEG * Math.sin(clock * 2 * Math.PI / 7.1));   // slow sway
   rotZ('rightShoulder', -2.5 * DEG * b); rotZ('leftShoulder', 2.5 * DEG * b);
-}
-function wave() {
-  const t = S.t, w = S.wave;
-  if (w <= 0) return;
-  // right arm up and out, forearm oscillating; blended by w so it eases in/out
-  rotZ('rightUpperArm', -88 * DEG * w); rotY('rightUpperArm', 20 * DEG * w);
-  rotZ('rightLowerArm', (-88 + 32 * Math.sin(t * 2 * Math.PI * 2.2)) * DEG * w);   // forearm up, swinging +-32 deg
-  rotX('rightLowerArm', 8 * DEG * w);
-  rotZ('rightHand', 22 * Math.sin(t * 2 * Math.PI * 2.2 + 0.7) * DEG * w);
-  rotZ('spine', 4 * DEG * w); rotZ('head', -6 * DEG * w);
 }
 function hop() {
   if (S.action !== 'hop') { S.hop.y = 0; S.hop.sy = 1; return; }
@@ -184,20 +239,16 @@ function ikReach() {
   const a = s.distanceTo(e0), b = e0.distanceTo(h0);
   const d = clamp(s.distanceTo(target), Math.abs(a - b) + 1e-3, a + b - 1e-3);
   const elbow = Math.acos(clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));   // interior angle
-  // 1) forearm bend about its local Y (forward-bending elbow for the right arm)
   lo.quaternion.identity();
   lo.quaternion.setFromAxisAngle(_v.set(0, 1, 0), (Math.PI - elbow));
-  // 2) aim upper arm: rotate so shoulder->hand points at shoulder->target
   for (let it = 0; it < 2; it++) {
     model.updateWorldMatrix(true, true);
     hand.getWorldPosition(h0);
     _v.subVectors(h0, s).normalize(); _v2.subVectors(target, s).normalize();
     _q.setFromUnitVectors(_v, _v2);
     up.parent.getWorldQuaternion(_q2);
-    // local' = P^-1 * q * P * local
     up.quaternion.premultiply(_q2).premultiply(_q).premultiply(_q2.clone().invert());
   }
-  // 3) pole: twist about shoulder->target so the elbow drops toward the pole point (below/behind)
   model.updateWorldMatrix(true, true);
   lo.getWorldPosition(e0);
   const axis = _v2.subVectors(target, s).normalize();
@@ -207,15 +258,119 @@ function ikReach() {
   _q.setFromAxisAngle(axis, ang * 0.85);
   up.parent.getWorldQuaternion(_q2);
   up.quaternion.premultiply(_q2).premultiply(_q).premultiply(_q2.clone().invert());
-  // 4) hand: relax the wrist toward the target direction, and blend by w for ease-in
-  if (w < 1) {
-    // ease from the idle pose by slerping from the pose we computed before IK (stored below)
-    up.quaternion.slerp(preIK.up, 1 - w); lo.quaternion.slerp(preIK.lo, 1 - w);
-  }
-  // look at the hand target too
+  if (w < 1) { up.quaternion.slerp(preIK.up, 1 - w); lo.quaternion.slerp(preIK.lo, 1 - w); }
   lookTarget.position.copy(target);
 }
 const preIK = { up: new THREE.Quaternion(), lo: new THREE.Quaternion() };
+
+// Head-turn look-at: the eyes already track lookTarget through vrm.lookAt; this turns the head
+// (and a fraction of neck / upper chest) toward the same target. It is closed-loop, not additive:
+// each frame it measures where the clip + breathing left the head pointing (in the model root's
+// frame, so it stays right while the model walks sideways), clamps the target relative to the
+// body's own facing (hips forward), smooths the residual (exponential, ~120 ms), splits it
+// head 60 / neck 25 / chest 15 %, then applies one correction step on the head bone so the head's
+// forward axis lands on the target even though the chain rotations are not exactly additive.
+const HEAD = { yawMax: 40 * DEG, pitchUp: 22 * DEG, pitchDown: 28 * DEG, tau: 0.12, weight: 1.0, split: { head: 0.6, neck: 0.25, upperChest: 0.15 } };
+const _mInv = new THREE.Quaternion();
+function fwdInModel(node, out) { // yaw/pitch (rad) of a normalized bone's +Z in the model root's frame
+  node.getWorldQuaternion(_q2).premultiply(_mInv);
+  const f = _v.set(0, 0, 1).applyQuaternion(_q2);
+  out.yaw = Math.atan2(f.x, f.z); out.pitch = Math.atan2(f.y, Math.hypot(f.x, f.z)); return out;
+}
+const _hf = { yaw: 0, pitch: 0 }, _bf = { yaw: 0, pitch: 0 };
+function headTurn(dt) {
+  let dYaw = 0, dPitch = 0;
+  const active = S.headTurn && (S.look || S.reach);
+  model.updateWorldMatrix(true, true);
+  model.getWorldQuaternion(_mInv).invert();
+  fwdInModel(B('head'), _hf);                           // where the clip left the head
+  if (active) {
+    fwdInModel(B('hips'), _bf);                          // body facing (the clip may stand turned)
+    B('head').getWorldPosition(_v3);
+    _v2.copy(lookTarget.position).sub(_v3).applyQuaternion(_mInv);   // head -> target, model frame (+Z forward)
+    const yawT = _bf.yaw + clamp(Math.atan2(_v2.x, _v2.z) - _bf.yaw, -HEAD.yawMax, HEAD.yawMax);
+    const pitchT = clamp(Math.atan2(_v2.y, Math.hypot(_v2.x, _v2.z)), -HEAD.pitchDown, HEAD.pitchUp);
+    dYaw = (yawT - _hf.yaw) * HEAD.weight; dPitch = (pitchT - _hf.pitch) * HEAD.weight;
+    S.head.target = { yaw: yawT, pitch: pitchT };
+  } else S.head.target = null;
+  const k = 1 - Math.exp(-dt / HEAD.tau);
+  S.head.yaw = lerp(S.head.yaw, dYaw, k); S.head.pitch = lerp(S.head.pitch, dPitch, k);
+  if (Math.abs(S.head.yaw) < 1e-4 && Math.abs(S.head.pitch) < 1e-4) return;
+  for (const [bone, f] of Object.entries(HEAD.split)) { rotY(bone, S.head.yaw * f); rotX(bone, -S.head.pitch * f); }
+  // one correction step on the head bone: chain rotations in rotated local frames are not exactly additive
+  model.updateWorldMatrix(true, true);
+  const want = { yaw: _hf.yaw + S.head.yaw, pitch: _hf.pitch + S.head.pitch };
+  fwdInModel(B('head'), _hf);
+  rotY('head', want.yaw - _hf.yaw); rotX('head', -(want.pitch - _hf.pitch));
+  model.updateWorldMatrix(true, true); fwdInModel(B('head'), _hf);
+  S.head.measured = { yaw: _hf.yaw, pitch: _hf.pitch };  // the rendered direction (bones are restored to the clip pose after render)
+}
+
+// Walk-across demo: root motion on the model root while Walk_Loop plays. Speed comes from the
+// clip itself (planted-foot velocity, measured once, see measureClipSpeed) so the feet do not
+// slide. Phases: face the travel direction (turn), walk to the right edge, turn, walk to the left
+// edge, turn, walk back to centre, face the camera, idle.
+const WALK = { turnTime: 0.35, margin: 0.30, yawFace: 0 };
+function startWalk(opts = {}) {
+  const speed = opts.speed ?? clipSpeed('quaternius:Walk_Loop');
+  const xMax = opts.xMax ?? (halfW - WALK.margin);
+  const legs = [[+xMax, +90 * DEG], [-xMax, -90 * DEG], [0, +90 * DEG]];
+  S.walk = { speed, xMax, legs, leg: 0, phase: 'turn', x: model.position.x, yaw: model.rotation.y, yawT: legs[0][1], t: 0, started: false };
+}
+function walkStep(dt) {
+  const w = S.walk; if (!w) return;
+  w.t += dt;
+  const turnRate = (180 * DEG) / (WALK.turnTime * 2);              // 90 deg in turnTime
+  const step = (target) => { const d = target - w.yaw; w.yaw += clamp(d, -turnRate * dt, turnRate * dt); return Math.abs(target - w.yaw) < 1e-3; };
+  if (w.phase === 'turn') {
+    if (!w.started) { w.started = true; ACTIONS.walk(); }
+    if (step(w.yawT)) { w.phase = 'walk'; }
+  } else if (w.phase === 'walk') {
+    const [xT] = w.legs[w.leg];
+    const dir = Math.sign(xT - w.x) || 1;
+    w.x += dir * w.speed * dt;
+    if ((dir > 0 && w.x >= xT) || (dir < 0 && w.x <= xT)) {
+      w.x = xT; w.leg++;
+      if (w.leg < w.legs.length) { w.phase = 'turn'; w.yawT = w.legs[w.leg][1]; }
+      else { w.phase = 'face'; w.yawT = WALK.yawFace; ACTIONS.idle(); }
+    }
+  } else if (w.phase === 'face') {
+    if (step(w.yawT)) { S.walk = null; model.rotation.y = 0; model.position.x = 0; return; }
+  }
+  model.rotation.y = w.yaw;
+}
+// Planted-foot speed of a clip (m/s), in the model's forward (+Z) direction: sample both feet over
+// one loop on a scratch mixer, take the foot that is lower, and median its backward velocity while
+// it is within 2 cm of its lowest height. This is what the root must move at for zero foot slide.
+const clipSpeedCache = new Map();
+function clipSpeed(name) {
+  if (clipSpeedCache.has(name)) return clipSpeedCache.get(name).speed;
+  const clip = CLIPS.get(name); if (!clip) throw new Error('unknown clip ' + name);
+  const m = new THREE.AnimationMixer(model); const a = m.clipAction(clip); a.play();
+  const N = 80, dt = clip.duration / N, L = B('leftFoot'), R = B('rightFoot');
+  const samples = [];
+  const saveRot = model.rotation.y, savePos = model.position.clone(); model.rotation.y = 0; model.position.set(0, 0, 0);
+  hum.resetNormalizedPose();
+  for (let i = 0; i <= N; i++) {
+    m.setTime(i * dt); model.updateWorldMatrix(true, true);
+    samples.push({ l: L.getWorldPosition(new THREE.Vector3()), r: R.getWorldPosition(new THREE.Vector3()) });
+  }
+  m.stopAllAction(); m.uncacheRoot(model); hum.resetNormalizedPose();
+  if (S.current) restorePose();                         // the main mixer's write-cache must match the bones again
+  model.rotation.y = saveRot; model.position.copy(savePos);
+  const minL = Math.min(...samples.map((s) => s.l.y)), minR = Math.min(...samples.map((s) => s.r.y));
+  const vs = [];
+  for (let i = 0; i < N; i++) {
+    for (const [f, min] of [['l', minL], ['r', minR]]) {
+      if (samples[i][f].y < min + 0.02 && samples[i + 1][f].y < min + 0.02) vs.push(-(samples[i + 1][f].z - samples[i][f].z) / dt);
+    }
+  }
+  vs.sort((a, b) => a - b);
+  const speed = vs.length ? vs[Math.floor(vs.length / 2)] : 0;
+  const out = { speed: +speed.toFixed(3), plantedSamples: vs.length, duration: clip.duration, strideM: +(speed * clip.duration).toFixed(3) };
+  clipSpeedCache.set(name, out);
+  return out.speed;
+}
 
 // spring nudge: a damped spring on the model root so hair/skirt/ribbons get an impulse
 function nudge(dt) {
@@ -246,65 +401,89 @@ function frame(now) {
   const dt = Math.min(0.05, (now - prev) / 1000); prev = now; clock += dt; S.t += dt;
   statsFrame(now);
 
-  hum.resetNormalizedPose();
+  // Clip layer. IMPORTANT: no resetNormalizedPose() while a clip plays. three's PropertyMixer only
+  // writes a bone when the blended value differs from what it wrote last time, so a track with a
+  // constant value (Sitting_Idle_Loop's knees, its hips height) is written once and never again;
+  // resetting the pose every frame then leaves those bones at rest (found the hard way, see
+  // REPORT_unify.md). Instead: mixer -> snapshot the clip pose -> procedural layers -> render ->
+  // restore the snapshot, so the bones always hold exactly what the mixer last wrote.
   model.scale.set(1, 1, 1);
-  const clipOwnsArms = !!S.clip;
-  if (S.clip) S.mixer.update(dt);
-  if (!clipOwnsArms) idlePose();
+  if (S.current) { S.mixer.update(dt); savePose(); }
+  else { hum.resetNormalizedPose(); idlePose(); }      // no clip: procedural stance
   breathing(dt);
-  if (S.action === 'wave') { const p = S.t / S.actionDur; S.wave = p < 0.15 ? smooth(p / 0.15) : p > 0.85 ? smooth((1 - p) / 0.15) : 1; if (p >= 1) { S.action = 'idle'; S.wave = 0; } }
-  wave();
   hop();
   if (S.action === 'hop' && S.t >= S.actionDur) S.action = 'idle';
-  if (S.reach) { preIK.up.copy(B('rightUpperArm').quaternion); preIK.lo.copy(B('rightLowerArm').quaternion); ikReach(); }
+  if (S.reach) { preIK.up.copy(B('rightUpperArm').quaternion); preIK.lo.copy(B('rightLowerArm').quaternion); ikReach(); model.updateWorldMatrix(true, true); S.ikErr = B('rightHand').getWorldPosition(_v3).distanceTo(S.reach); }
   else if (S.look) applyLook();
+  walkStep(dt);
+  headTurn(dt);
   nudge(dt);
-  model.position.set(S.nudgeP.x, S.hop.y + S.nudgeP.y, S.nudgeP.z);
+  const wx = S.walk ? S.walk.x : 0;
+  model.position.set(wx + S.nudgeP.x, S.hop.y + S.nudgeP.y, S.nudgeP.z);
   expressions(dt);
   vrm.update(dt);
   renderer.render(scene, camera);
+  if (S.current) restorePose();
   if (S.hudOn) drawHud();
 }
+// pose snapshot of every normalized humanoid bone (rotation; hips also position)
+const POSE_NODES = Object.keys(hum.humanBones).map((n) => B(n)).filter(Boolean);
+const poseSnap = POSE_NODES.map(() => ({ q: new THREE.Quaternion(), p: new THREE.Vector3() }));
+function savePose() { for (let i = 0; i < POSE_NODES.length; i++) { poseSnap[i].q.copy(POSE_NODES[i].quaternion); poseSnap[i].p.copy(POSE_NODES[i].position); } }
+function restorePose() { for (let i = 0; i < POSE_NODES.length; i++) { POSE_NODES[i].quaternion.copy(poseSnap[i].q); POSE_NODES[i].position.copy(poseSnap[i].p); } }
 function drawHud() {
   const n = Math.min(stats.ms.length, 120), recent = stats.ms.slice(-n), avg = recent.reduce((a, b) => a + b, 0) / (n || 1);
   hud.textContent = `vrm lab  ${(1000 / avg).toFixed(0)} fps  ${avg.toFixed(1)} ms\n` +
-    `expr ${S.expr}  action ${S.action}  clip ${S.clipName || '-'}\n` +
-    `[1-5] happy angry sad relaxed surprised [0] neutral\n[B] blink ${S.blink ? 'on' : 'off'}  [T] talk ${S.talk ? 'on' : 'off'}  [L] look ${S.look ? 'on' : 'off'}  [I] breathe ${S.breathe ? 'on' : 'off'}\n` +
-    `[W] wave  [H] hop  [N] nudge  [R] reach->mouse (again: release)\n[A] vrma clip  [M] mixamo clip  [Space] stop clip  [G] hud`;
+    `expr ${S.expr}  clip ${S.clipName || '-'}${S.current ? ' t=' + S.current.time.toFixed(2) : ''}  head ${(S.head.yaw / DEG).toFixed(0)}/${(S.head.pitch / DEG).toFixed(0)} deg${S.walk ? '  walk ' + S.walk.phase + ' x=' + S.walk.x.toFixed(2) : ''}\n` +
+    `[1-5] happy angry sad relaxed surprised [0] neutral\n[B] blink ${S.blink ? 'on' : 'off'}  [T] talk ${S.talk ? 'on' : 'off'}  [L] look ${S.look ? 'on' : 'off'}  [E] head-turn ${S.headTurn ? 'on' : 'off'}  [I] breathe ${S.breathe ? 'on' : 'off'}\n` +
+    `[W] wave(Interact)  [J] jump  [S] sit/stand  [K] walk across  [H] hop  [N] nudge  [R] reach->mouse\n[A] vrma clip  [M] mixamo clip  [Space] stop clips  [G] hud`;
 }
 
 // ------------------------------------------------------------------ control surface
-async function playClipFile(kind, url) {
-  stopClip();
-  let clip;
-  if (kind === 'vrma') {
-    const g = await loader.loadAsync(url);
-    const anim = g.userData.vrmAnimations?.[0];
-    if (!anim) throw new Error('no VRMC_vrm_animation in ' + url);
-    clip = createVRMAnimationClip(anim, vrm);
-  } else {
-    clip = await loadMixamoAnimation(url, vrm, FBXLoader);
-  }
-  S.clip = S.mixer.clipAction(clip); S.clip.reset().setLoop(THREE.LoopRepeat, Infinity).play(); S.clipName = kind + ':' + url.split('/').pop();
-  return { tracks: clip.tracks.length, duration: clip.duration };
-}
-function stopClip() { if (S.clip) { S.clip.stop(); S.mixer.uncacheRoot(model); S.clip = null; S.clipName = null; } }
-
 const lab = window.lab = {
   expression(name) { if (!EXPR.includes(name)) throw new Error('unknown expression ' + name); S.expr = name; for (const e of EXPR) S.exprTarget[e] = e === name ? 1 : 0; },
   expressions: () => EXPR.slice(),
-  action(name, dur) { S.action = name; S.t = 0; S.actionDur = dur ?? (name === 'wave' ? 2.6 : name === 'hop' ? 1.1 : 2); if (name !== 'wave') S.wave = 0; },
+  action(name, dur) {
+    if (ACTIONS[name]) return ACTIONS[name]();
+    S.action = name; S.t = 0; S.actionDur = dur ?? (name === 'hop' ? 1.1 : 2);
+  },
   setPhase(p) { S.t = p * S.actionDur; },
+  clip: (name, opts) => play(name, opts), clips: () => [...CLIPS.keys()], clipLoad: () => clipLoad,
+  clipTime(t) { if (S.current) { S.current.time = t; S.mixer.update(0); savePose(); } },
+  clipState() { return S.current ? { name: S.clipName, time: S.current.time, weight: S.current.getEffectiveWeight(), queued: S.clipQueue, running: S.current.isRunning() } : null; },
+  mixerWeights() { const out = {}; for (const [n, c] of CLIPS) { const a = S.mixer.existingAction(c); if (a && a.isRunning()) out[n] = +a.getEffectiveWeight().toFixed(3); } return out; },
+  play: playFile, stop: stopClips,
+  walk: (opts) => { startWalk(opts); return { speed: S.walk.speed, xMax: +S.walk.xMax.toFixed(3), halfW: +halfW.toFixed(3) }; },
+  walkState() { return S.walk ? { phase: S.walk.phase, leg: S.walk.leg, x: +S.walk.x.toFixed(3), yawDeg: +(S.walk.yaw / DEG).toFixed(1), t: +S.walk.t.toFixed(2) } : null; },
+  clipSpeed(name) { clipSpeed(name); return clipSpeedCache.get(name); },
   reach(x, y, z) { if (x == null) { S.reach = null; if (S.action === 'reach') S.action = 'idle'; return; } S.reach = new THREE.Vector3(x, y, z); S.action = 'reach'; S.t = 0; },
   reachScreen(nx, ny) { lab.reach(nx * 0.7, headY - 0.2 + ny * 0.5, 0.45); },
-  look(nx, ny) { S.mouse.x = nx; S.mouse.y = ny; },
+  look(nx, ny) { if (nx == null) { S.lookLock = false; return; } S.lookLock = true; S.mouse.x = nx; S.mouse.y = ny; },   // scripted look: locks out real mouse moves (Chromium also synthesises mousemove after layout changes); look(null) unlocks
+  headTurnOn(on) { S.headTurn = on; },
+  head() { // applied head-turn (deg) and the measured yaw/pitch of the normalized head bone's forward axis, model frame
+    model.updateWorldMatrix(true, true); model.getWorldQuaternion(_mInv).invert(); const f = fwdInModel(B('head'), { yaw: 0, pitch: 0 }), b = fwdInModel(B('hips'), { yaw: 0, pitch: 0 }), m = S.head.measured ?? f;
+    const d = (r) => +(r / DEG).toFixed(1);
+    return { appliedYawDeg: d(S.head.yaw), appliedPitchDeg: d(S.head.pitch), targetYawDeg: S.head.target ? d(S.head.target.yaw) : null, targetPitchDeg: S.head.target ? d(S.head.target.pitch) : null, headYawDeg: d(m.yaw), headPitchDeg: d(m.pitch), clipHeadYawDeg: d(f.yaw), clipHeadPitchDeg: d(f.pitch), bodyYawDeg: d(b.yaw), mouse: [S.mouse.x, S.mouse.y], clip: S.clipName };
+  },
+  trackInfo(clipName, bone) { // retargeted clip data as the page holds it
+    const clip = CLIPS.get(clipName); const node = B(bone); const tr = clip.tracks.find((t) => t.name === node.name + '.quaternion');
+    if (!tr) return { error: 'no track', nodeName: node.name, sample: clip.tracks.slice(0, 3).map((t) => t.name) };
+    const ip = tr.createInterpolant(); const at = (t) => Array.from(ip.evaluate(t)).map((x) => +x.toFixed(3));
+    const angle = (q) => +(2 * Math.acos(Math.min(1, Math.abs(q[3]))) / DEG).toFixed(1);
+    return { track: tr.name, keys: tr.times.length, t0: tr.times[0], tEnd: +tr.times[tr.times.length - 1].toFixed(3), interp: ip.constructor.name, samples: [0, 0.3, 0.6, 0.9, 1.2, 1.5].map((t) => ({ t, q: at(t), deg: angle(at(t)) })) };
+  },
+  knee() { const a = (n) => +(2 * Math.acos(Math.min(1, Math.abs(B(n).quaternion.w))) / DEG).toFixed(1); return { leftUpperLeg: a('leftUpperLeg'), leftLowerLeg: a('leftLowerLeg'), rightLowerLeg: a('rightLowerLeg'), hipsY: +B('hips').position.y.toFixed(3), weights: lab.mixerWeights(), clip: lab.clipState() }; },
+  probe() { // debugging: where is everything, in world metres / degrees
+    model.updateWorldMatrix(true, true); model.getWorldQuaternion(_mInv).invert(); const r3 = (v) => v.toArray().map((x) => +x.toFixed(3));
+    const fwd = (node) => { const o = fwdInModel(node, { yaw: 0, pitch: 0 }); return { yaw: +(o.yaw / DEG).toFixed(1), pitch: +(o.pitch / DEG).toFixed(1) }; };
+    return { hips: r3(B('hips').getWorldPosition(new THREE.Vector3())), head: r3(B('head').getWorldPosition(new THREE.Vector3())), model: r3(model.position), modelYaw: +(model.rotation.y / DEG).toFixed(1), target: r3(lookTarget.position), applied: { yaw: +(S.head.yaw / DEG).toFixed(1), pitch: +(S.head.pitch / DEG).toFixed(1) }, headFwd: fwd(B('head')), chestFwd: fwd(B('upperChest')), hipsFwd: fwd(B('hips')), clip: S.clipName, t: S.current?.time };
+  },
   blink(on) { S.blink = on; }, forceBlink(w) { S.forcedBlink = w; },
   talk(on) { S.talk = on; talkT = 0; }, forceViseme(v) { S.forcedVis = v; },
   breathe(on) { S.breathe = on; }, lookOn(on) { S.look = on; },
   nudge(x, y, z) { S.nudgeV.add(new THREE.Vector3(x, y, z ?? 0)); },
   hud(on) { S.hudOn = on; if (!on) hud.textContent = ''; },
   setTime(t) { clock = t; },
-  play: playClipFile, stop: stopClip,
   resetStats() { stats.ms.length = 0; stats.frames = 0; stats.t0 = performance.now(); },
   stats() {
     const ms = stats.ms.slice().sort((a, b) => a - b), n = ms.length, sum = ms.reduce((a, b) => a + b, 0);
@@ -313,11 +492,11 @@ const lab = window.lab = {
   info() {
     const em = vrm.expressionManager, sb = vrm.springBoneManager;
     let joints = 0; sb?.joints.forEach(() => joints++);
-    return { meta: vrm.meta.name, metaVersion: vrm.meta.metaVersion, licenseUrl: vrm.meta.licenseUrl, expressions: em.expressions.map((e) => e.expressionName), springJoints: joints, springs: sb?.springs?.size ?? sb?.springs?.length, lookAt: vrm.lookAt?.constructor?.name, bones: Object.keys(hum.humanBones).length, height: size.y, materials: [...new Set(vrm.materials?.map((m) => m.type))] };
+    return { meta: vrm.meta.name, metaVersion: vrm.meta.metaVersion, licenseUrl: vrm.meta.licenseUrl, expressions: em.expressions.map((e) => e.expressionName), springJoints: joints, springs: sb?.springs?.size ?? sb?.springs?.length, lookAt: vrm.lookAt?.constructor?.name, bones: Object.keys(hum.humanBones).length, height: size.y, materials: [...new Set(vrm.materials?.map((m) => m.type))], threeRevision: THREE.REVISION, clips: [...CLIPS.keys()], clipLoad, halfW: +halfW.toFixed(3) };
   },
   arm() { model.updateWorldMatrix(true, true); const s = B('rightUpperArm').getWorldPosition(new THREE.Vector3()), e = B('rightLowerArm').getWorldPosition(new THREE.Vector3()), h = B('rightHand').getWorldPosition(new THREE.Vector3()); return { shoulder: s.toArray(), length: s.distanceTo(e) + e.distanceTo(h) }; },
-  ikError() { if (!S.reach) return null; model.updateWorldMatrix(true, true); return B('rightHand').getWorldPosition(new THREE.Vector3()).distanceTo(S.reach); },
-  springSample() { // world x of the CHILD of a few spring joints, relative to the model root: the spring rotates the joint bone, so only the child moves; the nudge itself cancels out
+  ikError() { return S.reach ? S.ikErr : null; },   // measured inside the frame, after IK and before the clip-pose restore
+  springSample() {
     const out = []; model.updateWorldMatrix(true, true);
     vrm.springBoneManager?.joints.forEach((j) => { if (out.length < 6 && j.child) out.push(+(j.child.getWorldPosition(new THREE.Vector3()).x - model.position.x).toFixed(4)); }); return out;
   },
@@ -325,13 +504,16 @@ const lab = window.lab = {
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   const ex = { 1: 'happy', 2: 'angry', 3: 'sad', 4: 'relaxed', 5: 'surprised', 0: 'neutral' }[k]; if (ex) return lab.expression(ex);
-  if (k === 'b') lab.blink(!S.blink); else if (k === 't') lab.talk(!S.talk); else if (k === 'l') lab.lookOn(!S.look); else if (k === 'i') lab.breathe(!S.breathe);
-  else if (k === 'w') lab.action('wave'); else if (k === 'h') lab.action('hop'); else if (k === 'n') lab.nudge(0.9 * (Math.random() < 0.5 ? -1 : 1), 0.3);
+  if (k === 'b') lab.blink(!S.blink); else if (k === 't') lab.talk(!S.talk); else if (k === 'l') lab.lookOn(!S.look); else if (k === 'i') lab.breathe(!S.breathe); else if (k === 'e') lab.headTurnOn(!S.headTurn);
+  else if (k === 'w') ACTIONS.wave(); else if (k === 'j') ACTIONS.jump(); else if (k === 's') (S.clipName?.startsWith('quaternius:Sitting') ? ACTIONS.stand() : ACTIONS.sit());
+  else if (k === 'k') { if (!S.walk) startWalk(); }
+  else if (k === 'h') lab.action('hop'); else if (k === 'n') lab.nudge(0.9 * (Math.random() < 0.5 ? -1 : 1), 0.3);
   else if (k === 'r') { S.reach ? lab.reach(null) : lab.reachScreen(S.mouse.x, S.mouse.y); }
   else if (k === 'a') lab.play('vrma', './clips/test.vrma').catch((err) => { window.__error = String(err.stack || err); });
   else if (k === 'm') lab.play('mixamo', './clips/SambaDancing.fbx').catch((err) => { window.__error = String(err.stack || err); });
   else if (k === ' ') lab.stop(); else if (k === 'g') lab.hud(!S.hudOn);
 });
+ACTIONS.idle();                       // the clip route is the default state
 requestAnimationFrame(frame);
 window.__ready = true;
 </script>

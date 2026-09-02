@@ -1,0 +1,252 @@
+{
+  "input": "D:\\ds\\tools\\vrm\\out\\stock\\stock_rigged.glb",
+  "run_dir": "D:\\ds\\tools\\vrm\\out\\whalechan\\stock-proof",
+  "started": "2026-09-01T20:40:58",
+  "height": 1.0,
+  "steps": {
+    "probe": {
+      "height": 1.5801,
+      "width": 2.3506,
+      "depth": 0.745,
+      "facing": "-Y",
+      "rest_pose": "T",
+      "bones": 51,
+      "humanoid_mapped": 51,
+      "missing_required": [],
+      "meshes": 8,
+      "materials": 20,
+      "triangles": 45408,
+      "shape_keys": [
+        "Basis",
+        "blink_L",
+        "blink_R",
+        "cheek",
+        "cheek_pop",
+        "eye_V",
+        "eye_angry",
+        "eye_black_big",
+        "eye_black_small",
+        "eye_brow_down",
+        "eye_brow_down_L",
+        "eye_brow_down_R",
+        "eye_brow_up",
+        "eye_brow_up_L",
+        "eye_brow_up_R",
+        "eye_close",
+        "eye_no_hilight",
+        "eye_open",
+        "eye_small",
+        "eye_smile"
+      ],
+      "warnings": [
+        "meshes carry shape keys: build_vrm.py --force-tpose is SKIPPED on such input (rest pose stays as exported)"
+      ]
+    },
+    "chains": {
+      "file": "D:\\ds\\tools\\vrm\\out\\whalechan\\stock-proof\\chains.resolved.json",
+      "frame": {
+        "height_target": 1.0,
+        "scale_applied": 0.63283,
+        "bbox_scaled_min": [
+          -0.4939,
+          -0.1219,
+          -0.0001
+        ],
+        "bbox_scaled_max": [
+          0.9935,
+          0.3496,
+          0.9999
+        ],
+        "centre_x": 0.0,
+        "centre_source": "hips bone",
+        "facing": "-Y"
+      },
+      "routes": {
+        "tail": "object",
+        "skirt_front": "bbox",
+        "skirt_back": "bbox",
+        "hair_back_L": "material+bbox",
+        "hair_back_R": "material+bbox",
+        "sidelock_L": "material+bbox",
+        "sidelock_R": "material+bbox",
+        "bangs": "material+bbox",
+        "ear_L": "object",
+        "ear_R": "object",
+        "ahoge": "material+bbox"
+      }
+    },
+    "face": {
+      "texture": "D:\\ds\\spikes\\model\\face\\face_texture.png",
+      "atlas": "D:\\ds\\spikes\\model\\face\\face_atlas_states.json",
+      "mode": "bridge",
+      "material_matches": [
+        "robo_face"
+      ],
+      "applied_material": "robo_face"
+    },
+    "build": {
+      "vrm": "D:\\ds\\tools\\vrm\\out\\whalechan\\stock-proof\\whalechan.vrm",
+      "bytes": 18297408,
+      "chains": {
+        "tail": {
+          "verts": 331,
+          "axis": [
+            0.0,
+            0.833,
+            -0.553
+          ],
+          "length_m": 0.359
+        },
+        "skirt_front": {
+          "verts": 383,
+          "axis": [
+            0.0,
+            0.122,
+            -0.992
+          ],
+          "length_m": 0.25
+        },
+        "skirt_back": {
+          "verts": 220,
+          "axis": [
+            -0.232,
+            0.291,
+            -0.928
+          ],
+          "length_m": 0.235
+        },
+        "sidelock_R": {
+          "verts": 37,
+          "axis": [
+            -0.074,
+            0.799,
+            -0.597
+          ],
+          "length_m": 0.066
+        },
+        "bangs": {
+          "verts": 1413,
+          "axis": [
+            -0.999,
+            -0.046,
+            0.006
+          ],
+          "length_m": 0.14
+        },
+        "ear_L": {
+          "verts": 111,
+          "axis": [
+            0.822,
+            0.0,
+            0.569
+          ],
+          "length_m": 0.1
+        },
+        "ear_R": {
+          "verts": 111,
+          "axis": [
+            -0.822,
+            0.0,
+            0.569
+          ],
+          "length_m": 0.1
+        },
+        "ahoge": {
+          "verts": 2377,
+          "axis": [
+            0.152,
+            -0.986,
+            0.072
+          ],
+          "length_m": 0.149
+        },
+        "hair_back_L": {
+          "verts": 0,
+          "skipped": "selector matched no vertices"
+        },
+        "hair_back_R": {
+          "verts": 0,
+          "skipped": "selector matched no vertices"
+        },
+        "sidelock_L": {
+          "verts": 0,
+          "skipped": "selector matched no vertices"
+        }
+      },
+      "build_vrm_py_sha1": "f81355df1d9230232f5dfc80dd9e0585c4f0b906",
+      "force_tpose": "[build_vrm] force-tpose skipped: a mesh has shape keys (applying a rest pose would break them)",
+      "face": "[build_vrm] face material: robo_face (pattern 'face|skin_face|head')",
+      "height": "[build_vrm] height normalised: 1.580 -> 1.000 (scale 0.6329)"
+    },
+    "manifest": {
+      "spec": "1.0",
+      "bones": 85,
+      "humanoid": 51,
+      "springs": [
+        [
+          "tail",
+          8
+        ],
+        [
+          "skirt_front",
+          4
+        ],
+        [
+          "skirt_back",
+          4
+        ],
+        [
+          "sidelock_R",
+          5
+        ],
+        [
+          "bangs",
+          4
+        ],
+        [
+          "ear_L",
+          3
+        ],
+        [
+          "ear_R",
+          3
+        ],
+        [
+          "ahoge",
+          3
+        ]
+      ],
+      "colliders": 3,
+      "expressions_preset": 18,
+      "expressions_custom": 12,
+      "materials_mtoon": 20,
+      "materials": 20,
+      "triangles": 45408
+    },
+    "renders": [
+      "head_000_head.png",
+      "head_reimport_check.json",
+      "posed_090.png",
+      "posed_180.png",
+      "posed_reimport_check.json",
+      "turn_000.png",
+      "turn_090.png",
+      "turn_180.png",
+      "turn_270.png",
+      "turn_reimport_check.json"
+    ],
+    "sheets": {
+      "compare": "D:\\ds\\tools\\vrm\\out\\whalechan\\stock-proof\\compare_sheet.png",
+      "posed": "D:\\ds\\tools\\vrm\\out\\whalechan\\stock-proof\\sheet_posed.png"
+    }
+  },
+  "warnings": [
+    "probe: meshes carry shape keys: build_vrm.py --force-tpose is SKIPPED on such input (rest pose stays as exported)",
+    "chain hair_back_L skipped: selector matched no vertices",
+    "chain hair_back_R skipped: selector matched no vertices",
+    "chain sidelock_L skipped: selector matched no vertices",
+    "force-tpose skipped: a mesh has shape keys (applying a rest pose would break them)"
+  ],
+  "elapsed_s": 69.2,
+  "finished": "2026-09-01T20:42:07"
+}

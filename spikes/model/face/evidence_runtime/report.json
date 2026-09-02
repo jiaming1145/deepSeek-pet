@@ -1,0 +1,266 @@
+{
+  "info": {
+    "vrm": "../../tools/vrm/out/build/stock_whalechan_face.vrm",
+    "meta": "StockWhaleFace",
+    "faceMaterial": "eye",
+    "faceMaterialType": "ShaderMaterial",
+    "isMToon": true,
+    "mapSize": [
+      4096,
+      4096
+    ],
+    "flipY": false,
+    "cell": {
+      "u": 0,
+      "v": 0,
+      "w": 0.199951171875,
+      "h": 0.16650390625
+    },
+    "expressions": [
+      "aa",
+      "angry",
+      "blink",
+      "blinkLeft",
+      "blinkRight",
+      "ee",
+      "happy",
+      "ih",
+      "lookDown",
+      "lookLeft",
+      "lookRight",
+      "lookUp",
+      "neutral",
+      "oh",
+      "ou",
+      "relaxed",
+      "sad",
+      "surprised",
+      "affection",
+      "cheerful",
+      "confused",
+      "focused",
+      "gentle",
+      "hurt",
+      "panic",
+      "pouty",
+      "shocked",
+      "shy",
+      "sleepy",
+      "smug"
+    ],
+    "expressionsBoundToFace": [
+      "aa",
+      "angry",
+      "blink",
+      "blinkLeft",
+      "blinkRight",
+      "ee",
+      "happy",
+      "ih",
+      "lookDown",
+      "lookLeft",
+      "lookRight",
+      "lookUp",
+      "oh",
+      "ou",
+      "relaxed",
+      "sad",
+      "surprised",
+      "affection",
+      "cheerful",
+      "confused",
+      "focused",
+      "gentle",
+      "hurt",
+      "panic",
+      "pouty",
+      "shocked",
+      "shy",
+      "sleepy",
+      "smug"
+    ],
+    "binary": {
+      "aa": true,
+      "angry": true,
+      "blink": true,
+      "blinkLeft": true,
+      "blinkRight": true,
+      "ee": true,
+      "happy": true,
+      "ih": true,
+      "lookDown": true,
+      "lookLeft": true,
+      "lookRight": true,
+      "lookUp": true,
+      "neutral": false,
+      "oh": true,
+      "ou": true,
+      "relaxed": true,
+      "sad": true,
+      "surprised": true,
+      "affection": true,
+      "cheerful": true,
+      "confused": true,
+      "focused": true,
+      "gentle": true,
+      "hurt": true,
+      "panic": true,
+      "pouty": true,
+      "shocked": true,
+      "shy": true,
+      "sleepy": true,
+      "smug": true
+    },
+    "eye_trans": {
+      "transparent": true,
+      "opacity": 1,
+      "depthWrite": false,
+      "alphaTest": 0
+    },
+    "materialTypes": [
+      "ShaderMaterial"
+    ]
+  },
+  "shots": {
+    "expr_neutral": {
+      "weights": {},
+      "mapOffset": [
+        0,
+        0
+      ]
+    },
+    "expr_happy": {
+      "weights": {
+        "happy": 1
+      },
+      "mapOffset": [
+        0.7998,
+        0.1665
+      ]
+    },
+    "expr_blink": {
+      "weights": {
+        "blink": 1
+      },
+      "mapOffset": [
+        0.19995,
+        0
+      ]
+    },
+    "expr_aa": {
+      "weights": {
+        "aa": 1
+      },
+      "mapOffset": [
+        0.7998,
+        0
+      ]
+    },
+    "expr_surprised": {
+      "weights": {
+        "surprised": 1
+      },
+      "mapOffset": [
+        0.59985,
+        0.33301
+      ]
+    },
+    "expr_cheerful": {
+      "weights": {
+        "cheerful": 1
+      },
+      "mapOffset": [
+        0.7998,
+        0.83252
+      ]
+    },
+    "expr_affection": {
+      "weights": {
+        "affection": 1
+      },
+      "mapOffset": [
+        0.7998,
+        0.49951
+      ]
+    },
+    "expr_shy": {
+      "weights": {
+        "shy": 1
+      },
+      "mapOffset": [
+        0.19995,
+        0.66602
+      ]
+    },
+    "expr_sleepy": {
+      "weights": {
+        "sleepy": 1
+      },
+      "mapOffset": [
+        0.59985,
+        0.49951
+      ]
+    },
+    "expr_lookLeft": {
+      "weights": {
+        "lookLeft": 1
+      },
+      "mapOffset": [
+        0.19995,
+        0.49951
+      ]
+    },
+    "expr_angry": {
+      "weights": {
+        "angry": 1
+      },
+      "mapOffset": [
+        0,
+        0.33301
+      ]
+    },
+    "xfade_binary_50_happy_surprised": {
+      "weights": {
+        "happy": 0.5,
+        "surprised": 0.5
+      },
+      "mapOffset": [
+        0,
+        0
+      ]
+    },
+    "xfade_binary_60_happy_surprised": {
+      "weights": {
+        "happy": 0.4,
+        "surprised": 0.6
+      },
+      "mapOffset": [
+        0.59985,
+        0.33301
+      ]
+    },
+    "xfade_overlay_50_neutral_happy": {
+      "weights": {},
+      "mapOffset": [
+        0,
+        0
+      ]
+    },
+    "xfade_overlay_50_happy_surprised": {
+      "weights": {
+        "happy": 1
+      },
+      "mapOffset": [
+        0.7998,
+        0.1665
+      ]
+    },
+    "hud_neutral": {
+      "weights": {},
+      "mapOffset": [
+        0,
+        0
+      ]
+    }
+  }
+}

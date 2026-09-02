@@ -1,0 +1,142 @@
+{
+  "_about": [
+    "Spring-bone chain spec for Whale-chan (chibi whale-girl maid), consumed by hookup_whalechan.py,",
+    "which resolves every 'frac' box into the absolute world-space 'bbox' that build_vrm.py understands.",
+    "Numbers come from tools/vrm/measure_turnaround.py over spikes/model/turnaround/{front,right,back}.png",
+    "(see tools/vrm/evidence/turnaround_landmarks.json and REPORT_hookup.md for the derivation).",
+    "",
+    "frac axes, all in fractions of the model HEIGHT (H) after --height normalisation:",
+    "  x     from the hips bone (the symmetry centre); + = character's left (Blender +X after a glTF import)",
+    "  depth from the front-most plane of the bbox, backwards (0 = face / skirt front, 0.77 = tail tip)",
+    "  z     from the bbox bottom (0 = sole, 1 = ahoge tip)",
+    "Height is the only bbox measure that survives the T-pose bake (width grows from 0.59 H in the",
+    "35-degree A-pose to about 0.76 H in T-pose) and a curled-vs-straight tail (depth 0.77 H straight,",
+    "about 0.55 H curled), so nothing here is a fraction of width or depth.",
+    "",
+    "x is measured from the HIPS bone (bbox centre only if the rig has no hips) - an asymmetric or",
+    "raised arm skews the bbox centre; the front plane is the bbox min y, the floor the bbox min z.",
+    "prefer: if the GLB has a mesh whose name matches 'object', that mesh is the part (no bbox);",
+    "else if a material name matches 'material', the selector is material AND bbox (frac_material",
+    "when given - a wider box that is safe once the material excludes skin/arms); else bbox only.",
+    "Chains are applied in order and later chains re-claim overlapping vertices, so the hair strands",
+    "come after the skirt/tail and the ears after the side locks.",
+    "",
+    "Reference proportions (from the turnaround): head 0.62-0.93 H, eyes 0.69 H, shoulders 0.56 H,",
+    "waist 0.47 H, skirt 0.20-0.45 H, hips 0.32 H, tail exits the skirt at 0.19 H and its flukes span",
+    "0.15-0.36 H, arm length 0.24 H, upper-body half width 0.26 H."
+  ],
+  "height": 1.0,
+  "colliders": true,
+  "chains": [
+    {
+      "name": "tail",
+      "_why": "root at the lower back under the skirt (hips at 0.32 H, exit at 0.19 H); the tail is the only thing behind the skirt back (0.37 H) below 0.37 H; x is wide because the flukes curl to one side in the front/back views (fluke centre at +-0.30 H)",
+      "prefer": {"object": "^(?!.*hair)(.*[_ .-])?tail([_ .-].*)?$|fluke", "material": "^(?!.*hair)(.*[_ .-])?tail([_ .-].*)?$|fluke"},
+      "frac": {"x": [-0.36, 0.36], "depth": [0.40, 2.00], "z": [0.03, 0.37]},
+      "bones": 7, "parent": "hips",
+      "stiffness": 0.9, "stiffness_tip": 0.35, "drag": 0.30, "gravity": 0.20,
+      "gravity_dir": [0, -1, 0], "hit_radius": 0.03, "blend_root": 0.15,
+      "collider_groups": ["hips_colliders"]
+    },
+    {
+      "name": "skirt_front",
+      "_why": "apron/skirt front between the hem (0.20 H) and the waist band (0.45 H); depth stops before the legs' front plane (0.12 H) so the socks stay on the leg bones",
+      "prefer": {"object": "skirt_?f|apron", "material": "skirt|apron|dress"},
+      "frac": {"x": [-0.24, 0.24], "depth": [-0.02, 0.11], "z": [0.19, 0.44]},
+      "bones": 3, "parent": "hips",
+      "stiffness": 1.1, "stiffness_tip": 0.6, "drag": 0.40, "gravity": 0.10,
+      "hit_radius": 0.02, "blend_root": 0.25,
+      "collider_groups": ["hips_colliders"]
+    },
+    {
+      "name": "skirt_back",
+      "_why": "skirt back panel + bow (depth 0.25-0.39 H, the skirt back edge is at 0.37 H); ends before the tail box starts at 0.40 H",
+      "prefer": {"object": "skirt_?b|bow", "material": "skirt|dress"},
+      "frac": {"x": [-0.24, 0.24], "depth": [0.25, 0.39], "z": [0.19, 0.44]},
+      "bones": 3, "parent": "hips",
+      "stiffness": 1.1, "stiffness_tip": 0.6, "drag": 0.40, "gravity": 0.10,
+      "hit_radius": 0.02, "blend_root": 0.25,
+      "collider_groups": ["hips_colliders"]
+    },
+    {
+      "name": "hair_back_L",
+      "_why": "left half of the back hair: behind the upper back (0.32 H) out to the hair's back edge (0.54 H), from the headdress (0.88 H) down to 0.36 H; the last 0.12 H of tips (down to 0.24 H) are left to the skirt/tail boxes on purpose",
+      "prefer": {"object": "hair_?back_?l|back_?hair_?l", "material": "hair"},
+      "frac": {"x": [0.0, 0.30], "depth": [0.34, 0.58], "z": [0.36, 0.88]},
+      "bones": 5, "parent": "head",
+      "stiffness": 0.7, "stiffness_tip": 0.3, "drag": 0.35, "gravity": 0.15,
+      "hit_radius": 0.02, "blend_root": 0.10,
+      "collider_groups": ["head_colliders", "chest_colliders"]
+    },
+    {
+      "name": "hair_back_R",
+      "_why": "mirror of hair_back_L",
+      "prefer": {"object": "hair_?back_?r|back_?hair_?r", "material": "hair"},
+      "frac": {"x": [-0.30, 0.0], "depth": [0.34, 0.58], "z": [0.36, 0.88]},
+      "bones": 5, "parent": "head",
+      "stiffness": 0.7, "stiffness_tip": 0.3, "drag": 0.35, "gravity": 0.15,
+      "hit_radius": 0.02, "blend_root": 0.10,
+      "collider_groups": ["head_colliders", "chest_colliders"]
+    },
+    {
+      "name": "sidelock_L",
+      "_why": "left side lock beside the head (x 0.12-0.30 H, depth 0.16-0.26 H). bbox-only fallback stops at 0.60 H because a T-posed upper arm crosses z 0.50-0.58 H in the same x range; with a hair material the box runs down to the hand level (0.36 H)",
+      "prefer": {"object": "hair_?side_?l|side_?lock_?l|sidelock_?l", "material": "hair"},
+      "frac": {"x": [0.12, 0.32], "depth": [0.12, 0.30], "z": [0.60, 0.78]},
+      "frac_material": {"x": [0.11, 0.32], "depth": [0.12, 0.30], "z": [0.36, 0.78]},
+      "bones": 4, "parent": "head",
+      "stiffness": 0.8, "stiffness_tip": 0.35, "drag": 0.35, "gravity": 0.15,
+      "hit_radius": 0.015, "blend_root": 0.12,
+      "collider_groups": ["head_colliders", "chest_colliders"]
+    },
+    {
+      "name": "sidelock_R",
+      "_why": "mirror of sidelock_L",
+      "prefer": {"object": "hair_?side_?r|side_?lock_?r|sidelock_?r", "material": "hair"},
+      "frac": {"x": [-0.32, -0.12], "depth": [0.12, 0.30], "z": [0.60, 0.78]},
+      "frac_material": {"x": [-0.32, -0.11], "depth": [0.12, 0.30], "z": [0.36, 0.78]},
+      "bones": 4, "parent": "head",
+      "stiffness": 0.8, "stiffness_tip": 0.35, "drag": 0.35, "gravity": 0.15,
+      "hit_radius": 0.015, "blend_root": 0.12,
+      "collider_groups": ["head_colliders", "chest_colliders"]
+    },
+    {
+      "name": "bangs",
+      "_why": "front bangs on the forehead: from the brow line (0.72 H) to under the headdress (0.88 H), front 0.16 H of the head; the forehead skin under them (hidden) moves with them",
+      "prefer": {"object": "bang|fringe|hair_?front", "material": "hair"},
+      "frac": {"x": [-0.20, 0.20], "depth": [-0.02, 0.16], "z": [0.72, 0.88]},
+      "frac_material": {"x": [-0.22, 0.22], "depth": [-0.02, 0.18], "z": [0.66, 0.90]},
+      "bones": 3, "parent": "head",
+      "stiffness": 1.4, "stiffness_tip": 0.8, "drag": 0.45, "gravity": 0.05,
+      "hit_radius": 0.015, "blend_root": 0.30,
+      "collider_groups": ["head_colliders"]
+    },
+    {
+      "name": "ear_L",
+      "_why": "left fin ear: root at x 0.20 H, tip at 0.30 H, z 0.65-0.72 H, mid-depth of the head (0.24-0.41 H); listed after the side locks so the ear wins the overlap",
+      "prefer": {"object": "(^|[_ .-])ear_?l($|[_ .-])|(^|[_ .-])l_?ear($|[_ .-])|left_?ear|(^|[_ .-])fin_?l($|[_ .-])", "material": "(^|[_ .-])(ear|fin)s?($|[_ .-])"},
+      "frac": {"x": [0.16, 0.36], "depth": [0.20, 0.44], "z": [0.63, 0.74]},
+      "bones": 2, "parent": "head",
+      "stiffness": 1.2, "stiffness_tip": 0.7, "drag": 0.40, "gravity": 0.0,
+      "hit_radius": 0.01, "blend_root": 0.20
+    },
+    {
+      "name": "ear_R",
+      "_why": "mirror of ear_L",
+      "prefer": {"object": "(^|[_ .-])ear_?r($|[_ .-])|(^|[_ .-])r_?ear($|[_ .-])|right_?ear|(^|[_ .-])fin_?r($|[_ .-])", "material": "(^|[_ .-])(ear|fin)s?($|[_ .-])"},
+      "frac": {"x": [-0.36, -0.16], "depth": [0.20, 0.44], "z": [0.63, 0.74]},
+      "bones": 2, "parent": "head",
+      "stiffness": 1.2, "stiffness_tip": 0.7, "drag": 0.40, "gravity": 0.0,
+      "hit_radius": 0.01, "blend_root": 0.20
+    },
+    {
+      "name": "ahoge",
+      "_why": "the curl on top: everything above the headdress top (0.93 H), within 0.08 H of the centre line, on the front half of the skull (depth 0.05-0.25 H)",
+      "prefer": {"object": "ahoge|antenna", "material": "hair"},
+      "frac": {"x": [-0.08, 0.08], "depth": [0.02, 0.28], "z": [0.94, 1.10]},
+      "bones": 2, "parent": "head",
+      "stiffness": 1.6, "stiffness_tip": 0.9, "drag": 0.50, "gravity": 0.0,
+      "hit_radius": 0.01, "blend_root": 0.30
+    }
+  ]
+}

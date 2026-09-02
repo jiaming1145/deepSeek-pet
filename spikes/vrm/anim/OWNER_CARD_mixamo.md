@@ -1,17 +1,31 @@
 # Owner card — Mixamo clips for Whale-chan
 
-Mixamo (https://www.mixamo.com) is Adobe's free library of ~2,500 humanoid mocap clips.
-It needs an Adobe ID (free) and a browser; nothing can be scripted, so this is your step.
+Mixamo (https://www.mixamo.com) is Adobe's free library of humanoid mocap clips (the often-quoted
+"about 2,500" is not stated by Adobe; unverified). It needs an Adobe ID (free, no Creative Cloud
+subscription) and a browser; nothing can be scripted, so this is your step.
 Budget: about 25 minutes for the whole list below.
 
-## Licence in plain words (Adobe Mixamo FAQ, helpx.adobe.com/creative-cloud/faq/mixamo-faq.html)
+## Licence in plain words (re-checked 2026-09-01)
 
-- Free for personal, commercial and non-profit projects, no royalties, no attribution required.
-- Allowed: use the animations inside a finished product (our desktop pet, videos, images).
-- Not allowed: redistributing the raw animation files as a pack, template or asset-store
-  item. So the FBX files stay private build inputs; the pet ships them only inside its own
-  bundle/asset format. Keep `anim/mixamo/` out of any public repo.
-- Adobe keeps the rights to the library; you keep the rights to what you make with it.
+Source: Adobe's Mixamo FAQ, https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html. The page
+timed out for our fetcher three times today, so the wording below comes from search-engine
+excerpts of that live page plus the FAQ text reproduced on community.adobe.com
+(questions-696/mixamo-faq-licensing-royalties-ownership-eula-and-tos-589400). Read the live page
+once yourself when you sign in.
+
+- "available free for anyone with an Adobe ID and does not require a subscription to Creative
+  Cloud." Not available to Enterprise or Federated IDs, and not available to accounts with a
+  China country code.
+- Royalty free "for personal, commercial, and non-profit projects" (illustrations, films, games).
+  No attribution required: "you're certainly welcome to, but are not required to give credit to
+  Adobe, Mixamo, or Fuse in any way."
+- "Really the only thing you can't do is distribute the raw character and animation files" as
+  standalone assets (packs, templates, asset-store items). Also excluded: training machine-learning
+  models on the content. So the FBX files stay private build inputs; the pet ships them only inside
+  its own bundle/asset format. Keep `anim/mixamo/` out of any public repo (it is git-ignored).
+- "Adobe retains the rights to our software and content, you retain the rights to your designs and
+  creations." The FAQ still calls the service a "limited duration technology preview" whose terms
+  could change; projects made during the free period keep their terms.
 
 ## One-time setup
 
@@ -21,7 +35,11 @@ Budget: about 25 minutes for the whole list below.
 
 ## Export settings (use these for every clip)
 
-Click **Download** on the clip and set:
+Click **Download** on the clip and set (field names as in the current download dialog, checked
+2026-09-01 against a script that drives that dialog: gist.github.com/krazyjakee/1e3592856dd636b8043cc359ad9d66fc;
+the script names Format "FBX Binary" (other FBX and Collada variants exist), Skin "With Skin" /
+"Without Skin", Frames per Second 24 / 30 / 60, Keyframe Reduction "None" / "Uniform" / "Non-uniform",
+and an "In Place" checkbox; it notes that not every clip shows every control):
 
 | field | value |
 |---|---|

@@ -1,0 +1,638 @@
+{
+ "schema": "whalechan.face_texture/1",
+ "neutral": "neutral",
+ "cols": 5,
+ "rows": 6,
+ "states": {
+  "neutral": {
+   "u": 0.0,
+   "v": 0.0,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "blink": {
+   "u": 0.199951171875,
+   "v": 0.0,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "blinkLeft": {
+   "u": 0.39990234375,
+   "v": 0.0,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "blinkRight": {
+   "u": 0.599853515625,
+   "v": 0.0,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "aa": {
+   "u": 0.7998046875,
+   "v": 0.0,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "ih": {
+   "u": 0.0,
+   "v": 0.16650390625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "ou": {
+   "u": 0.199951171875,
+   "v": 0.16650390625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "ee": {
+   "u": 0.39990234375,
+   "v": 0.16650390625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "oh": {
+   "u": 0.599853515625,
+   "v": 0.16650390625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "happy": {
+   "u": 0.7998046875,
+   "v": 0.16650390625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "angry": {
+   "u": 0.0,
+   "v": 0.3330078125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "sad": {
+   "u": 0.199951171875,
+   "v": 0.3330078125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "relaxed": {
+   "u": 0.39990234375,
+   "v": 0.3330078125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "surprised": {
+   "u": 0.599853515625,
+   "v": 0.3330078125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "lookUp": {
+   "u": 0.7998046875,
+   "v": 0.3330078125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "lookDown": {
+   "u": 0.0,
+   "v": 0.49951171875,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "lookLeft": {
+   "u": 0.199951171875,
+   "v": 0.49951171875,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "lookRight": {
+   "u": 0.39990234375,
+   "v": 0.49951171875,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "sleepy": {
+   "u": 0.599853515625,
+   "v": 0.49951171875,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "affection": {
+   "u": 0.7998046875,
+   "v": 0.49951171875,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "panic": {
+   "u": 0.0,
+   "v": 0.666015625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "shy": {
+   "u": 0.199951171875,
+   "v": 0.666015625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "smug": {
+   "u": 0.39990234375,
+   "v": 0.666015625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "pouty": {
+   "u": 0.599853515625,
+   "v": 0.666015625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "focused": {
+   "u": 0.7998046875,
+   "v": 0.666015625,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "hurt": {
+   "u": 0.0,
+   "v": 0.83251953125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "confused": {
+   "u": 0.199951171875,
+   "v": 0.83251953125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "shocked": {
+   "u": 0.39990234375,
+   "v": 0.83251953125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "gentle": {
+   "u": 0.599853515625,
+   "v": 0.83251953125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  },
+  "cheerful": {
+   "u": 0.7998046875,
+   "v": 0.83251953125,
+   "w": 0.199951171875,
+   "h": 0.16650390625,
+   "binary": true
+  }
+ },
+ "texture": {
+  "file": "face_texture.png",
+  "size_px": [
+   4096,
+   4096
+  ],
+  "cell_px": [
+   819,
+   682
+  ],
+  "face_in_cell_px": [
+   16,
+   8,
+   786,
+   666
+  ],
+  "face_in_cell_uv": [
+   0.01954,
+   0.01173,
+   0.95971,
+   0.97654
+  ],
+  "face_source_px": [
+   1360,
+   1152
+  ],
+  "scale": 0.578125,
+  "pad_px": 8,
+  "background_rgb": [
+   253,
+   243,
+   235
+  ],
+  "alpha": "opaque (255 everywhere)"
+ },
+ "uv_note": "glTF UV space: origin top-left, v down; build_vrm.py rescales the face material's mesh UVs (0..1 over the whole cell, so map the face island to face_in_cell_uv) into the neutral cell and emits every other state as an isBinary textureTransformBind offset (u-u0, v-v0).",
+ "sides": "kit convention: *_l is HER left (screen-right in the texture); lookLeft = she looks to her left.",
+ "regions": {
+  "eye_l": {
+   "anchor_cell_uv": [
+    0.69719,
+    0.48813
+   ],
+   "anchor_face_uv": [
+    0.70588,
+    0.48785
+   ]
+  },
+  "eye_r": {
+   "anchor_cell_uv": [
+    0.33578,
+    0.48813
+   ],
+   "anchor_face_uv": [
+    0.32941,
+    0.48785
+   ]
+  },
+  "mouth": {
+   "anchor_cell_uv": [
+    0.51331,
+    0.70217
+   ],
+   "anchor_face_uv": [
+    0.51434,
+    0.70703
+   ]
+  },
+  "brow_l": {
+   "anchor_cell_uv": [
+    0.6696,
+    0.3006
+   ],
+   "anchor_face_uv": [
+    0.67714,
+    0.29581
+   ]
+  },
+  "brow_r": {
+   "anchor_cell_uv": [
+    0.31251,
+    0.30386
+   ],
+   "anchor_face_uv": [
+    0.30518,
+    0.29915
+   ]
+  }
+ },
+ "recipes": {
+  "neutral": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "blink": {
+   "kind": "preset",
+   "eye_l": "closed",
+   "eye_r": "closed",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "blinkLeft": {
+   "kind": "preset",
+   "eye_l": "closed",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "blinkRight": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "closed",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "aa": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "aa",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "ih": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "ih",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "ou": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "ou",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "ee": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "ee",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "oh": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "oh",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "happy": {
+   "kind": "preset",
+   "eye_l": "happy",
+   "eye_r": "happy",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "smile",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "angry": {
+   "kind": "preset",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "down_inner",
+   "brow_r": "down_inner",
+   "mouth": "frown",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "sad": {
+   "kind": "preset",
+   "eye_l": "look_down",
+   "eye_r": "look_down",
+   "brow_l": "up_inner",
+   "brow_r": "up_inner",
+   "mouth": "frown",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "relaxed": {
+   "kind": "preset",
+   "eye_l": "half_lid",
+   "eye_r": "half_lid",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "smile",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "surprised": {
+   "kind": "preset",
+   "eye_l": "surprised",
+   "eye_r": "surprised",
+   "brow_l": "up",
+   "brow_r": "up",
+   "mouth": "oh",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "lookUp": {
+   "kind": "preset",
+   "eye_l": "look_up",
+   "eye_r": "look_up",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "lookDown": {
+   "kind": "preset",
+   "eye_l": "look_down",
+   "eye_r": "look_down",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "lookLeft": {
+   "kind": "preset",
+   "eye_l": "look_left",
+   "eye_r": "look_left",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "lookRight": {
+   "kind": "preset",
+   "eye_l": "look_right",
+   "eye_r": "look_right",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "closed",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "sleepy": {
+   "kind": "custom",
+   "eye_l": "closed",
+   "eye_r": "closed",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "ou",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "affection": {
+   "kind": "custom",
+   "eye_l": "heart",
+   "eye_r": "heart",
+   "brow_l": "up",
+   "brow_r": "up",
+   "mouth": "smile",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "panic": {
+   "kind": "custom",
+   "eye_l": "spiral",
+   "eye_r": "spiral",
+   "brow_l": "up_inner",
+   "brow_r": "up_inner",
+   "mouth": "wavy",
+   "fx": [
+    "sweat_drop"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "shy": {
+   "kind": "custom",
+   "eye_l": "look_down_right",
+   "eye_r": "look_down_right",
+   "brow_l": "up_inner",
+   "brow_r": "up_inner",
+   "mouth": "wavy",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "smug": {
+   "kind": "custom",
+   "eye_l": "half_lid",
+   "eye_r": "half_lid",
+   "brow_l": "down",
+   "brow_r": "down",
+   "mouth": "smile",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "pouty": {
+   "kind": "custom",
+   "eye_l": "look_left",
+   "eye_r": "look_left",
+   "brow_l": "down_inner",
+   "brow_r": "down_inner",
+   "mouth": "pout",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "focused": {
+   "kind": "custom",
+   "eye_l": "half_lid",
+   "eye_r": "half_lid",
+   "brow_l": "down_inner",
+   "brow_r": "down_inner",
+   "mouth": "flat",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "hurt": {
+   "kind": "custom",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "up_inner",
+   "brow_r": "up_inner",
+   "mouth": "frown",
+   "fx": [
+    "tear_l",
+    "tear_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "confused": {
+   "kind": "custom",
+   "eye_l": "look_up",
+   "eye_r": "look_up",
+   "brow_l": "tilted",
+   "brow_r": "neutral",
+   "mouth": "flat",
+   "fx": [],
+   "fx_skipped_outside_face": []
+  },
+  "shocked": {
+   "kind": "custom",
+   "eye_l": "surprised",
+   "eye_r": "surprised",
+   "brow_l": "up",
+   "brow_r": "up",
+   "mouth": "oh",
+   "fx": [
+    "sweat_drop"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "gentle": {
+   "kind": "custom",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "verbatim",
+   "brow_r": "verbatim",
+   "mouth": "smile",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  },
+  "cheerful": {
+   "kind": "custom",
+   "eye_l": "open",
+   "eye_r": "open",
+   "brow_l": "up",
+   "brow_r": "up",
+   "mouth": "open_wide",
+   "fx": [
+    "blush_l",
+    "blush_r"
+   ],
+   "fx_skipped_outside_face": []
+  }
+ },
+ "source": {
+  "kit": ".",
+  "atlas_schema": "whalechan.face_atlas/1"
+ }
+}

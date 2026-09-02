@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file: 'unsafe-inline'; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' file: blob:"><title>vrm actions lab</title>
+<style>
+ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+ canvas{display:block}
+ #hud{position:fixed;left:8px;top:8px;font:11px ui-monospace,Consolas,monospace;color:#9fe;
+      text-shadow:0 1px 2px #000,0 0 4px #000;line-height:1.5;pointer-events:none;white-space:pre}
+</style>
+<!-- one three instance for everything: the VRM loader, the shared anim/retarget loaders and this lab -->
+<script type="importmap">
+{ "imports": {
+  "three": "../../../apps/desktop/node_modules/three/build/three.module.js",
+  "three/addons/": "../../../apps/desktop/node_modules/three/examples/jsm/",
+  "three/examples/jsm/": "../../../apps/desktop/node_modules/three/examples/jsm/",
+  "@pixiv/three-vrm": "../../../apps/desktop/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+  "@pixiv/three-vrm-animation": "../../../apps/desktop/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+} }
+</script>
+</head><body>
+<div id="hud">loading</div>
+<script>
+window.__error = null; window.__ready = false;
+window.addEventListener('error', (e) => { window.__error = String(e.error?.stack || e.message); });
+window.addEventListener('unhandledrejection', (e) => { window.__error = String(e.reason?.stack || e.reason); });
+</script>
+<script type="module" src="./lab.js"></script>
+</body></html>

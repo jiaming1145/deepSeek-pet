@@ -64,6 +64,37 @@ def enum_to_camel(enum_name):
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
 
 
+def restore_alpha_mode(mat, alpha_mode, cutoff):
+    """Wire the base-colour texture alpha into the Principled BSDF the way the glTF importer does, so
+    the glTF exporter writes alphaMode BLEND / MASK (+alphaCutoff) instead of OPAQUE."""
+    if alpha_mode not in ("BLEND", "MASK") or not mat.node_tree:
+        return
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return
+    base = bsdf.inputs["Base Color"]
+    tex = base.links[0].from_node if base.is_linked and base.links[0].from_node.type == "TEX_IMAGE" else None
+    alpha_in = bsdf.inputs["Alpha"]
+    if tex is None:
+        if alpha_mode == "BLEND" and alpha_in.default_value >= 1.0:
+            alpha_in.default_value = 0.999
+    elif alpha_mode == "BLEND":
+        links.new(tex.outputs["Alpha"], alpha_in)
+    else:  # MASK: alpha = 1 - (a < cutoff), the chain the exporter's detect_alpha_clip recognises
+        sub = nodes.new("ShaderNodeMath")
+        sub.operation = "SUBTRACT"
+        sub.inputs[0].default_value = 1.0
+        lt = nodes.new("ShaderNodeMath")
+        lt.operation = "LESS_THAN"
+        lt.inputs[1].default_value = cutoff
+        links.new(tex.outputs["Alpha"], lt.inputs[0])
+        links.new(lt.outputs[0], sub.inputs[1])
+        links.new(sub.outputs[0], alpha_in)
+    mat.surface_render_method = "BLENDED" if alpha_mode == "BLEND" else "DITHERED"
+    log(f"  alpha mode kept on {mat.name}: {alpha_mode}" + (f" cutoff={cutoff}" if alpha_mode == "MASK" else ""))
+
+
 def main():
     a = parse_args()
     os.makedirs(a.outdir, exist_ok=True)
@@ -154,8 +185,13 @@ def main():
             if md.type != "ARMATURE":
                 m.modifiers.remove(md)
     for mat in list(bpy.data.materials):
-        if mat.vrm_addon_extension.mtoon1.enabled:
+        gltf = mat.vrm_addon_extension.mtoon1
+        if gltf.enabled:
+            alpha_mode, cutoff = gltf.alpha_mode, float(gltf.alpha_cutoff)
             bpy.ops.vrm.convert_mtoon1_to_bsdf_principled(material_name=mat.name)
+            # the add-on's conversion only copies the constant alpha factor; a real generator export
+            # keeps alphaMode BLEND/MASK with the texture alpha wired in, so restore that here
+            restore_alpha_mode(mat, alpha_mode, cutoff)
     for mat in list(bpy.data.materials):
         if mat.name.startswith("MToon Outline"):
             bpy.data.materials.remove(mat)

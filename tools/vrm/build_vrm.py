@@ -14,7 +14,9 @@ Options (all optional except --input/--output):
   --force-tpose               rotate arms to a straight T-pose and apply it as the new rest pose
   --no-mtoon                  keep imported materials (skip MToon conversion)
   --shade-tint r,g,b          MToon shade colour multiplier (default 0.75,0.72,0.82)
-  --outline-width F           MToon outline width (world coords, metres; default 0.0025)
+  --outline-width F           MToon outline width (world coords, metres; default 0.0012 - 2.5 mm made the
+                              lip geometry's inverted-hull outline poke through the mouth on a 1.6 m model)
+  --outline-skip REGEX        extra materials that get no outline (face material + BLEND materials never do)
   --name NAME / --author NAME / --version V   VRM meta
   --manifest out.json         where to write the manifest (default: <output>.manifest.json)
   --save-blend out.blend      also save the Blender scene for inspection
@@ -70,7 +72,10 @@ def parse_args():
     p.add_argument("--force-tpose", action="store_true")
     p.add_argument("--no-mtoon", action="store_true")
     p.add_argument("--shade-tint", default="0.75,0.72,0.82")
-    p.add_argument("--outline-width", type=float, default=0.0025)
+    p.add_argument("--outline-width", type=float, default=0.0012)
+    p.add_argument("--outline-skip", default=None,
+                   help="regex of extra materials that get no MToon outline (the face material and alpha-blended "
+                        "materials never get one)")
     p.add_argument("--name", default="Character")
     p.add_argument("--author", default="owner")
     p.add_argument("--version", default="0.1.0")
@@ -652,16 +657,75 @@ def used_materials(meshes):
     return mats
 
 
-def convert_to_mtoon(meshes, shade_tint, outline_width):
+def detect_alpha_mode(mat):
+    """('OPAQUE'|'MASK'|'BLEND', cutoff) read off the Principled node tree the glTF/FBX importer built.
+
+    The VRM add-on's convert_material_to_mtoon1 copies colours and textures but never sets the MToon
+    alpha mode, so every BLEND overlay (mouth/brow planes, glass) silently became OPAQUE. The importer
+    records the glTF alphaMode as: BLEND -> surface_render_method 'BLENDED' + texture alpha wired into
+    the Alpha socket; MASK -> Alpha <- Math(1 - (a < cutoff)); OPAQUE -> Alpha = 1 constant.
+    """
+    if not mat.use_nodes or not mat.node_tree:
+        return "OPAQUE", 0.5
+    bsdf = next((n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return "OPAQUE", 0.5
+    alpha_in = bsdf.inputs.get("Alpha")
+    if alpha_in is None:
+        return "OPAQUE", 0.5
+    blended = getattr(mat, "surface_render_method", "") == "BLENDED" or getattr(mat, "blend_method", "") in ("BLEND", "HASHED")
+    if not alpha_in.is_linked:
+        if float(alpha_in.default_value) < 1.0:
+            return "BLEND", 0.5
+        return "OPAQUE", 0.5
+    # walk back through Math nodes looking for the importer's clip chain
+    node, cutoff, hops = alpha_in.links[0].from_node, None, 0
+    while node is not None and node.type == "MATH" and hops < 4:
+        for i in (0, 1):
+            if node.operation in ("LESS_THAN", "GREATER_THAN") and not node.inputs[i].is_linked:
+                cutoff = float(node.inputs[i].default_value)
+        if node.operation == "ROUND":
+            cutoff = 0.5
+        nxt = None
+        for sock in node.inputs:
+            if sock.is_linked:
+                nxt = sock.links[0].from_node
+                break
+        node, hops = nxt, hops + 1
+    if cutoff is not None and not blended:
+        return "MASK", cutoff
+    return "BLEND", 0.5
+
+
+def convert_to_mtoon(meshes, shade_tint, outline_width, no_outline_pattern=None):
+    """Convert every used material to MToon. Face-part materials (those matching no_outline_pattern,
+    i.e. --face-material) and alpha-blended overlays get NO outline: the outline shell of the mouth
+    cavity / brow / lash planes that sit just inside or on the skin pokes through the face and reads as
+    a dark blob over the mouth and heavy brows (the defect the stock Seed-san build showed; its own
+    face materials ship with outlineWidthMode 'none')."""
+    no_outline_re = re.compile(no_outline_pattern, re.I) if no_outline_pattern else None
     mats = used_materials(meshes)
     for mat in mats:
         gltf = mat.vrm_addon_extension.mtoon1
         if not gltf.enabled:
+            alpha_mode, cutoff = detect_alpha_mode(mat)
             bpy.ops.vrm.convert_material_to_mtoon1(material_name=mat.name)
             gltf = mat.vrm_addon_extension.mtoon1
+            gltf.alpha_mode = alpha_mode
+            if alpha_mode == "MASK":
+                gltf.alpha_cutoff = cutoff
+            if alpha_mode != "OPAQUE":
+                log(f"  alpha mode kept on {mat.name}: {alpha_mode}" + (f" cutoff={cutoff}" if alpha_mode == "MASK" else ""))
         gltf.enabled = True
         mtoon = gltf.extensions.vrmc_materials_mtoon
         base_img = gltf.pbr_metallic_roughness.base_color_texture.index.source
+        if base_img is not None:
+            # the add-on copies the Principled "Base Color" socket value as the factor even when a texture
+            # is wired into it; the glTF importer leaves that socket at Blender's 0.8 grey, so every textured
+            # material came out 20 % darker than the input. glTF semantics: texture linked -> factor 1.
+            fac = tuple(gltf.pbr_metallic_roughness.base_color_factor)
+            if any(abs(c - 0.8) < 1e-3 for c in fac[:3]):
+                gltf.pbr_metallic_roughness.base_color_factor = (1.0, 1.0, 1.0, fac[3])
         mean = image_mean_rgb(base_img) if base_img else None
         if base_img:
             mtoon.shade_multiply_texture.index.source = base_img
@@ -669,7 +733,8 @@ def convert_to_mtoon(meshes, shade_tint, outline_width):
         mtoon.shading_toony_factor = 0.9
         mtoon.shading_shift_factor = -0.05
         mtoon.gi_equalization_factor = 0.9
-        mtoon.outline_width_mode = "worldCoordinates"
+        skip_outline = (no_outline_re is not None and no_outline_re.search(mat.name)) or gltf.alpha_mode == "BLEND"
+        mtoon.outline_width_mode = "none" if skip_outline else "worldCoordinates"
         mtoon.outline_width_factor = outline_width
         if mean:
             mtoon.outline_color_factor = tuple(max(0.0, c * 0.28) for c in mean)
@@ -677,7 +742,7 @@ def convert_to_mtoon(meshes, shade_tint, outline_width):
             mtoon.outline_color_factor = (0.1, 0.08, 0.12)
         mtoon.outline_lighting_mix_factor = 1.0
         log(f"  MToon {mat.name}: base_tex={base_img.name if base_img else None} mean={tuple(round(c, 3) for c in mean) if mean else None} "
-            f"outline_col={tuple(round(c, 3) for c in mtoon.outline_color_factor)}")
+            f"outline={mtoon.outline_width_mode} outline_col={tuple(round(c, 3) for c in mtoon.outline_color_factor)} alpha={gltf.alpha_mode}")
     log(f"materials converted to MToon: {len(mats)}")
 
 
@@ -737,6 +802,45 @@ def swap_face_texture(face_mat, png_path):
     return img
 
 
+def clear_secondary_face_maps(mat):
+    """Drop every texture on the face material except base/shade colour (VRM add-on MToon props and
+    the Principled node tree), so texture-transform expressions move one map, not a stack."""
+    cleared = []
+    ext = getattr(mat, "vrm_addon_extension", None)
+    mtoon1 = getattr(ext, "mtoon1", None) if ext else None
+    if mtoon1 is not None:
+        try:
+            mtoon1.emissive_factor = (0.0, 0.0, 0.0)
+        except Exception as e:  # noqa: BLE001
+            log(f"face: could not zero emissive_factor: {e}")
+        candidates = [("emissive_texture", mtoon1)]
+        vm = getattr(getattr(mtoon1, "extensions", None), "vrmc_materials_mtoon", None)
+        if vm is not None:
+            candidates += [(n, vm) for n in ("matcap_texture", "rim_multiply_texture", "outline_width_multiply_texture", "uv_animation_mask_texture")]
+        for name, owner in candidates:
+            tex = getattr(owner, name, None)
+            idx = getattr(tex, "index", None)
+            if idx is not None and getattr(idx, "source", None) is not None:
+                try:
+                    idx.source = None
+                    cleared.append(name)
+                except Exception as e:  # noqa: BLE001
+                    log(f"face: could not clear {name}: {e}")
+    nt = mat.node_tree
+    if nt:
+        for node in list(nt.nodes):
+            if node.type == "BSDF_PRINCIPLED":
+                for inp_name in ("Emission Strength",):
+                    if inp_name in node.inputs:
+                        node.inputs[inp_name].default_value = 0.0
+                for inp_name in ("Emission Color", "Emission"):
+                    if inp_name in node.inputs:
+                        for link in list(node.inputs[inp_name].links):
+                            nt.links.remove(link)
+                            cleared.append("node:" + inp_name)
+    log(f"face: secondary maps cleared on {mat.name}: {cleared or 'none present'}")
+
+
 def apply_face_atlas(arm, meshes, face_mat, atlas):
     """atlas: {"neutral": "<state>", "states": {name: {"u","v","w","h"}}} in glTF UV space (v down)."""
     states = atlas["states"]
@@ -758,6 +862,9 @@ def apply_face_atlas(arm, meshes, face_mat, atlas):
                 uv[li].uv = (u0 + bu * w, (1.0 - v0 - h) + bv * h)
                 touched += 1
     log(f"face atlas: neutral cell {neutral_name} (u={u0} v={v0} w={w} h={h}); {touched} UV loops rescaled")
+    # 1b) the atlas replaces base and shade; any OTHER map on this material (emissive, matcap, rim,
+    # outline-width) still samples the original UV layout and washes the cells out under the offset.
+    clear_secondary_face_maps(face_mat)
     # 2) expressions as texture-transform binds (offset from the neutral cell, in glTF UV space)
     ext = armature_ext(arm.data)
     made = []
@@ -771,10 +878,17 @@ def apply_face_atlas(arm, meshes, face_mat, atlas):
         bind.scale = (1.0, 1.0)
         bind.offset = (du, dv)
         grp.is_binary = bool(cell.get("binary", True))
-        if st_name == "blink" or st_name.startswith("blink"):
-            grp.override_blink = "block"
-        if st_name in ("aa", "ih", "ou", "ee", "oh"):
-            grp.override_mouth = "block"
+        # Every cell is a whole face and the binds are ADDITIVE offsets on one material, so two active
+        # states would land on a garbage cell. VRM overrides solve that: an expression's override
+        # multiplies the weight of the OTHER expressions of that category (blink / lookAt / mouth) by
+        # (1 - its weight); it must not name its own category, or it blocks itself (three-vrm applies
+        # the multiplier to blink/blinkLeft/blinkRight, aa/ih/ou/ee/oh and lookUp/Down/Left/Right).
+        is_blink = st_name in ("blink", "blinkLeft", "blinkRight")
+        is_mouth = st_name in ("aa", "ih", "ou", "ee", "oh")
+        is_look = st_name in ("lookUp", "lookDown", "lookLeft", "lookRight")
+        grp.override_blink = "none" if is_blink else "block"
+        grp.override_mouth = "none" if is_mouth else "block"
+        grp.override_look_at = "none" if is_look else "block"
         made.append((kind, st_name, (du, dv)))
     for kind, st, off in made:
         log(f"  expression {kind}:{st} textureTransform offset={tuple(round(x, 4) for x in off)} binary")
@@ -875,7 +989,8 @@ def main():
 
     if not args.no_mtoon:
         tint = tuple(float(x) for x in args.shade_tint.split(","))
-        convert_to_mtoon(meshes, tint, args.outline_width)
+        no_outline = args.face_material if not args.outline_skip else f"(?:{args.face_material})|(?:{args.outline_skip})"
+        convert_to_mtoon(meshes, tint, args.outline_width, no_outline_pattern=no_outline)
 
     face_mat = find_face_material(meshes, args.face_material)
     log(f"face material: {face_mat.name if face_mat else None} (pattern {args.face_material!r})")

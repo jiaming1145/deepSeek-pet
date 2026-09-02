@@ -118,11 +118,65 @@ action and is finished first.
 
 ## 6. What this changes in code
 
+Updated 2026-09-01 for the 3D runtime (`docs/DECISIONS.md` D-2026-09-01-04). The action list above is
+unchanged; "authored" now means an animation clip played on the VRM humanoid, not a Spine clip. The
+authoritative action-to-clip map is `spikes/vrm/anim/ACTION_CLIPS.json`; the runtime reads that file,
+this section only explains it.
+
 - `packages/protocol` `INTERACTION_ACTIONS`: add `reach`, `climb`. Behaviours naming them are
   valid; the rig realises them.
 - `packages/brain`: `motion=` values are validated against this list, not the model3 motion
   catalogue. Unknown values are dropped as today.
 - `packages/behaviors`: `interaction` is already optional on a behaviour; the `motion` tuple
-  becomes optional too once the Spine rig lands, since an action can be fully procedural.
+  becomes optional too, since an action can be fully procedural.
 - `apps/desktop/src/main`: a world-sense module publishing the work area and window rectangles
   (geometry only, never titles) as collision surfaces for `walk`, `sit`, `climb`.
+- `apps/desktop/src/renderer/pet`: the stage renders a VRM 1.0 with three.js + `@pixiv/three-vrm`
+  (spike: `spikes/vrm/index.html`). The three lanes of §1 are unchanged. `body` is realised by a
+  clip layer (three `AnimationMixer` on the VRM humanoid, loaded through
+  `spikes/vrm/anim/retarget/index.js`: `loadQuaterniusAnimations`, `loadVRMAnimation`,
+  `loadMixamoAnimation`) with procedural layers written after the mixer each frame; `expression`
+  by `vrm.expressionManager` (presets + the face-atlas states); `gaze` by `vrm.lookAt` plus a
+  head-turn layer. The at-rest layer (breath, weight shift, tail sway, blink) is procedural under
+  everything and spring bones (`VRMC_springBone`) move tail, ears, hair and skirt without any clip.
+
+### Clip vs procedural, per action
+
+From `ACTION_CLIPS.json` (`status`: covered = licence-clean clip in the tree now; owner = free clip
+behind the owner's BOOTH or Mixamo login; procedural = no clip, computed at runtime). The
+`procedural_layer` column is what stays procedural on top of the clip, and is the whole realisation
+until the clip arrives.
+
+| action | realisation | primary clip | procedural layer |
+|---|---|---|---|
+| `idle` | covered | `quaternius:Idle_Loop` | breath, weight shift, tail sway, blink, look-at |
+| `walk` | covered | `quaternius:Walk_Loop` | foot IK to floor, head look-at; in 3D lateral walk needs no side-view art (D-2026-09-01-04 supersedes the last line of §5), only the floor from world sense |
+| `hop` | covered | `quaternius:Jump_Start` + `Jump_Land` | vertical offset from main's window motion, landing squash |
+| `sit` | covered | `quaternius:Sitting_Idle_Loop` (+ `Sitting_Enter` / `Sitting_Exit`) | hips pinned to the sensed edge height, gaze |
+| `sleep` | owner | `mixamo:sleep_lie.fbx` (stopgap `quaternius:Death01` end pose) | slow breath, eyes-closed expression, damped tail |
+| `wake` | owner | `mixamo:get_up.fbx` | blink/squint, stretch overlay; trimmed to <= 1.5 s |
+| `stretch` | owner | `mixamo:stretch_arms.fbx` | procedural arms-up spline until the clip lands |
+| `climb` | owner | `mixamo:climb_ladder.fbx` | hands and feet IK-pinned to the sensed vertical edge, gaze up |
+| `stumble` | procedural | none (`quaternius:Hit_Chest` as an impact flinch overlay) | physics impulse from window motion drives everything |
+| `recover` | owner | `mixamo:get_up.fbx` (stopgap `quaternius:Jump_Land` tail) | expression; <= 1.2 s |
+| `reach` | procedural | none (`quaternius:Interact` is a timing reference) | two-bone IK on the nearer arm to the target point |
+| `inspect` | procedural | none | reach + lean + gaze lock |
+| `wave` | owner | `vrma:VRMA_02.vrma` (VRoid Greeting; alt `mixamo:wave.fbx`) | gaze to viewer; procedural arm wave until then (currently reads as a salute, VERIFY.md) |
+| `eat` | owner | `mixamo:eat.fbx` | hand IK to `prop:food`, chew via the facial controller |
+| `drink` | owner | `mixamo:drink.fbx` | hand IK to `prop:drink`, swallow via the facial controller |
+| `celebrate` | covered | `quaternius:Dance_Loop` (2 to 3 cycles) | happy expression, tail wag |
+| `tail_react` | procedural | none | spring-bone tail (VRM `VRMC_springBone`), impulse on touch or drag release |
+
+Rules the runtime follows:
+- Every action still starts procedural (§2 P), so the vocabulary is complete before any owner clip
+  arrives; a clip replaces the body motion of an action without changing its lanes, triggers or
+  interrupt policy.
+- `A+P` actions apply the clip through the mixer, then overwrite specific bones (feet, hands,
+  hips) with IK / pin results in the same frame; the VRM's spring bones and look-at update after that.
+- Mixamo and VRoid clips are owner-gated (`spikes/vrm/anim/OWNER_CARD_mixamo.md`,
+  `spikes/vrm/anim/SOURCES.md`); their raw files are never redistributed, only shipped inside the pet.
+- Clips are retargeted once at load (`retarget/smoke.mjs` is the check: 45 Quaternius clips, 53 tracks
+  per clip, 0.03 deg mean error); the hips translation is scaled by the hips-height ratio so adult
+  mocap fits a 2.8-head chibi.
+- The §5 authoring order stands, read as "which owner clip to fetch and tune first":
+  walk (covered) → eat → sleep/wake → celebrate (covered) → wave → sit (covered).

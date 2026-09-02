@@ -1,9 +1,17 @@
-// Unit tests for the Mixamo -> VRM retarget path, without Electron or an FBX parser.
+// Unit tests for the Mixamo -> VRM retarget path, without Electron or an FBX file. They exercise
+// the SHARED loader in anim/retarget/ (the one index.html now imports), not a local copy.
 // Run:  node --import ./test/register.mjs --test test/   (cwd D:\ds\spikes\vrm)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { mixamoVRMRigMap, retargetMixamoAsset } from '../lib/loadMixamoAnimation.js';
+import { mixamoVRMRigMap, convertMixamoAsset } from '../anim/retarget/loadMixamoAnimation.js';
+
+// Adapter: the shared loader returns the clip with its stats on `clip.userData.retarget`
+// (`mapped` = count of rotation tracks, `unmapped` = source node names).
+function retargetMixamoAsset(asset, vrm, opts) {
+  const clip = convertMixamoAsset(asset, vrm, opts);
+  return { clip, mapped: clip.userData.retarget.mapped, unmapped: clip.userData.retarget.unmapped };
+}
 
 // The 55 humanoid bone names of VRM 1.0 (VRMC_vrm-1.0/humanoid.md).
 const VRM1_BONES = new Set([
@@ -61,8 +69,9 @@ test('retarget renames tracks to normalized bones, scales hips, drops unmapped',
   assert.equal(clip.name, 'vrmAnimation');
   assert.equal(clip.duration, 1);
   assert.deepEqual(clip.tracks.map((t) => t.name), ['Normalized_hips.position', 'Normalized_spine.quaternion']);
-  assert.deepEqual(mapped, ['mixamorigHips->hips', 'mixamorigSpine->spine']);
-  assert.deepEqual(unmapped, ['mixamorigNotABone.quaternion']);
+  assert.equal(mapped, 1, 'one rotation track mapped (spine); the hips position track is counted separately');
+  assert.deepEqual(unmapped, ['mixamorigNotABone']);
+  assert.equal(clip.userData.retarget.hipsPositionScale, 0.01);
   // 100 cm hips -> 1 m: scale 0.01
   const pos = Array.from(clip.tracks[0].values);
   assert.deepEqual(pos.map((v) => +v.toFixed(4)), [0, 1, 0, 0.05, 1.1, -0.05]);

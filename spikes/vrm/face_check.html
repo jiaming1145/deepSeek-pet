@@ -1,0 +1,191 @@
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file: 'unsafe-inline'; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' file: blob:"><title>vrm face check</title>
+<style>
+ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+ canvas{display:block}
+ #hud{position:fixed;left:8px;top:8px;font:11px ui-monospace,Consolas,monospace;color:#9fe;
+      text-shadow:0 1px 2px #000,0 0 4px #000;line-height:1.5;pointer-events:none;white-space:pre}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "../../apps/desktop/node_modules/three/build/three.module.js",
+  "three/addons/": "../../apps/desktop/node_modules/three/examples/jsm/",
+  "@pixiv/three-vrm": "../../apps/desktop/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"
+} }
+</script>
+</head><body>
+<div id="hud"></div>
+<script>
+window.__error = null; window.__ready = false;
+window.addEventListener('error', (e) => { window.__error = String(e.error?.stack || e.message); });
+window.addEventListener('unhandledrejection', (e) => { window.__error = String(e.reason?.stack || e.reason); });
+</script>
+<script type="module">
+// =====================================================================================
+// Face check: load a VRM built by tools/vrm/build_vrm.py with --face-atlas and prove that its
+// texture-transform expressions drive the face material in three-vrm. Shows the head close-up and,
+// below it, an "inspection quad" that shares the SAME material object as the face primitive with UVs
+// covering exactly the neutral cell: whatever offset the expression manager applies to the face
+// material's map is visible there as the whole cell. Query params: ?vrm=<url>&mat=<regex>&atlas=<url>
+// =====================================================================================
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+const q = new URLSearchParams(location.search);
+const VRM_URL = q.get('vrm') || '../../tools/vrm/out/build/stock_whalechan_face.vrm';
+const MAT_RE = new RegExp(q.get('mat') || '^eye$', 'i');
+const ATLAS_URL = q.get('atlas') || '../model/face/face_atlas_states.json';
+const DEG = Math.PI / 180;
+const hud = document.getElementById('hud');
+
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 0);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(24, window.innerWidth / window.innerHeight, 0.05, 50);
+const key = new THREE.DirectionalLight(0xfff4e6, Math.PI * 0.9); key.position.set(1.2, 2.2, 2.0); scene.add(key);
+const fill = new THREE.DirectionalLight(0xcfe3ff, Math.PI * 0.35); fill.position.set(-1.5, 0.5, 1.0); scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+// atlas spec (XHR: fetch() refuses file:// URLs). Optional; the UV bbox of the face primitive is the fallback.
+function loadJson(url) {
+  return new Promise((res) => { const x = new XMLHttpRequest(); x.open('GET', url); x.onload = () => { try { res(JSON.parse(x.responseText)); } catch (e) { res(null); } }; x.onerror = () => res(null); x.send(); });
+}
+const atlas = await loadJson(ATLAS_URL);
+
+const loader = new GLTFLoader();
+loader.register((p) => new VRMLoaderPlugin(p));
+const gltf = await loader.loadAsync(VRM_URL);
+const vrm = gltf.userData.vrm;
+VRMUtils.removeUnnecessaryVertices(gltf.scene);
+VRMUtils.combineSkeletons(gltf.scene);
+vrm.scene.traverse((o) => { o.frustumCulled = false; });
+scene.add(vrm.scene);
+vrm.springBoneManager?.reset();
+const em = vrm.expressionManager;
+const EXPR = em.expressions.map((e) => e.expressionName);
+
+// ------------------------------------------------------------------ find the face material
+let faceMesh = null, faceMat = null, faceGroup = -1;
+vrm.scene.traverse((o) => {
+  if (faceMat || !o.isMesh) return;
+  const mats = Array.isArray(o.material) ? o.material : [o.material];
+  mats.forEach((m, i) => { if (!faceMat && m && MAT_RE.test(m.name || '')) { faceMesh = o; faceMat = m; faceGroup = i; } });
+});
+if (!faceMat) throw new Error('no material matches ' + MAT_RE + ' in ' + VRM_URL + '; materials: ' + [...new Set(vrm.materials.map((m) => m.name))].join(','));
+const otherMats = {}; vrm.materials.forEach((m) => { otherMats[m.name] = m; });
+const bindsOnFace = EXPR.filter((n) => (em.getExpression(n)?._binds || []).some((b) => b.material === faceMat));
+
+// neutral cell rect in glTF UV space (v down): from the atlas spec, else from the primitive's UV bbox
+let cell;
+if (atlas?.states?.[atlas.neutral || 'neutral']) { const c = atlas.states[atlas.neutral || 'neutral']; cell = { u: c.u, v: c.v, w: c.w, h: c.h }; }
+else {
+  const uv = faceMesh.geometry.attributes.uv, idx = faceMesh.geometry.index, g = faceMesh.geometry.groups[faceGroup] || { start: 0, count: idx ? idx.count : uv.count };
+  let u0 = 1e9, v0 = 1e9, u1 = -1e9, v1 = -1e9;
+  for (let i = g.start; i < g.start + g.count; i++) { const k = idx ? idx.getX(i) : i; const u = uv.getX(k), v = uv.getY(k); u0 = Math.min(u0, u); v0 = Math.min(v0, v); u1 = Math.max(u1, u); v1 = Math.max(v1, v); }
+  cell = { u: u0, v: v0, w: u1 - u0, h: v1 - v0 };
+}
+
+// ------------------------------------------------------------------ camera: head close-up + inspection quad below it
+const head = vrm.humanoid.getNormalizedBoneNode('head');
+vrm.scene.updateWorldMatrix(true, true);
+const headPos = head.getWorldPosition(new THREE.Vector3());
+const QW = 0.26, QH = QW * (cell.h / cell.w) * (atlas?.texture ? atlas.texture.cell_px[1] / atlas.texture.cell_px[0] / (cell.h / cell.w) : 1);
+const quadGeo = new THREE.PlaneGeometry(QW, QH);
+{ // UVs = exactly the neutral cell, top-left of the cell at the top-left of the quad (glTF textures: flipY=false)
+  const p = quadGeo.attributes.position, uv = quadGeo.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, cell.u + (p.getX(i) / QW + 0.5) * cell.w, cell.v + (0.5 - p.getY(i) / QH) * cell.h);
+  uv.needsUpdate = true;
+}
+const quad = new THREE.Mesh(quadGeo, faceMat);           // SAME material object as the face primitive
+quad.position.set(headPos.x, headPos.y - 0.30, headPos.z + 0.30);
+scene.add(quad);
+const target = new THREE.Vector3(headPos.x, headPos.y - 0.11, headPos.z + 0.1);
+const dist = 0.62 / (2 * Math.tan(camera.fov * DEG / 2));
+camera.position.set(target.x, target.y, target.z + dist); camera.lookAt(target);
+if (vrm.lookAt) { const lt = new THREE.Object3D(); lt.position.copy(camera.position); scene.add(lt); vrm.lookAt.target = lt; }
+
+// ------------------------------------------------------------------ overlay crossfade (a second face primitive with the target cell, alpha-faded)
+// isBinary texture-transform expressions cannot crossfade (weight 0.5 snaps); a real crossfade needs a second
+// layer: a clone of the face SkinnedMesh whose face material samples the target cell, faded in with opacity.
+let overlay = null, overlayMat = null, quadOverlay = null;
+function ensureOverlay() {
+  if (overlay) return;
+  overlayMat = faceMat.clone();
+  const tex = faceMat.map.clone(); tex.needsUpdate = true;
+  overlayMat.map = tex; if ('shadeMultiplyTexture' in overlayMat) overlayMat.shadeMultiplyTexture = tex;
+  overlayMat.transparent = true; overlayMat.depthWrite = false; overlayMat.opacity = 0;
+  overlayMat.polygonOffset = true; overlayMat.polygonOffsetFactor = -2; overlayMat.polygonOffsetUnits = -2;
+  const hidden = new THREE.MeshBasicMaterial({ visible: false });
+  overlay = faceMesh.clone();
+  overlay.material = Array.isArray(faceMesh.material) ? faceMesh.material.map((m, i) => (i === faceGroup ? overlayMat : hidden)) : overlayMat;
+  overlay.frustumCulled = false; overlay.renderOrder = 10;
+  faceMesh.parent.add(overlay);
+  // the inspection quad gets the same overlay so the whole-cell blend is visible too
+  quadOverlay = new THREE.Mesh(quadGeo, overlayMat);
+  quadOverlay.position.copy(quad.position); quadOverlay.position.z += 0.002; quadOverlay.renderOrder = 10;
+  scene.add(quadOverlay);
+  overlay.visible = false; quadOverlay.visible = false;
+}
+function cellOffset(name) {
+  if (atlas?.states?.[name]) return [atlas.states[name].u - cell.u, atlas.states[name].v - cell.v];
+  const b = (em.getExpression(name)?._binds || []).find((x) => x.material === faceMat);
+  return b ? [b.offset.x, b.offset.y] : [0, 0];
+}
+
+// ------------------------------------------------------------------ control surface
+const S = { hudOn: true, xfade: null, overlayState: null };
+const lab = window.lab = {
+  expressions: () => EXPR.slice(),
+  set(name, w) { em.setValue(name, w); },
+  only(name) { for (const e of EXPR) em.setValue(e, 0); if (name && name !== 'neutral') em.setValue(name, 1); S.xfade = null; lab.overlay(null); },
+  xfade(a, b, t) { for (const e of EXPR) em.setValue(e, 0); if (a !== 'neutral') em.setValue(a, 1 - t); if (b !== 'neutral') em.setValue(b, t); S.xfade = { a, b, t }; lab.overlay(null); },
+  overlay(a, b, t) {
+    if (a == null) { if (overlay) { overlay.visible = false; quadOverlay.visible = false; } S.overlayState = null; return; }
+    ensureOverlay();
+    for (const e of EXPR) em.setValue(e, 0); if (a !== 'neutral') em.setValue(a, 1);
+    const [du, dv] = cellOffset(b);
+    overlayMat.map.offset.set(du, dv);    // absolute offset from the neutral cell
+    overlayMat.opacity = t; overlay.visible = true; quadOverlay.visible = true; S.overlayState = { a, b, t };
+  },
+  weights() { const o = {}; for (const e of EXPR) { const w = em.getValue(e); if (w) o[e] = +w.toFixed(3); } return o; },
+  offset: () => faceMat.map.offset.toArray().map((v) => +v.toFixed(5)),
+  hud(on) { S.hudOn = on; if (!on) hud.textContent = ''; },
+  info() {
+    const et = otherMats.eye_trans;
+    return {
+      vrm: VRM_URL, meta: vrm.meta?.name, faceMaterial: faceMat.name, faceMaterialType: faceMat.type, isMToon: !!faceMat.isMToonMaterial,
+      mapSize: faceMat.map?.image ? [faceMat.map.image.width, faceMat.map.image.height] : null, flipY: faceMat.map?.flipY, cell,
+      expressions: EXPR, expressionsBoundToFace: bindsOnFace, binary: Object.fromEntries(EXPR.map((n) => [n, em.getExpression(n).isBinary])),
+      eye_trans: et ? { transparent: et.transparent, opacity: et.opacity, depthWrite: et.depthWrite, alphaTest: et.alphaTest } : null,
+      materialTypes: [...new Set(vrm.materials.map((m) => m.type))],
+    };
+  },
+};
+function drawHud() {
+  const w = lab.weights();
+  hud.textContent = `face check  mat=${faceMat.name} (${faceMat.type})  map.offset=${lab.offset().join(', ')}\n` +
+    `weights ${JSON.stringify(w)}\n` + (S.xfade ? `xfade ${S.xfade.a}->${S.xfade.b} t=${S.xfade.t} (isBinary: snaps)\n` : '') +
+    (S.overlayState ? `overlay ${S.overlayState.a}->${S.overlayState.b} opacity=${S.overlayState.t}\n` : '') +
+    `keys: 0 neutral 1 happy 2 blink 3 aa 4 cheerful 5 affection 6 shy 7 sleepy 8 lookLeft 9 surprised  x xfade50  o overlay50  g hud`;
+}
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  const m = { 0: 'neutral', 1: 'happy', 2: 'blink', 3: 'aa', 4: 'cheerful', 5: 'affection', 6: 'shy', 7: 'sleepy', 8: 'lookLeft', 9: 'surprised' }[k];
+  if (m) lab.only(m); else if (k === 'x') lab.xfade('happy', 'surprised', 0.5); else if (k === 'o') lab.overlay('neutral', 'happy', 0.5); else if (k === 'g') lab.hud(!S.hudOn);
+});
+let prev = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  vrm.update(dt);
+  overlayMat?.update?.(dt);          // not in vrm.materials: upload its own uv-transform / opacity uniforms
+  renderer.render(scene, camera);
+  if (S.hudOn) drawHud();
+}
+requestAnimationFrame(frame);
+window.__ready = true;
+</script>
+</body></html>
