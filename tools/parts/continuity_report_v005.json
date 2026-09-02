@@ -1,0 +1,1743 @@
+{
+ "schema_version": "1.0",
+ "run_id": "deepseek_humanized_20260830_001",
+ "revision": "v005",
+ "stage": "03_parts",
+ "status": "pass",
+ "checks": [
+  {
+   "id": "inventory_matches_plan",
+   "passed": true,
+   "severity": "error",
+   "details": {
+    "missing": [],
+    "unexpected": []
+   }
+  },
+  {
+   "id": "reassembly_error_bounded",
+   "passed": true,
+   "severity": "error",
+   "details": {
+    "mean_abs_error": 0.23998188972473145,
+    "unassigned": 0
+   }
+  },
+  {
+   "id": "masks_loaded_sanely",
+   "passed": true,
+   "severity": "error",
+   "details": {
+    "visible_masks_covering_over_60pct_of_canvas": {}
+   }
+  },
+  {
+   "id": "no_leaked_art_fragments",
+   "passed": true,
+   "severity": "error",
+   "details": {
+    "count": 0,
+    "parts": [],
+    "islands": []
+   }
+  },
+  {
+   "id": "every_touching_seam_has_band",
+   "passed": true,
+   "severity": "error",
+   "details": {
+    "min_seam_px": 48,
+    "coverage_min": 0.9,
+    "pairs": 184,
+    "torn": 0,
+    "torn_pairs": [],
+    "waived": {
+     "skirt_front_l -> hand_l": {
+      "coverage": 0.837,
+      "reason": "Same geometry as hip_bow_l -> hand_l: the hand nests inside cuff_l (z 380), which is below skirt_front_l (z 420), so the skirt's band cannot pass under the hand without being drawn over the cuff at rest. 84% of the near-seam pixels are covered; the uncovered remainder is ~330 source px. Accepted 2026-09-01; a rig binds the hand to the forearm, so lifting the hand reveals cuff and skirt art that both exist."
+     }
+    }
+   }
+  }
+ ],
+ "seams": [
+  {
+   "lower": "tail_stock",
+   "upper": "tail_fluke_upper",
+   "near_seam_px": 14064,
+   "covered_px": 14064,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "tail_stock",
+   "upper": "tail_fluke_lower",
+   "near_seam_px": 5312,
+   "covered_px": 5312,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "tail_stock",
+   "upper": "skirt_back",
+   "near_seam_px": 18528,
+   "covered_px": 18528,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "tail_fluke_upper",
+   "upper": "tail_fluke_lower",
+   "near_seam_px": 34032,
+   "covered_px": 34032,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "hair_back_strand_l",
+   "near_seam_px": 9152,
+   "covered_px": 9152,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "hair_back_strand_r",
+   "near_seam_px": 10528,
+   "covered_px": 10528,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "head_base",
+   "near_seam_px": 13232,
+   "covered_px": 13232,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "dress_torso",
+   "near_seam_px": 15952,
+   "covered_px": 15952,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "sleeve_upper_l",
+   "near_seam_px": 4656,
+   "covered_px": 4656,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "sleeve_upper_r",
+   "near_seam_px": 5664,
+   "covered_px": 5664,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "apron_panel",
+   "near_seam_px": 25888,
+   "covered_px": 25888,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "apron_waist_frill",
+   "near_seam_px": 2528,
+   "covered_px": 2528,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "hair_front_base",
+   "near_seam_px": 19264,
+   "covered_px": 19264,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "side_lock_root_l",
+   "near_seam_px": 5328,
+   "covered_px": 5328,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "side_lock_tip_l",
+   "near_seam_px": 6064,
+   "covered_px": 6064,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "side_lock_root_r",
+   "near_seam_px": 7248,
+   "covered_px": 7248,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 3312,
+   "covered_px": 3312,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "bonnet_base",
+   "near_seam_px": 5344,
+   "covered_px": 5344,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "bonnet_frill_l",
+   "near_seam_px": 29424,
+   "covered_px": 29424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "bonnet_frill_r",
+   "near_seam_px": 9200,
+   "covered_px": 9200,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "hair_bow_l",
+   "near_seam_px": 23344,
+   "covered_px": 23344,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "hair_bow_r",
+   "near_seam_px": 9840,
+   "covered_px": 9840,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "collar_frill_l",
+   "near_seam_px": 8096,
+   "covered_px": 8096,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 6016,
+   "covered_px": 6016,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "chest_bow_tail_l",
+   "near_seam_px": 7440,
+   "covered_px": 7440,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_base",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 7600,
+   "covered_px": 7600,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_outer_l",
+   "upper": "hair_back_inner_l",
+   "near_seam_px": 82256,
+   "covered_px": 82256,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_outer_l",
+   "upper": "hair_bow_tail_l",
+   "near_seam_px": 10992,
+   "covered_px": 10992,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "hair_back_strand_l",
+   "near_seam_px": 11024,
+   "covered_px": 11024,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "sleeve_upper_l",
+   "near_seam_px": 10576,
+   "covered_px": 10576,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "sleeve_lower_l",
+   "near_seam_px": 26784,
+   "covered_px": 26784,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "cuff_l",
+   "near_seam_px": 4832,
+   "covered_px": 4832,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "side_lock_tip_l",
+   "near_seam_px": 31152,
+   "covered_px": 31152,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_l",
+   "upper": "hair_bow_tail_l",
+   "near_seam_px": 11792,
+   "covered_px": 11792,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_l",
+   "upper": "dress_torso",
+   "near_seam_px": 1392,
+   "covered_px": 1392,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_l",
+   "upper": "sleeve_upper_l",
+   "near_seam_px": 42224,
+   "covered_px": 42224,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_l",
+   "upper": "apron_panel",
+   "near_seam_px": 4016,
+   "covered_px": 4016,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_l",
+   "upper": "side_lock_tip_l",
+   "near_seam_px": 18896,
+   "covered_px": 18896,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_l",
+   "upper": "chest_bow_loop_l",
+   "near_seam_px": 1888,
+   "covered_px": 1888,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_outer_r",
+   "upper": "hair_back_inner_r",
+   "near_seam_px": 74480,
+   "covered_px": 74480,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_outer_r",
+   "upper": "cuff_r",
+   "near_seam_px": 448,
+   "covered_px": 448,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "hair_back_strand_r",
+   "near_seam_px": 9392,
+   "covered_px": 9392,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "sleeve_upper_r",
+   "near_seam_px": 24288,
+   "covered_px": 24288,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "sleeve_lower_r",
+   "near_seam_px": 26144,
+   "covered_px": 26144,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "cuff_r",
+   "near_seam_px": 3328,
+   "covered_px": 3328,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 32192,
+   "covered_px": 32192,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_inner_r",
+   "upper": "hair_bow_tail_r",
+   "near_seam_px": 4016,
+   "covered_px": 4016,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_r",
+   "upper": "dress_torso",
+   "near_seam_px": 1072,
+   "covered_px": 1072,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_r",
+   "upper": "sleeve_upper_r",
+   "near_seam_px": 49360,
+   "covered_px": 49360,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_r",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 27248,
+   "covered_px": 27248,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_back_strand_r",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 6624,
+   "covered_px": 6624,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "skirt_front_l",
+   "near_seam_px": 38096,
+   "covered_px": 38096,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "skirt_front_center",
+   "near_seam_px": 23712,
+   "covered_px": 23712,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "skirt_front_r",
+   "near_seam_px": 18448,
+   "covered_px": 18448,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "underskirt_frill_l",
+   "near_seam_px": 32160,
+   "covered_px": 32160,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "underskirt_frill_center",
+   "near_seam_px": 26512,
+   "covered_px": 26512,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "underskirt_frill_r",
+   "near_seam_px": 20544,
+   "covered_px": 20544,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_back",
+   "upper": "apron_panel",
+   "near_seam_px": 55904,
+   "covered_px": 55904,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "fin_ear_l",
+   "near_seam_px": 10128,
+   "covered_px": 10128,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "fin_ear_r",
+   "near_seam_px": 10336,
+   "covered_px": 10336,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "eye_white_l",
+   "near_seam_px": 68960,
+   "covered_px": 68960,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "iris_l",
+   "near_seam_px": 9680,
+   "covered_px": 9680,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "iris_detail_l",
+   "near_seam_px": 8640,
+   "covered_px": 8640,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "upper_lash_l",
+   "near_seam_px": 18528,
+   "covered_px": 18528,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "lower_lash_l",
+   "near_seam_px": 608,
+   "covered_px": 608,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "eye_white_r",
+   "near_seam_px": 66992,
+   "covered_px": 66992,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "iris_r",
+   "near_seam_px": 11744,
+   "covered_px": 11744,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "iris_detail_r",
+   "near_seam_px": 8256,
+   "covered_px": 8256,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "upper_lash_r",
+   "near_seam_px": 15664,
+   "covered_px": 15664,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "lower_lash_r",
+   "near_seam_px": 656,
+   "covered_px": 656,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "brow_l",
+   "near_seam_px": 2672,
+   "covered_px": 2672,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "brow_r",
+   "near_seam_px": 2448,
+   "covered_px": 2448,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "nose",
+   "near_seam_px": 3152,
+   "covered_px": 3152,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "lower_teeth",
+   "near_seam_px": 15744,
+   "covered_px": 15744,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "upper_teeth",
+   "near_seam_px": 16016,
+   "covered_px": 16016,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "hair_front_base",
+   "near_seam_px": 17264,
+   "covered_px": 17264,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "bang_l",
+   "near_seam_px": 18480,
+   "covered_px": 18480,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "bang_center",
+   "near_seam_px": 3328,
+   "covered_px": 3328,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "bang_r",
+   "near_seam_px": 20656,
+   "covered_px": 20656,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "bang_strand_l",
+   "near_seam_px": 2928,
+   "covered_px": 2928,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "bang_strand_r",
+   "near_seam_px": 2928,
+   "covered_px": 2928,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "side_lock_root_l",
+   "near_seam_px": 10304,
+   "covered_px": 10304,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "side_lock_tip_l",
+   "near_seam_px": 23424,
+   "covered_px": 23424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "side_lock_root_r",
+   "near_seam_px": 7856,
+   "covered_px": 7856,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 21024,
+   "covered_px": 21024,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "hair_bow_l",
+   "near_seam_px": 14624,
+   "covered_px": 14624,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "hair_bow_r",
+   "near_seam_px": 14800,
+   "covered_px": 14800,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "collar_frill_l",
+   "near_seam_px": 14944,
+   "covered_px": 14944,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "collar_frill_r",
+   "near_seam_px": 17456,
+   "covered_px": 17456,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "chest_bow_knot",
+   "near_seam_px": 7872,
+   "covered_px": 7872,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "chest_bow_loop_l",
+   "near_seam_px": 40656,
+   "covered_px": 40656,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 41680,
+   "covered_px": 41680,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "head_base",
+   "upper": "chest_gem",
+   "near_seam_px": 6640,
+   "covered_px": 6640,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_l",
+   "upper": "side_lock_root_l",
+   "near_seam_px": 5264,
+   "covered_px": 5264,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_l",
+   "upper": "side_lock_tip_l",
+   "near_seam_px": 7184,
+   "covered_px": 7184,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_l",
+   "upper": "hair_bow_l",
+   "near_seam_px": 35840,
+   "covered_px": 35840,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_l",
+   "upper": "hair_bow_tail_l",
+   "near_seam_px": 95120,
+   "covered_px": 95120,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_r",
+   "upper": "side_lock_root_r",
+   "near_seam_px": 5024,
+   "covered_px": 5024,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_r",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 8560,
+   "covered_px": 8560,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_r",
+   "upper": "hair_bow_r",
+   "near_seam_px": 46128,
+   "covered_px": 46128,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "fin_ear_r",
+   "upper": "hair_bow_tail_r",
+   "near_seam_px": 79520,
+   "covered_px": 79520,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_l",
+   "upper": "shoe_l",
+   "near_seam_px": 17648,
+   "covered_px": 17648,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_l",
+   "upper": "underskirt_frill_l",
+   "near_seam_px": 4896,
+   "covered_px": 4896,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_l",
+   "upper": "underskirt_frill_center",
+   "near_seam_px": 8640,
+   "covered_px": 8640,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_r",
+   "upper": "shoe_r",
+   "near_seam_px": 17328,
+   "covered_px": 17328,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_r",
+   "upper": "underskirt_frill_center",
+   "near_seam_px": 8928,
+   "covered_px": 8928,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "stocking_r",
+   "upper": "underskirt_frill_r",
+   "near_seam_px": 4736,
+   "covered_px": 4736,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "sleeve_upper_r",
+   "near_seam_px": 7344,
+   "covered_px": 7344,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "apron_panel",
+   "near_seam_px": 20928,
+   "covered_px": 20928,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "apron_waist_frill",
+   "near_seam_px": 1504,
+   "covered_px": 1504,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "collar_frill_l",
+   "near_seam_px": 14416,
+   "covered_px": 14416,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "chest_bow_tail_l",
+   "near_seam_px": 10528,
+   "covered_px": 10528,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "dress_torso",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 8576,
+   "covered_px": 8576,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "sleeve_lower_l",
+   "near_seam_px": 23088,
+   "covered_px": 23088,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "apron_panel",
+   "near_seam_px": 13056,
+   "covered_px": 13056,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "apron_waist_frill",
+   "near_seam_px": 2640,
+   "covered_px": 2640,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "collar_frill_l",
+   "near_seam_px": 37408,
+   "covered_px": 37408,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "chest_bow_loop_l",
+   "near_seam_px": 10544,
+   "covered_px": 10544,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_l",
+   "upper": "chest_bow_tail_l",
+   "near_seam_px": 7760,
+   "covered_px": 7760,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_l",
+   "upper": "cuff_l",
+   "near_seam_px": 23056,
+   "covered_px": 23056,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_l",
+   "upper": "skirt_front_l",
+   "near_seam_px": 23184,
+   "covered_px": 23184,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_l",
+   "upper": "apron_panel",
+   "near_seam_px": 11216,
+   "covered_px": 11216,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "cuff_l",
+   "upper": "skirt_front_l",
+   "near_seam_px": 15616,
+   "covered_px": 15616,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "cuff_l",
+   "upper": "hip_bow_l",
+   "near_seam_px": 800,
+   "covered_px": 800,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "cuff_l",
+   "upper": "hand_l",
+   "near_seam_px": 8448,
+   "covered_px": 8448,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "sleeve_lower_r",
+   "near_seam_px": 20240,
+   "covered_px": 20240,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "apron_panel",
+   "near_seam_px": 12224,
+   "covered_px": 12224,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "apron_waist_frill",
+   "near_seam_px": 3424,
+   "covered_px": 3424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "side_lock_tip_r",
+   "near_seam_px": 10624,
+   "covered_px": 10624,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "collar_frill_r",
+   "near_seam_px": 30960,
+   "covered_px": 30960,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 10592,
+   "covered_px": 10592,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_upper_r",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 9424,
+   "covered_px": 9424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_r",
+   "upper": "cuff_r",
+   "near_seam_px": 19632,
+   "covered_px": 19632,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_r",
+   "upper": "skirt_front_r",
+   "near_seam_px": 22464,
+   "covered_px": 22464,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "sleeve_lower_r",
+   "upper": "apron_panel",
+   "near_seam_px": 12224,
+   "covered_px": 12224,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "cuff_r",
+   "upper": "skirt_front_r",
+   "near_seam_px": 14832,
+   "covered_px": 14832,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "cuff_r",
+   "upper": "hand_r",
+   "near_seam_px": 10736,
+   "covered_px": 10736,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_l",
+   "upper": "underskirt_frill_l",
+   "near_seam_px": 26624,
+   "covered_px": 26624,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_l",
+   "upper": "apron_panel",
+   "near_seam_px": 33120,
+   "covered_px": 33120,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_l",
+   "upper": "hip_bow_l",
+   "near_seam_px": 12384,
+   "covered_px": 12384,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_l",
+   "upper": "hand_l",
+   "near_seam_px": 2064,
+   "covered_px": 1728,
+   "coverage": 0.837,
+   "ok": false,
+   "waived": "Same geometry as hip_bow_l -> hand_l: the hand nests inside cuff_l (z 380), which is below skirt_front_l (z 420), so the skirt's band cannot pass under the hand without being drawn over the cuff at rest. 84% of the near-seam pixels are covered; the uncovered remainder is ~330 source px. Accepted 2026-09-01; a rig binds the hand to the forearm, so lifting the hand reveals cuff and skirt art that both exist."
+  },
+  {
+   "lower": "skirt_front_center",
+   "upper": "underskirt_frill_center",
+   "near_seam_px": 17024,
+   "covered_px": 17024,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_center",
+   "upper": "apron_panel",
+   "near_seam_px": 12960,
+   "covered_px": 12960,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_r",
+   "upper": "underskirt_frill_r",
+   "near_seam_px": 15424,
+   "covered_px": 15424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_r",
+   "upper": "apron_panel",
+   "near_seam_px": 35888,
+   "covered_px": 35888,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_r",
+   "upper": "hip_bow_r",
+   "near_seam_px": 11072,
+   "covered_px": 11072,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "skirt_front_r",
+   "upper": "hand_r",
+   "near_seam_px": 3424,
+   "covered_px": 3424,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "underskirt_frill_l",
+   "upper": "underskirt_frill_center",
+   "near_seam_px": 19008,
+   "covered_px": 19008,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "underskirt_frill_center",
+   "upper": "underskirt_frill_r",
+   "near_seam_px": 18752,
+   "covered_px": 18752,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "apron_panel",
+   "upper": "apron_waist_frill",
+   "near_seam_px": 12304,
+   "covered_px": 12304,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "brow_l",
+   "upper": "bang_strand_l",
+   "near_seam_px": 2912,
+   "covered_px": 2912,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bang_l",
+   "near_seam_px": 42864,
+   "covered_px": 42864,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bang_center",
+   "near_seam_px": 3328,
+   "covered_px": 3328,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bang_r",
+   "near_seam_px": 40944,
+   "covered_px": 40944,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "side_lock_root_l",
+   "near_seam_px": 30096,
+   "covered_px": 30096,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "side_lock_root_r",
+   "near_seam_px": 30512,
+   "covered_px": 30512,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bonnet_base",
+   "near_seam_px": 15456,
+   "covered_px": 15456,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bonnet_frill_l",
+   "near_seam_px": 38880,
+   "covered_px": 38880,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bonnet_frill_center",
+   "near_seam_px": 13920,
+   "covered_px": 13920,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_front_base",
+   "upper": "bonnet_frill_r",
+   "near_seam_px": 37472,
+   "covered_px": 37472,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "bang_l",
+   "upper": "side_lock_root_l",
+   "near_seam_px": 13728,
+   "covered_px": 13728,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "bang_r",
+   "upper": "side_lock_root_r",
+   "near_seam_px": 16192,
+   "covered_px": 16192,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "side_lock_root_l",
+   "upper": "hair_bow_l",
+   "near_seam_px": 18816,
+   "covered_px": 18816,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "side_lock_root_r",
+   "upper": "hair_bow_r",
+   "near_seam_px": 18368,
+   "covered_px": 18368,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "side_lock_tip_r",
+   "upper": "hair_bow_tail_r",
+   "near_seam_px": 8256,
+   "covered_px": 8256,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "ahoge_tip",
+   "upper": "bonnet_base",
+   "near_seam_px": 16304,
+   "covered_px": 16304,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "ahoge_tip",
+   "upper": "bonnet_frill_center",
+   "near_seam_px": 14704,
+   "covered_px": 14704,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "bonnet_base",
+   "upper": "bonnet_frill_l",
+   "near_seam_px": 9584,
+   "covered_px": 9584,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "bonnet_base",
+   "upper": "bonnet_frill_center",
+   "near_seam_px": 7504,
+   "covered_px": 7504,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "bonnet_base",
+   "upper": "bonnet_frill_r",
+   "near_seam_px": 7184,
+   "covered_px": 7184,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_bow_l",
+   "upper": "hair_bow_tail_l",
+   "near_seam_px": 29152,
+   "covered_px": 29152,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "hair_bow_r",
+   "upper": "hair_bow_tail_r",
+   "near_seam_px": 20112,
+   "covered_px": 20112,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_l",
+   "upper": "collar_frill_r",
+   "near_seam_px": 14016,
+   "covered_px": 14016,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_l",
+   "upper": "chest_bow_knot",
+   "near_seam_px": 6480,
+   "covered_px": 6480,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_l",
+   "upper": "chest_bow_loop_l",
+   "near_seam_px": 41376,
+   "covered_px": 41376,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_l",
+   "upper": "chest_bow_tail_l",
+   "near_seam_px": 15536,
+   "covered_px": 15536,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_r",
+   "upper": "chest_bow_knot",
+   "near_seam_px": 5696,
+   "covered_px": 5696,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_r",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 46368,
+   "covered_px": 46368,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "collar_frill_r",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 17312,
+   "covered_px": 17312,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "chest_bow_knot",
+   "upper": "chest_bow_loop_l",
+   "near_seam_px": 10560,
+   "covered_px": 10560,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "chest_bow_knot",
+   "upper": "chest_bow_loop_r",
+   "near_seam_px": 11712,
+   "covered_px": 11712,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "chest_bow_loop_l",
+   "upper": "chest_bow_tail_l",
+   "near_seam_px": 2592,
+   "covered_px": 2592,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "chest_bow_loop_r",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 2864,
+   "covered_px": 2864,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  },
+  {
+   "lower": "chest_bow_tail_l",
+   "upper": "chest_bow_tail_r",
+   "near_seam_px": 2000,
+   "covered_px": 2000,
+   "coverage": 1.0,
+   "ok": true,
+   "waived": null
+  }
+ ],
+ "hidden_only_parts": [
+  "ahoge_root",
+  "eyelid_fill_l",
+  "eyelid_fill_r",
+  "foot_l",
+  "foot_r",
+  "forearm_l",
+  "forearm_r",
+  "hip_base",
+  "lower_leg_l",
+  "lower_leg_r",
+  "mouth_cover_skin",
+  "neck",
+  "shoulder_l",
+  "shoulder_r",
+  "thigh_l",
+  "thigh_r",
+  "torso_base",
+  "upper_arm_l",
+  "upper_arm_r"
+ ],
+ "created_at": "2026-09-02T01:56:09.462924+00:00"
+}

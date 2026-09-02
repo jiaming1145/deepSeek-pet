@@ -15,6 +15,8 @@
 
 ## Shared project contracts
 
+- Read `docs/DECISIONS.md` before building anything that touches the character, the visual
+  runtime, or the art pipeline. It records the binding architecture decisions and their evidence.
 - The product specifications in `docs/`, machine-readable contracts in `schemas/`, starter data in
   `templates/`, and normal application or pipeline source code are shared between Codex and Claude.
 - The reliable automation boundary ends at Live2D-ready artwork, validated PSDs, QA, and a Cubism

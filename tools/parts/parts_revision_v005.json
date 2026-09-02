@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "run_id": "deepseek_humanized_20260830_001",
+  "revision": "v005",
+  "base_revision": "03_parts/revisions/v001/parts_index.json",
+  "supersedes_for_final_art": [
+    "v001",
+    "v002"
+  ],
+  "does_not_touch": [
+    "v003",
+    "v004"
+  ],
+  "scope": "full_rebuild_riggable_partition",
+  "reason": "A motion spike over the v001 parts (spikes/tail, docs/spikes/2026-08-31-tail-rig-spike.md) showed the character cannot move: 8 of 24 articulated seams had zero painted overlap and 48 parts carried islands of another part's art. Both are invisible to a reassembly-error gate, which is what v001 QA measured. v005 keeps every v001 anchor, zone and face rule, and replaces only the two mechanisms responsible: nearest-ellipse assignment becomes a zone-constrained seeded watershed with island cleanup, and the hidden band is sized from the plan's motion_envelope, directed by its occlusion graph, and filled by continuing the part's own pixels.",
+  "changes": [
+    "visible partition: seeded watershed inside the v001 zones whose parts are separated by drawn outlines (tail, hair, stocking/shoe); the one-fabric zones (dress, sleeves, skirt panels, frills, bows, bonnet) keep v001's ellipse-normalised nearest-anchor rule, because equal-speed flooding lets the largest seed eat its neighbours where no outline exists",
+    "colour gate: tail parts hand any non-navy pixels (the white underskirt frill v001 had claimed for tail_root) to the neighbour that surrounds them",
+    "arm re-claim: dark pixels inside each arm polygon go to that arm's sleeve parts; since v001 the hair zone, which runs last and whose blue test accepts navy, had given both sleeve bodies to hair_back_strand_l/r and hair_back_inner_l, leaving the sleeve parts only their trim",
+    "island cleanup: any fragment under 25% of a part's largest piece, embedded in one other part, is reassigned to that part (face parts exempt)",
+    "hidden band: max(motion_envelope.warp, translate, overlap_px) clamped to 64..320 source px, grown geodesically through pixels owned by higher-z parts and declared occluders so it can never jump across a lower part",
+    "band growth and placement treat alpha >= 200 as solid instead of exactly 255; after resampling, 2.8% of interior pixels sit at 200-254 and an exact test made every such hairline a wall across a seam; the band's own alpha follows the canonical's so it is never more opaque than the art was there",
+    "hidden fill: nearest visible pixel for the first 48 source px, fading to the part's median colour beyond, so a pale edge pixel cannot smear across a band; tail_root, which has almost no art of its own, continues from tail_stock alone",
+    "unchanged: hidden-only anatomy proxies, generated expression overlays, provenance shape, neutral composite QA seed",
+    "band pieces not connected to the part's own art are dropped, so growth that tunnels through a chain-mate can never leave a detached patch"
+  ],
+  "known_limits": [
+    "hidden-only anatomy parts (arms, legs, torso, neck, hip) are still ellipse-shaped copies of the art above them; a rig should bind the visible clothing surfaces and leave these at zero opacity",
+    "the 25 generated expression overlays are v001's; v003/v004 record the owner's rejection of patch-based expressions and that work moves to the rig",
+    "22 of 25 FX overlays still default to visible in 04_psd packager_job.json; that is a stage-04 fix"
+  ],
+  "qa": "03_parts/revisions/v005/qa/continuity_report.json",
+  "qa_gate_script": "03_parts/revisions/v005/scripts/qa_continuity.py",
+  "status": "built_qa_pass_pending_owner_review",
+  "tracked_copies": "tools/parts/ (runs/ is git-ignored; the executable copies live here, the versioned copies there)",
+  "qa_result": {
+    "touching_pairs": 184,
+    "torn": 0,
+    "leaked_fragments": 0,
+    "active_waivers": [
+      "skirt_front_l -> hand_l"
+    ],
+    "reassembly_mean_abs_error": 0.23998
+  }
+}

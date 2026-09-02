@@ -1,0 +1,4 @@
+{
+  "hip_bow_l -> hand_l": "The hand nests inside the cuff (z 380) and skirt_front_l (z 420), both below the bow (z 510), so the bow's band cannot reach under the hand without being drawn over the cuff or skirt at rest. Uncovered area is ~740 source px at the hip. Accepted 2026-09-01; a rig binds the bow to the hip and the hand to the forearm, so the hand lifts away from the bow's own art, not from this patch.",
+  "skirt_front_l -> hand_l": "Same geometry as hip_bow_l -> hand_l: the hand nests inside cuff_l (z 380), which is below skirt_front_l (z 420), so the skirt's band cannot pass under the hand without being drawn over the cuff at rest. 84% of the near-seam pixels are covered; the uncovered remainder is ~330 source px. Accepted 2026-09-01; a rig binds the hand to the forearm, so lifting the hand reveals cuff and skirt art that both exist."
+}
