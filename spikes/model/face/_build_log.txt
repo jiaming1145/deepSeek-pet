@@ -1,0 +1,16 @@
+face box (864, 2688, 2224, 3840) size 1360 1152
+head_base visible raw 669712 hair-classified 457101
+eye_l: aperture bbox [756, 340, 1164, 784] region bbox [756, 340, 1176, 784] aperture px 100777 lash px 17121 hair px removed from white 55
+eye_r: aperture bbox [244, 340, 652, 784] region bbox [244, 340, 652, 784] aperture px 100614 lash px 15470 hair px removed from white 90
+mouth visible-mask union bbox [580, 780, 824, 860] px 2304 | lip-colour strokes bbox [641, 801, 758, 827] px 885
+brow_l visible bbox [800, 264, 1084, 404] px 2585
+brow_r visible bbox [264, 264, 544, 412] px 2333
+nose visible bbox [672, 648, 740, 716] px 3152
+head_base pixels 1473456 trusted skin 94415 synthesised 1379041
+lash colour [ 7.  7. 10.]
+eye_l anchor (960.0, 562.0) aperture 408 x 444 gaze offset px 32.6
+eye_r anchor (448.0, 562.0) aperture 408 x 444 gaze offset px 32.6
+mouth stroke bbox [641, 801, 758, 828] anchor (699.5, 814.5) lip colour [230.  127.5 117. ] stroke px 974
+brow_l anchor (np.float64(920.9), np.float64(340.8)) axis deg -0.8 colour [24. 36. 67.] dark px 2585
+brow_r anchor (np.float64(415.0), np.float64(344.6)) axis deg 6.4 colour [24. 42. 78.] dark px 2333
+neutral vs canonical (verbatim zone, excl. inpainted): mean abs err 0.166 p99 3.84

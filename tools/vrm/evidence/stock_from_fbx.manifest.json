@@ -1,0 +1,712 @@
+{
+  "file": "D:\\ds\\tools\\vrm\\out\\build\\stock_from_fbx.vrm",
+  "extensionsUsed": [
+    "KHR_materials_unlit",
+    "KHR_materials_emissive_strength",
+    "VRMC_materials_mtoon",
+    "VRMC_vrm",
+    "VRMC_springBone"
+  ],
+  "vrmSpecVersion": "1.0",
+  "meta": {
+    "name": "StockFBX",
+    "version": "0.1.0",
+    "authors": [
+      "owner"
+    ],
+    "licenseUrl": "https://vrm.dev/licenses/1.0/"
+  },
+  "nodeCount": 81,
+  "boneCount": 72,
+  "meshCount": 9,
+  "triangleCount": 45488,
+  "imageCount": 10,
+  "humanoid": {
+    "chest": "mixamorig:Spine1",
+    "head": "mixamorig:Head",
+    "hips": "mixamorig:Hips",
+    "leftFoot": "mixamorig:LeftFoot",
+    "leftHand": "mixamorig:LeftHand",
+    "leftIndexDistal": "mixamorig:LeftHandIndex3",
+    "leftIndexIntermediate": "mixamorig:LeftHandIndex2",
+    "leftIndexProximal": "mixamorig:LeftHandIndex1",
+    "leftLittleDistal": "mixamorig:LeftHandPinky3",
+    "leftLittleIntermediate": "mixamorig:LeftHandPinky2",
+    "leftLittleProximal": "mixamorig:LeftHandPinky1",
+    "leftLowerArm": "mixamorig:LeftForeArm",
+    "leftLowerLeg": "mixamorig:LeftLeg",
+    "leftMiddleDistal": "mixamorig:LeftHandMiddle3",
+    "leftMiddleIntermediate": "mixamorig:LeftHandMiddle2",
+    "leftMiddleProximal": "mixamorig:LeftHandMiddle1",
+    "leftRingDistal": "mixamorig:LeftHandRing3",
+    "leftRingIntermediate": "mixamorig:LeftHandRing2",
+    "leftRingProximal": "mixamorig:LeftHandRing1",
+    "leftShoulder": "mixamorig:LeftShoulder",
+    "leftThumbDistal": "mixamorig:LeftHandThumb3",
+    "leftThumbMetacarpal": "mixamorig:LeftHandThumb1",
+    "leftThumbProximal": "mixamorig:LeftHandThumb2",
+    "leftToes": "mixamorig:LeftToeBase",
+    "leftUpperArm": "mixamorig:LeftArm",
+    "leftUpperLeg": "mixamorig:LeftUpLeg",
+    "neck": "mixamorig:Neck",
+    "rightFoot": "mixamorig:RightFoot",
+    "rightHand": "mixamorig:RightHand",
+    "rightIndexDistal": "mixamorig:RightHandIndex3",
+    "rightIndexIntermediate": "mixamorig:RightHandIndex2",
+    "rightIndexProximal": "mixamorig:RightHandIndex1",
+    "rightLittleDistal": "mixamorig:RightHandPinky3",
+    "rightLittleIntermediate": "mixamorig:RightHandPinky2",
+    "rightLittleProximal": "mixamorig:RightHandPinky1",
+    "rightLowerArm": "mixamorig:RightForeArm",
+    "rightLowerLeg": "mixamorig:RightLeg",
+    "rightMiddleDistal": "mixamorig:RightHandMiddle3",
+    "rightMiddleIntermediate": "mixamorig:RightHandMiddle2",
+    "rightMiddleProximal": "mixamorig:RightHandMiddle1",
+    "rightRingDistal": "mixamorig:RightHandRing3",
+    "rightRingIntermediate": "mixamorig:RightHandRing2",
+    "rightRingProximal": "mixamorig:RightHandRing1",
+    "rightShoulder": "mixamorig:RightShoulder",
+    "rightThumbDistal": "mixamorig:RightHandThumb3",
+    "rightThumbMetacarpal": "mixamorig:RightHandThumb1",
+    "rightThumbProximal": "mixamorig:RightHandThumb2",
+    "rightToes": "mixamorig:RightToeBase",
+    "rightUpperArm": "mixamorig:RightArm",
+    "rightUpperLeg": "mixamorig:RightUpLeg",
+    "spine": "mixamorig:Spine"
+  },
+  "humanoidCount": 51,
+  "springs": [
+    {
+      "name": "tail",
+      "joints": [
+        "tail_01",
+        "tail_02",
+        "tail_03",
+        "tail_04",
+        "tail_05",
+        "tail_06",
+        "tail_07",
+        "tail_end"
+      ],
+      "stiffness": 0.8999999761581421,
+      "dragForce": 0.30000001192092896,
+      "gravityPower": 0.25,
+      "gravityDir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "hitRadius": 0.029999999329447746,
+      "colliderGroups": [
+        1
+      ]
+    },
+    {
+      "name": "ear_L",
+      "joints": [
+        "ear_L_01",
+        "ear_L_02",
+        "ear_L_end"
+      ],
+      "stiffness": 1.2000000476837158,
+      "dragForce": 0.4000000059604645,
+      "gravityPower": 0.0,
+      "gravityDir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "hitRadius": 0.009999999776482582,
+      "colliderGroups": []
+    },
+    {
+      "name": "ear_R",
+      "joints": [
+        "ear_R_01",
+        "ear_R_02",
+        "ear_R_end"
+      ],
+      "stiffness": 1.2000000476837158,
+      "dragForce": 0.4000000059604645,
+      "gravityPower": 0.0,
+      "gravityDir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "hitRadius": 0.009999999776482582,
+      "colliderGroups": []
+    },
+    {
+      "name": "hair_tail",
+      "joints": [
+        "hair_tail_01",
+        "hair_tail_02",
+        "hair_tail_03",
+        "hair_tail_04",
+        "hair_tail_05",
+        "hair_tail_06",
+        "hair_tail_end"
+      ],
+      "stiffness": 0.699999988079071,
+      "dragForce": 0.3499999940395355,
+      "gravityPower": 0.15000000596046448,
+      "gravityDir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "hitRadius": 0.019999999552965164,
+      "colliderGroups": [
+        0
+      ]
+    }
+  ],
+  "springColliders": 3,
+  "springColliderGroups": 3,
+  "expressions": {
+    "preset": {
+      "aa": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "angry": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "blink": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "blinkLeft": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "blinkRight": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "ee": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "happy": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "ih": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "lookDown": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "lookLeft": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "lookRight": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "lookUp": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "neutral": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "oh": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "ou": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "relaxed": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "sad": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      },
+      "surprised": {
+        "morphTargetBinds": 0,
+        "materialColorBinds": 0,
+        "textureTransformBinds": [],
+        "isBinary": false
+      }
+    },
+    "custom": {}
+  },
+  "materials": [
+    {
+      "name": "ear_L_mat",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.10000000149011612,
+        0.07999999821186066,
+        0.11999999731779099
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "ear_R_mat",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.10000000149011612,
+        0.07999999821186066,
+        0.11999999731779099
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "hair",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.037620704621076584,
+        0.03652869164943695,
+        0.03616011515259743
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "huku_bake",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.18404895067214966,
+        0.19324280321598053,
+        0.20248295366764069
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "body_bake",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.23749613761901855,
+        0.21003681421279907,
+        0.19229143857955933
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "eye",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11987631022930145,
+        0.08826184272766113,
+        0.0700126513838768
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "eye_trans",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11987631022930145,
+        0.08826184272766113,
+        0.0700126513838768
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "arm_mat",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.12930962443351746,
+        0.13548947870731354,
+        0.14454394578933716
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "arm_plastic",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.12930962443351746,
+        0.13548947870731354,
+        0.14454394578933716
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "green_emit",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11504927277565002,
+        0.1290917694568634,
+        0.13653595745563507
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "tail_mat",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.10000000149011612,
+        0.07999999821186066,
+        0.11999999731779099
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "body_nm",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.23749613761901855,
+        0.21003681421279907,
+        0.19229143857955933
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "wear_metal",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.18404895067214966,
+        0.19324280321598053,
+        0.20248295366764069
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "armgear_plastic",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.18404895067214966,
+        0.19324280321598053,
+        0.20248295366764069
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "robo_face",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.2335583120584488,
+        0.24473756551742554,
+        0.2422507107257843
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "glass",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.10000000149011612,
+        0.07999999821186066,
+        0.11999999731779099
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "backpack_metal",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11504927277565002,
+        0.1290917694568634,
+        0.13653595745563507
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "backpack_nm",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11504927277565002,
+        0.1290917694568634,
+        0.13653595745563507
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "backpack_plastic",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.11504927277565002,
+        0.1290917694568634,
+        0.13653595745563507
+      ],
+      "alphaMode": "OPAQUE"
+    },
+    {
+      "name": "anim_logo",
+      "mtoon": true,
+      "shadeColorFactor": [
+        0.75,
+        0.7200000286102295,
+        0.8199999928474426
+      ],
+      "outlineWidthMode": "worldCoordinates",
+      "outlineWidthFactor": 0.0024999999441206455,
+      "outlineColorFactor": [
+        0.10000000149011612,
+        0.07999999821186066,
+        0.11999999731779099
+      ],
+      "alphaMode": "OPAQUE"
+    }
+  ],
+  "log": [
+    "VRM add-on ready (bpy.ops.export_scene.vrm present)",
+    "imported 10 objects from D:\\ds\\tools\\vrm\\out\\stock_fbx\\stock_rigged.fbx",
+    "armature: Armature (51 bones); meshes=9 skinned=8",
+    "humanoid mapping: 51 bones mapped, 0 unmapped, 0 conflicts",
+    "  chest                    <- mixamorig:Spine1",
+    "  head                     <- mixamorig:Head",
+    "  hips                     <- mixamorig:Hips",
+    "  leftFoot                 <- mixamorig:LeftFoot",
+    "  leftHand                 <- mixamorig:LeftHand",
+    "  leftIndexDistal          <- mixamorig:LeftHandIndex3",
+    "  leftIndexIntermediate    <- mixamorig:LeftHandIndex2",
+    "  leftIndexProximal        <- mixamorig:LeftHandIndex1",
+    "  leftLittleDistal         <- mixamorig:LeftHandPinky3",
+    "  leftLittleIntermediate   <- mixamorig:LeftHandPinky2",
+    "  leftLittleProximal       <- mixamorig:LeftHandPinky1",
+    "  leftLowerArm             <- mixamorig:LeftForeArm",
+    "  leftLowerLeg             <- mixamorig:LeftLeg",
+    "  leftMiddleDistal         <- mixamorig:LeftHandMiddle3",
+    "  leftMiddleIntermediate   <- mixamorig:LeftHandMiddle2",
+    "  leftMiddleProximal       <- mixamorig:LeftHandMiddle1",
+    "  leftRingDistal           <- mixamorig:LeftHandRing3",
+    "  leftRingIntermediate     <- mixamorig:LeftHandRing2",
+    "  leftRingProximal         <- mixamorig:LeftHandRing1",
+    "  leftShoulder             <- mixamorig:LeftShoulder",
+    "  leftThumbDistal          <- mixamorig:LeftHandThumb3",
+    "  leftThumbMetacarpal      <- mixamorig:LeftHandThumb1",
+    "  leftThumbProximal        <- mixamorig:LeftHandThumb2",
+    "  leftToes                 <- mixamorig:LeftToeBase",
+    "  leftUpperArm             <- mixamorig:LeftArm",
+    "  leftUpperLeg             <- mixamorig:LeftUpLeg",
+    "  neck                     <- mixamorig:Neck",
+    "  rightFoot                <- mixamorig:RightFoot",
+    "  rightHand                <- mixamorig:RightHand",
+    "  rightIndexDistal         <- mixamorig:RightHandIndex3",
+    "  rightIndexIntermediate   <- mixamorig:RightHandIndex2",
+    "  rightIndexProximal       <- mixamorig:RightHandIndex1",
+    "  rightLittleDistal        <- mixamorig:RightHandPinky3",
+    "  rightLittleIntermediate  <- mixamorig:RightHandPinky2",
+    "  rightLittleProximal      <- mixamorig:RightHandPinky1",
+    "  rightLowerArm            <- mixamorig:RightForeArm",
+    "  rightLowerLeg            <- mixamorig:RightLeg",
+    "  rightMiddleDistal        <- mixamorig:RightHandMiddle3",
+    "  rightMiddleIntermediate  <- mixamorig:RightHandMiddle2",
+    "  rightMiddleProximal      <- mixamorig:RightHandMiddle1",
+    "  rightRingDistal          <- mixamorig:RightHandRing3",
+    "  rightRingIntermediate    <- mixamorig:RightHandRing2",
+    "  rightRingProximal        <- mixamorig:RightHandRing1",
+    "  rightShoulder            <- mixamorig:RightShoulder",
+    "  rightThumbDistal         <- mixamorig:RightHandThumb3",
+    "  rightThumbMetacarpal     <- mixamorig:RightHandThumb1",
+    "  rightThumbProximal       <- mixamorig:RightHandThumb2",
+    "  rightToes                <- mixamorig:RightToeBase",
+    "  rightUpperArm            <- mixamorig:RightArm",
+    "  rightUpperLeg            <- mixamorig:RightUpLeg",
+    "  spine                    <- mixamorig:Spine",
+    "colliders: ['head_colliders', 'hips_colliders', 'chest_colliders']",
+    "chain tail: 331 verts, axis=(0.0, 0.833, -0.553), length=0.567, root=(-0.0, 0.083, 0.83), parent=mixamorig:Hips",
+    "chain tail: 7 deform bones + end, spring joints=8 stiffness=0.9->0.35 drag=0.3 gravity=0.25",
+    "chain ear_L: 111 verts, axis=(0.822, 0.0, 0.569), length=0.158, root=(0.047, 0.012, 1.396), parent=mixamorig:Head",
+    "chain ear_L: 2 deform bones + end, spring joints=3 stiffness=1.2->0.6 drag=0.4 gravity=0.0",
+    "chain ear_R: 111 verts, axis=(-0.822, 0.0, 0.569), length=0.158, root=(-0.047, 0.012, 1.396), parent=mixamorig:Head",
+    "chain ear_R: 2 deform bones + end, spring joints=3 stiffness=1.2->0.6 drag=0.4 gravity=0.0",
+    "chain hair_tail: 156 verts, axis=(-0.541, 0.469, -0.698), length=0.407, root=(0.02, 0.058, 1.32), parent=mixamorig:Head",
+    "chain hair_tail: 6 deform bones + end, spring joints=7 stiffness=0.7->0.35 drag=0.35 gravity=0.15",
+    "  MToon ear_L_mat: base_tex=None mean=None outline_col=(0.1, 0.08, 0.12)",
+    "  MToon ear_R_mat: base_tex=None mean=None outline_col=(0.1, 0.08, 0.12)",
+    "  MToon hair: base_tex=hair mean=(0.134, 0.13, 0.129) outline_col=(0.038, 0.037, 0.036)",
+    "  MToon huku_bake: base_tex=wear mean=(0.657, 0.69, 0.723) outline_col=(0.184, 0.193, 0.202)",
+    "  MToon body_bake: base_tex=body mean=(0.848, 0.75, 0.687) outline_col=(0.237, 0.21, 0.192)",
+    "  MToon eye: base_tex=faceparts mean=(0.428, 0.315, 0.25) outline_col=(0.12, 0.088, 0.07)",
+    "  MToon eye_trans: base_tex=faceparts mean=(0.428, 0.315, 0.25) outline_col=(0.12, 0.088, 0.07)",
+    "  MToon arm_mat: base_tex=robo_arm mean=(0.462, 0.484, 0.516) outline_col=(0.129, 0.135, 0.145)",
+    "  MToon arm_plastic: base_tex=robo_arm mean=(0.462, 0.484, 0.516) outline_col=(0.129, 0.135, 0.145)",
+    "  MToon green_emit: base_tex=backpack mean=(0.411, 0.461, 0.488) outline_col=(0.115, 0.129, 0.137)",
+    "  MToon tail_mat: base_tex=None mean=None outline_col=(0.1, 0.08, 0.12)",
+    "  MToon body_nm: base_tex=body mean=(0.848, 0.75, 0.687) outline_col=(0.237, 0.21, 0.192)",
+    "  MToon wear_metal: base_tex=wear mean=(0.657, 0.69, 0.723) outline_col=(0.184, 0.193, 0.202)",
+    "  MToon armgear_plastic: base_tex=wear mean=(0.657, 0.69, 0.723) outline_col=(0.184, 0.193, 0.202)",
+    "  MToon robo_face: base_tex=planekun_face mean=(0.834, 0.874, 0.865) outline_col=(0.234, 0.245, 0.242)",
+    "  MToon glass: base_tex=None mean=None outline_col=(0.1, 0.08, 0.12)",
+    "  MToon backpack_metal: base_tex=backpack mean=(0.411, 0.461, 0.488) outline_col=(0.115, 0.129, 0.137)",
+    "  MToon backpack_nm: base_tex=backpack mean=(0.411, 0.461, 0.488) outline_col=(0.115, 0.129, 0.137)",
+    "  MToon backpack_plastic: base_tex=backpack mean=(0.411, 0.461, 0.488) outline_col=(0.115, 0.129, 0.137)",
+    "  MToon anim_logo: base_tex=None mean=None outline_col=(0.1, 0.08, 0.12)",
+    "materials converted to MToon: 20",
+    "face material: eye (pattern '^eye$')",
+    "exported D:\\ds\\tools\\vrm\\out\\build\\stock_from_fbx.vrm (15150772 bytes)"
+  ],
+  "input": "D:\\ds\\tools\\vrm\\out\\stock_fbx\\stock_rigged.fbx"
+}

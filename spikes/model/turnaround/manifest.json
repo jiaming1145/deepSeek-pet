@@ -1,0 +1,47 @@
+{
+  "front": {
+    "source": "turnaround/_candidates/front_v4_g31-0.jpg",
+    "bbox_xyxy": [
+      194,
+      338,
+      1339,
+      2269
+    ],
+    "scale": 1.3975,
+    "figure_px": [
+      1602,
+      2700
+    ]
+  },
+  "right": {
+    "source": "turnaround/_candidates/right_v1_g31-0.jpg",
+    "bbox_xyxy": [
+      54,
+      348,
+      1346,
+      2035
+    ],
+    "scale": 1.5995,
+    "figure_px": [
+      2068,
+      2700
+    ]
+  },
+  "back": {
+    "source": "turnaround/_candidates/back_v4_g31-0.jpg",
+    "bbox_xyxy": [
+      291,
+      232,
+      1597,
+      2285
+    ],
+    "scale": 1.3145,
+    "figure_px": [
+      1718,
+      2700
+    ]
+  },
+  "left": {
+    "source": "mirror of right.png (character is bilaterally symmetric; tail drawn straight back in side views)"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "colliders": true,
+  "chains": [
+    {
+      "name": "tail",
+      "select": {
+        "object": "^tail$"
+      },
+      "bones": 7,
+      "parent": "hips",
+      "stiffness": 0.9,
+      "stiffness_tip": 0.35,
+      "drag": 0.3,
+      "gravity": 0.25,
+      "hit_radius": 0.03,
+      "blend_root": 0.12,
+      "collider_groups": [
+        "hips_colliders"
+      ]
+    },
+    {
+      "name": "ear_L",
+      "select": {
+        "object": "^ear_L$"
+      },
+      "bones": 2,
+      "parent": "head",
+      "stiffness": 1.2,
+      "drag": 0.4,
+      "gravity": 0.0,
+      "hit_radius": 0.01,
+      "blend_root": 0.2
+    },
+    {
+      "name": "ear_R",
+      "select": {
+        "object": "^ear_R$"
+      },
+      "bones": 2,
+      "parent": "head",
+      "stiffness": 1.2,
+      "drag": 0.4,
+      "gravity": 0.0,
+      "hit_radius": 0.01,
+      "blend_root": 0.2
+    },
+    {
+      "name": "hair_tail",
+      "select": {
+        "object": "^hair_tail$"
+      },
+      "bones": 6,
+      "parent": "head",
+      "stiffness": 0.7,
+      "drag": 0.35,
+      "gravity": 0.15,
+      "hit_radius": 0.02,
+      "blend_root": 0.1,
+      "collider_groups": [
+        "head_colliders"
+      ]
+    }
+  ]
+}

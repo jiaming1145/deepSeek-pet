@@ -1,0 +1,17 @@
+{
+  "_source": "Sheet values: median of hue-filtered pixels inside the named callout circle / swatch dot of whalechan-character-color-material-reference-sheet.webp (scripts/extract_palette.py). Canonical values: median RGB of opaque pixels of the named v005 part PNG (our own art, authoritative for the texture).",
+  "navy_deep":   {"hex": "#0a1f49", "name": "Deep-sea navy (sleeve upper / bow knot shadow)", "sheet": "#212f5b", "canonical_part": "sleeve_upper_l"},
+  "navy":        {"hex": "#122e62", "name": "Dress navy (skirt, sleeves, shoes, bows)", "sheet_swatch_dot": "#1e3976", "canonical_part": "skirt_front_center"},
+  "blue_mid":    {"hex": "#2e57ab", "name": "Mid blue (hair base, fin ears, head hair)", "canonical_part": "head_base #295fab / fin_ear_l #2c63a9"},
+  "blue_tail":   {"hex": "#22498c", "name": "Tail blue (tail root/stock/flukes)", "canonical_part": "tail_root"},
+  "cyan_tips":   {"hex": "#54a2db", "name": "Cyan hair tips (gradient end)", "canonical_part": "hair_back_strand_l #25a2f4 (brighter, ends of strands)"},
+  "cyan_splash": {"hex": "#71ddfc", "name": "Water splash / bubble cyan", "canonical_part": "tail_splash_fx"},
+  "white":       {"hex": "#fdf9f6", "name": "Apron / bonnet / tights white (warm)", "sheet": "#fef9f8", "canonical_part": "apron_panel"},
+  "gold":        {"hex": "#ce9d66", "name": "Accent gold (hem trim lines, hip bows, brooch rim)", "canonical_part": "chest_gem #a28264 (darker: gem bezel)"},
+  "skin":        {"hex": "#f9c9b8", "name": "Skin (mouth_cover_skin, hands)", "sheet_swatch_dot": "#fbc8ba"},
+  "skin_blush":  {"hex": "#fbd1bc", "name": "Cheek blush wash", "sheet": "#fbd1bc"},
+  "iris":        {"hex": "#193e76", "name": "Iris base", "canonical_part": "iris_l"},
+  "iris_light":  {"hex": "#2589e4", "name": "Iris highlight ring", "canonical_part": "iris_detail_l"},
+  "emblem_blue": {"hex": "#234587", "name": "Whale apron motif blue", "canonical_part": "apron_emblem"},
+  "pink_fx":     {"hex": "#f87598", "name": "Heart FX pink", "canonical_part": "heart_fx"}
+}

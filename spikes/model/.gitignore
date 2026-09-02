@@ -1,0 +1,5 @@
+turnaround/_candidates/
+face/_scratch/
+generated/
+reference/*_rgba.png
+reference/canonical_front_2048_*.png

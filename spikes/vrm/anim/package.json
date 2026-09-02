@@ -1,0 +1,16 @@
+{
+  "name": "@ds-spike/vrm-anim",
+  "private": true,
+  "type": "module",
+  "description": "Animation sources, loaders and retargeting for the VRM pet spike (D:/ds/spikes/vrm/anim)",
+  "scripts": {
+    "smoke": "node retarget/smoke.mjs"
+  },
+  "devDependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "@pixiv/three-vrm-animation": "^3.5.5",
+    "@pixiv/three-vrm-core": "^3.5.5",
+    "jsdom": "^30.0.1",
+    "three": "^0.185.1"
+  }
+}

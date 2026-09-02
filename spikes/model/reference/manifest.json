@@ -1,0 +1,301 @@
+{
+  "overview_front": {
+    "sheet": "whalechan-character-overview-reference-sheet.webp",
+    "crop_box_xyxy": [
+      285,
+      120,
+      800,
+      960
+    ],
+    "source_px": [
+      515,
+      840
+    ],
+    "output_px": [
+      628,
+      1024
+    ],
+    "bg_removed_fraction": 0.359
+  },
+  "overview_side": {
+    "sheet": "whalechan-character-overview-reference-sheet.webp",
+    "crop_box_xyxy": [
+      860,
+      60,
+      1300,
+      570
+    ],
+    "source_px": [
+      440,
+      510
+    ],
+    "output_px": [
+      883,
+      1024
+    ],
+    "bg_removed_fraction": 0.603
+  },
+  "overview_back": {
+    "sheet": "whalechan-character-overview-reference-sheet.webp",
+    "crop_box_xyxy": [
+      980,
+      550,
+      1320,
+      1010
+    ],
+    "source_px": [
+      340,
+      460
+    ],
+    "output_px": [
+      757,
+      1024
+    ],
+    "bg_removed_fraction": 0.457
+  },
+  "overview_tail_attachment": {
+    "sheet": "whalechan-character-overview-reference-sheet.webp",
+    "crop_box_xyxy": [
+      712,
+      745,
+      950,
+      960
+    ],
+    "source_px": [
+      238,
+      215
+    ],
+    "output_px": [
+      1024,
+      925
+    ],
+    "bg_removed_fraction": 0.269
+  },
+  "tail_at_rest_back": {
+    "sheet": "whalechan-character-tail-motion-reference-sheet.webp",
+    "crop_box_xyxy": [
+      740,
+      60,
+      960,
+      400
+    ],
+    "source_px": [
+      220,
+      340
+    ],
+    "output_px": [
+      663,
+      1024
+    ],
+    "bg_removed_fraction": 0.429
+  },
+  "tail_turning_side": {
+    "sheet": "whalechan-character-tail-motion-reference-sheet.webp",
+    "crop_box_xyxy": [
+      1020,
+      60,
+      1390,
+      400
+    ],
+    "source_px": [
+      370,
+      340
+    ],
+    "output_px": [
+      1024,
+      941
+    ],
+    "bg_removed_fraction": 0.646
+  },
+  "tail_accelerating_side": {
+    "sheet": "whalechan-character-tail-motion-reference-sheet.webp",
+    "crop_box_xyxy": [
+      740,
+      420,
+      1090,
+      720
+    ],
+    "source_px": [
+      350,
+      300
+    ],
+    "output_px": [
+      1024,
+      878
+    ],
+    "bg_removed_fraction": 0.571
+  },
+  "tail_balancing_side": {
+    "sheet": "whalechan-character-tail-motion-reference-sheet.webp",
+    "crop_box_xyxy": [
+      750,
+      700,
+      1080,
+      1000
+    ],
+    "source_px": [
+      330,
+      300
+    ],
+    "output_px": [
+      1024,
+      931
+    ],
+    "bg_removed_fraction": 0.66
+  },
+  "tail_cozy_hug": {
+    "sheet": "whalechan-character-tail-motion-reference-sheet.webp",
+    "crop_box_xyxy": [
+      1080,
+      700,
+      1390,
+      1000
+    ],
+    "source_px": [
+      310,
+      300
+    ],
+    "output_px": [
+      1024,
+      991
+    ],
+    "bg_removed_fraction": 0.497
+  },
+  "costume_headband_ruffle": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      770,
+      40,
+      1020,
+      300
+    ],
+    "source_px": [
+      250,
+      260
+    ],
+    "output_px": [
+      985,
+      1024
+    ],
+    "bg_removed_fraction": 0.377
+  },
+  "costume_jeweled_bow": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      990,
+      225,
+      1255,
+      460
+    ],
+    "source_px": [
+      265,
+      235
+    ],
+    "output_px": [
+      1024,
+      908
+    ],
+    "bg_removed_fraction": 0.294
+  },
+  "costume_white_bib": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      860,
+      425,
+      1085,
+      655
+    ],
+    "source_px": [
+      225,
+      230
+    ],
+    "output_px": [
+      1002,
+      1024
+    ],
+    "bg_removed_fraction": 0.299
+  },
+  "costume_gold_trim_hem": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      1080,
+      595,
+      1335,
+      830
+    ],
+    "source_px": [
+      255,
+      235
+    ],
+    "output_px": [
+      1024,
+      944
+    ],
+    "bg_removed_fraction": 0.445
+  },
+  "costume_whale_apron_motif": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      930,
+      785,
+      1185,
+      1020
+    ],
+    "source_px": [
+      255,
+      235
+    ],
+    "output_px": [
+      1024,
+      944
+    ],
+    "bg_removed_fraction": 0.36
+  },
+  "costume_full_pose": {
+    "sheet": "whalechan-character-costume-layers-reference-sheet.webp",
+    "crop_box_xyxy": [
+      180,
+      130,
+      960,
+      980
+    ],
+    "source_px": [
+      780,
+      850
+    ],
+    "output_px": [
+      940,
+      1024
+    ],
+    "bg_removed_fraction": 0.501
+  },
+  "color_full_pose": {
+    "sheet": "whalechan-character-color-material-reference-sheet.webp",
+    "crop_box_xyxy": [
+      60,
+      130,
+      780,
+      1000
+    ],
+    "source_px": [
+      720,
+      870
+    ],
+    "output_px": [
+      847,
+      1024
+    ],
+    "bg_removed_fraction": 0.484
+  },
+  "canonical_front_2048": {
+    "source": "D:/ds/runs/deepseek_humanized_20260830_001/01_design/canonical/revisions/v005/canonical_v005.png",
+    "source_px": [
+      4096,
+      8192
+    ],
+    "output_px": [
+      1024,
+      2048
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+# build outputs (VRM/GLB/blend/atlas are 10-20 MB each) - regenerate with run_demo.ps1
+out/
+# downloaded third-party assets (add-on zip, sample models) - install_vrm_addon.py / run_demo.ps1 fetch them
+vendor/
+__pycache__/

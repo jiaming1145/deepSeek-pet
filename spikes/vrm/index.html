@@ -1,0 +1,338 @@
+<!doctype html><html><head><meta charset="utf-8"><title>vrm lab</title>
+<style>
+ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+ canvas{display:block}
+ #hud{position:fixed;left:8px;top:8px;font:11px ui-monospace,Consolas,monospace;color:#9fe;
+      text-shadow:0 1px 2px #000,0 0 4px #000;line-height:1.5;pointer-events:none;white-space:pre}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "../../apps/desktop/node_modules/three/build/three.module.js",
+  "three/addons/": "../../apps/desktop/node_modules/three/examples/jsm/",
+  "@pixiv/three-vrm": "../../apps/desktop/node_modules/@pixiv/three-vrm/lib/three-vrm.module.js",
+  "@pixiv/three-vrm-animation": "../../apps/desktop/node_modules/@pixiv/three-vrm-animation/lib/three-vrm-animation.module.js"
+} }
+</script>
+</head><body>
+<div id="hud"></div>
+<script>
+window.__error = null; window.__ready = false;
+window.addEventListener('error', (e) => { window.__error = String(e.error?.stack || e.message); });
+window.addEventListener('unhandledrejection', (e) => { window.__error = String(e.reason?.stack || e.reason); });
+</script>
+<script type="module">
+// =====================================================================================
+// VRM lab: a stock VRM 1.0 model in the pet window with the procedural layers the 3D pet
+// needs, stacked in a fixed order every frame:
+//   reset normalized pose -> clip (mixer) -> idle arm pose -> breathing -> wave -> hop -> IK
+//   -> vrm.update(dt) (look-at, expressions, spring bones, normalized->raw copy)
+// =====================================================================================
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+import { loadMixamoAnimation } from './lib/loadMixamoAnimation.js';
+
+const DEG = Math.PI / 180, clamp = (v, a, b) => (v < a ? a : v > b ? b : v), lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (t) => t * t * (3 - 2 * t);
+const hud = document.getElementById('hud');
+
+// ------------------------------------------------------------------ renderer / scene
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, premultipliedAlpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 0);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(24, window.innerWidth / window.innerHeight, 0.1, 50);
+// Soft key + fill; MToon reads the directional light for its shade ramp.
+const key = new THREE.DirectionalLight(0xfff4e6, Math.PI * 0.9); key.position.set(1.2, 2.2, 2.0); scene.add(key);
+const fill = new THREE.DirectionalLight(0xcfe3ff, Math.PI * 0.35); fill.position.set(-1.5, 0.5, 1.0); scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ------------------------------------------------------------------ load VRM
+const loader = new GLTFLoader();
+loader.register((p) => new VRMLoaderPlugin(p));
+loader.register((p) => new VRMAnimationLoaderPlugin(p));
+const gltf = await loader.loadAsync('./models/VRM1_Constraint_Twist_Sample.vrm');
+const vrm = gltf.userData.vrm;
+VRMUtils.removeUnnecessaryVertices(gltf.scene);
+VRMUtils.combineSkeletons(gltf.scene);
+vrm.scene.traverse((o) => { o.frustumCulled = false; });
+scene.add(vrm.scene);
+const model = vrm.scene;            // root: hop/nudge move this
+const hum = vrm.humanoid;
+const B = (n) => hum.getNormalizedBoneNode(n);
+const lookTarget = new THREE.Object3D(); scene.add(lookTarget);
+vrm.lookAt.target = lookTarget;
+vrm.springBoneManager?.reset();
+
+// frame the whole body
+const box = new THREE.Box3().setFromObject(model);
+const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+const dist = (size.y * 1.3) / (2 * Math.tan(camera.fov * DEG / 2));   // 30% headroom: hop + hair stay inside the window
+camera.position.set(0, center.y + size.y * 0.07, dist); camera.lookAt(0, center.y + size.y * 0.07, 0);
+const headY = B('head').getWorldPosition(new THREE.Vector3()).y;
+lookTarget.position.set(0, headY, dist);
+
+// ------------------------------------------------------------------ state
+const S = {
+  breathe: true, blink: true, look: true, talk: false, hudOn: true,
+  expr: 'neutral', exprW: {}, exprTarget: {},           // expression crossfade (weights per preset)
+  action: 'idle', t: 0, actionDur: 2.0,                 // wave / hop / reach clocks
+  reach: null,                                          // IK target (world)
+  nudgeV: new THREE.Vector3(), nudgeP: new THREE.Vector3(),
+  mixer: new THREE.AnimationMixer(model), clip: null, clipName: null,
+  hop: { y: 0, sy: 1 }, wave: 0, mouse: { x: 0, y: 0 },
+  forcedBlink: null, forcedVis: null,
+};
+const EXPR = ['neutral', 'happy', 'angry', 'sad', 'relaxed', 'surprised'];
+for (const e of EXPR) { S.exprW[e] = e === 'neutral' ? 1 : 0; S.exprTarget[e] = S.exprW[e]; }
+const VIS = ['aa', 'ih', 'ou', 'ee', 'oh'];
+
+// ------------------------------------------------------------------ mouse look
+window.addEventListener('mousemove', (e) => { S.mouse.x = (e.clientX / innerWidth) * 2 - 1; S.mouse.y = -((e.clientY / innerHeight) * 2 - 1); });
+function applyLook() {
+  // put the target on a plane a little in front of the face, spanning +-1.2 m
+  lookTarget.position.set(S.mouse.x * 1.2, headY + S.mouse.y * 0.9, 1.2);
+}
+
+// ------------------------------------------------------------------ blink
+let blinkT = 0, nextBlink = 2.5;
+function blinkWeight(dt) {
+  if (S.forcedBlink != null) return S.forcedBlink;
+  if (!S.blink) return 0;
+  blinkT += dt;
+  if (blinkT < nextBlink) return 0;
+  const p = (blinkT - nextBlink) / 0.18;          // 180 ms blink: fast close, slower open
+  if (p >= 1) { blinkT = 0; nextBlink = 1.8 + Math.random() * 3.2; return 0; }
+  return p < 0.35 ? smooth(p / 0.35) : 1 - smooth((p - 0.35) / 0.65);
+}
+
+// ------------------------------------------------------------------ lip flap
+let talkT = 0;
+function visemes(dt) {
+  const out = {}; for (const v of VIS) out[v] = 0;
+  if (S.forcedVis) { out[S.forcedVis] = 1; return out; }
+  if (!S.talk) return out;
+  talkT += dt;
+  const cyc = ['aa', 'ih', 'ou', 'ee', 'aa', 'oh'];
+  const i = Math.floor(talkT / 0.13) % cyc.length, ph = (talkT / 0.13) % 1;
+  out[cyc[i]] = 0.85 * Math.sin(ph * Math.PI);
+  return out;
+}
+
+// ------------------------------------------------------------------ procedural layers
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const rotZ = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), a));
+const rotX = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(1, 0, 0), a));
+const rotY = (n, a) => B(n)?.quaternion.multiply(_q.setFromAxisAngle(_v.set(0, 1, 0), a));
+
+// VRM 1.0 rest is a T-pose: this brings the arms down to a relaxed stance, and is skipped
+// while a clip owns the arms.
+function idlePose() {
+  rotZ('rightUpperArm', 68 * DEG); rotZ('leftUpperArm', -68 * DEG);
+  rotZ('rightLowerArm', 8 * DEG); rotZ('leftLowerArm', -8 * DEG);
+  rotY('rightLowerArm', 12 * DEG); rotY('leftLowerArm', -12 * DEG);
+}
+let clock = 0;
+function breathing(dt) {
+  if (!S.breathe) return;
+  const b = Math.sin(clock * 2 * Math.PI / 3.6);          // 3.6 s breath
+  rotX('spine', -1.5 * DEG * b); rotX('chest', -2.2 * DEG * b); rotX('upperChest', -1.4 * DEG * b);
+  rotX('neck', 1.0 * DEG * b); rotX('head', 0.8 * DEG * b);
+  rotZ('spine', 0.6 * DEG * Math.sin(clock * 2 * Math.PI / 7.1));   // slow sway
+  rotZ('rightShoulder', -2.5 * DEG * b); rotZ('leftShoulder', 2.5 * DEG * b);
+}
+function wave() {
+  const t = S.t, w = S.wave;
+  if (w <= 0) return;
+  // right arm up and out, forearm oscillating; blended by w so it eases in/out
+  rotZ('rightUpperArm', -88 * DEG * w); rotY('rightUpperArm', 20 * DEG * w);
+  rotZ('rightLowerArm', (-88 + 32 * Math.sin(t * 2 * Math.PI * 2.2)) * DEG * w);   // forearm up, swinging +-32 deg
+  rotX('rightLowerArm', 8 * DEG * w);
+  rotZ('rightHand', 22 * Math.sin(t * 2 * Math.PI * 2.2 + 0.7) * DEG * w);
+  rotZ('spine', 4 * DEG * w); rotZ('head', -6 * DEG * w);
+}
+function hop() {
+  if (S.action !== 'hop') { S.hop.y = 0; S.hop.sy = 1; return; }
+  const p = clamp(S.t / S.actionDur, 0, 1);
+  // anticipation squash (0..0.2), launch stretch (0.2..0.35), flight (0.35..0.75), land squash, settle
+  let y = 0, sy = 1;
+  if (p < 0.2) { const k = smooth(p / 0.2); sy = 1 - 0.14 * k; }
+  else if (p < 0.75) { const k = (p - 0.2) / 0.55; y = 0.16 * Math.sin(k * Math.PI); sy = 1 + 0.12 * Math.sin(k * Math.PI) * (1 - k * 0.5); if (k < 0.15) sy = lerp(0.86, 1.12, k / 0.15); }
+  else if (p < 0.9) { const k = smooth((p - 0.75) / 0.15); sy = lerp(0.84, 1, k); }
+  const sx = 1 / Math.sqrt(sy);                     // volume-preserving
+  S.hop.y = y; S.hop.sy = sy;
+  model.scale.set(sx, sy, sx);
+  // knees: bend during squash so it reads as a crouch, not a scaled sprite
+  const bend = clamp((1 - sy) * 4, 0, 1) * 35 * DEG;
+  rotX('rightUpperLeg', -bend * 0.8); rotX('leftUpperLeg', -bend * 0.8);
+  rotX('rightLowerLeg', bend * 1.6); rotX('leftLowerLeg', bend * 1.6);
+  rotX('spine', bend * 0.4);
+}
+// Two-bone analytic IK: upper arm aims the chain at the target, forearm supplies the elbow
+// angle from the law of cosines, then a pole twist keeps the elbow low/back.
+function ikReach() {
+  if (!S.reach) return;
+  const up = B('rightUpperArm'), lo = B('rightLowerArm'), hand = B('rightHand');
+  const target = S.reach, w = S.action === 'reach' ? smooth(clamp(S.t / 0.5, 0, 1)) : 1;
+  model.updateWorldMatrix(true, true);
+  const s = up.getWorldPosition(new THREE.Vector3()), e0 = lo.getWorldPosition(new THREE.Vector3()), h0 = hand.getWorldPosition(new THREE.Vector3());
+  const a = s.distanceTo(e0), b = e0.distanceTo(h0);
+  const d = clamp(s.distanceTo(target), Math.abs(a - b) + 1e-3, a + b - 1e-3);
+  const elbow = Math.acos(clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));   // interior angle
+  // 1) forearm bend about its local Y (forward-bending elbow for the right arm)
+  lo.quaternion.identity();
+  lo.quaternion.setFromAxisAngle(_v.set(0, 1, 0), (Math.PI - elbow));
+  // 2) aim upper arm: rotate so shoulder->hand points at shoulder->target
+  for (let it = 0; it < 2; it++) {
+    model.updateWorldMatrix(true, true);
+    hand.getWorldPosition(h0);
+    _v.subVectors(h0, s).normalize(); _v2.subVectors(target, s).normalize();
+    _q.setFromUnitVectors(_v, _v2);
+    up.parent.getWorldQuaternion(_q2);
+    // local' = P^-1 * q * P * local
+    up.quaternion.premultiply(_q2).premultiply(_q).premultiply(_q2.clone().invert());
+  }
+  // 3) pole: twist about shoulder->target so the elbow drops toward the pole point (below/behind)
+  model.updateWorldMatrix(true, true);
+  lo.getWorldPosition(e0);
+  const axis = _v2.subVectors(target, s).normalize();
+  const pole = _v3.set(s.x - 0.3, s.y - 0.6, s.z - 0.3);
+  const pe = e0.clone().sub(s).projectOnPlane(axis).normalize(), pp = pole.sub(s).projectOnPlane(axis).normalize();
+  let ang = Math.acos(clamp(pe.dot(pp), -1, 1)); if (pe.clone().cross(pp).dot(axis) < 0) ang = -ang;
+  _q.setFromAxisAngle(axis, ang * 0.85);
+  up.parent.getWorldQuaternion(_q2);
+  up.quaternion.premultiply(_q2).premultiply(_q).premultiply(_q2.clone().invert());
+  // 4) hand: relax the wrist toward the target direction, and blend by w for ease-in
+  if (w < 1) {
+    // ease from the idle pose by slerping from the pose we computed before IK (stored below)
+    up.quaternion.slerp(preIK.up, 1 - w); lo.quaternion.slerp(preIK.lo, 1 - w);
+  }
+  // look at the hand target too
+  lookTarget.position.copy(target);
+}
+const preIK = { up: new THREE.Quaternion(), lo: new THREE.Quaternion() };
+
+// spring nudge: a damped spring on the model root so hair/skirt/ribbons get an impulse
+function nudge(dt) {
+  const k = 90, c = 2 * Math.sqrt(k) * 0.55;
+  S.nudgeV.addScaledVector(S.nudgeP, -k * dt).addScaledVector(S.nudgeV, -c * dt);
+  S.nudgeP.addScaledVector(S.nudgeV, dt);
+}
+
+// ------------------------------------------------------------------ expressions
+function expressions(dt) {
+  const em = vrm.expressionManager;
+  for (const e of EXPR) {
+    S.exprW[e] = lerp(S.exprW[e], S.exprTarget[e], 1 - Math.exp(-dt / 0.09));  // ~250 ms crossfade
+    if (e !== 'neutral') em.setValue(e, S.exprW[e]);
+  }
+  em.setValue('blink', blinkWeight(dt));
+  const v = visemes(dt); for (const k of VIS) em.setValue(k, v[k]);
+}
+
+// ------------------------------------------------------------------ stats
+const stats = { frames: 0, ms: [], t0: performance.now(), last: performance.now() };
+function statsFrame(now) { stats.ms.push(now - stats.last); stats.last = now; stats.frames++; if (stats.ms.length > 2000) stats.ms.shift(); }
+
+// ------------------------------------------------------------------ frame
+let prev = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now; clock += dt; S.t += dt;
+  statsFrame(now);
+
+  hum.resetNormalizedPose();
+  model.scale.set(1, 1, 1);
+  const clipOwnsArms = !!S.clip;
+  if (S.clip) S.mixer.update(dt);
+  if (!clipOwnsArms) idlePose();
+  breathing(dt);
+  if (S.action === 'wave') { const p = S.t / S.actionDur; S.wave = p < 0.15 ? smooth(p / 0.15) : p > 0.85 ? smooth((1 - p) / 0.15) : 1; if (p >= 1) { S.action = 'idle'; S.wave = 0; } }
+  wave();
+  hop();
+  if (S.action === 'hop' && S.t >= S.actionDur) S.action = 'idle';
+  if (S.reach) { preIK.up.copy(B('rightUpperArm').quaternion); preIK.lo.copy(B('rightLowerArm').quaternion); ikReach(); }
+  else if (S.look) applyLook();
+  nudge(dt);
+  model.position.set(S.nudgeP.x, S.hop.y + S.nudgeP.y, S.nudgeP.z);
+  expressions(dt);
+  vrm.update(dt);
+  renderer.render(scene, camera);
+  if (S.hudOn) drawHud();
+}
+function drawHud() {
+  const n = Math.min(stats.ms.length, 120), recent = stats.ms.slice(-n), avg = recent.reduce((a, b) => a + b, 0) / (n || 1);
+  hud.textContent = `vrm lab  ${(1000 / avg).toFixed(0)} fps  ${avg.toFixed(1)} ms\n` +
+    `expr ${S.expr}  action ${S.action}  clip ${S.clipName || '-'}\n` +
+    `[1-5] happy angry sad relaxed surprised [0] neutral\n[B] blink ${S.blink ? 'on' : 'off'}  [T] talk ${S.talk ? 'on' : 'off'}  [L] look ${S.look ? 'on' : 'off'}  [I] breathe ${S.breathe ? 'on' : 'off'}\n` +
+    `[W] wave  [H] hop  [N] nudge  [R] reach->mouse (again: release)\n[A] vrma clip  [M] mixamo clip  [Space] stop clip  [G] hud`;
+}
+
+// ------------------------------------------------------------------ control surface
+async function playClipFile(kind, url) {
+  stopClip();
+  let clip;
+  if (kind === 'vrma') {
+    const g = await loader.loadAsync(url);
+    const anim = g.userData.vrmAnimations?.[0];
+    if (!anim) throw new Error('no VRMC_vrm_animation in ' + url);
+    clip = createVRMAnimationClip(anim, vrm);
+  } else {
+    clip = await loadMixamoAnimation(url, vrm, FBXLoader);
+  }
+  S.clip = S.mixer.clipAction(clip); S.clip.reset().setLoop(THREE.LoopRepeat, Infinity).play(); S.clipName = kind + ':' + url.split('/').pop();
+  return { tracks: clip.tracks.length, duration: clip.duration };
+}
+function stopClip() { if (S.clip) { S.clip.stop(); S.mixer.uncacheRoot(model); S.clip = null; S.clipName = null; } }
+
+const lab = window.lab = {
+  expression(name) { if (!EXPR.includes(name)) throw new Error('unknown expression ' + name); S.expr = name; for (const e of EXPR) S.exprTarget[e] = e === name ? 1 : 0; },
+  expressions: () => EXPR.slice(),
+  action(name, dur) { S.action = name; S.t = 0; S.actionDur = dur ?? (name === 'wave' ? 2.6 : name === 'hop' ? 1.1 : 2); if (name !== 'wave') S.wave = 0; },
+  setPhase(p) { S.t = p * S.actionDur; },
+  reach(x, y, z) { if (x == null) { S.reach = null; if (S.action === 'reach') S.action = 'idle'; return; } S.reach = new THREE.Vector3(x, y, z); S.action = 'reach'; S.t = 0; },
+  reachScreen(nx, ny) { lab.reach(nx * 0.7, headY - 0.2 + ny * 0.5, 0.45); },
+  look(nx, ny) { S.mouse.x = nx; S.mouse.y = ny; },
+  blink(on) { S.blink = on; }, forceBlink(w) { S.forcedBlink = w; },
+  talk(on) { S.talk = on; talkT = 0; }, forceViseme(v) { S.forcedVis = v; },
+  breathe(on) { S.breathe = on; }, lookOn(on) { S.look = on; },
+  nudge(x, y, z) { S.nudgeV.add(new THREE.Vector3(x, y, z ?? 0)); },
+  hud(on) { S.hudOn = on; if (!on) hud.textContent = ''; },
+  setTime(t) { clock = t; },
+  play: playClipFile, stop: stopClip,
+  resetStats() { stats.ms.length = 0; stats.frames = 0; stats.t0 = performance.now(); },
+  stats() {
+    const ms = stats.ms.slice().sort((a, b) => a - b), n = ms.length, sum = ms.reduce((a, b) => a + b, 0);
+    return { frames: stats.frames, seconds: (performance.now() - stats.t0) / 1000, avgMs: sum / n, p50Ms: ms[Math.floor(n * 0.5)], p95Ms: ms[Math.floor(n * 0.95)], maxMs: ms[n - 1], fps: stats.frames / ((performance.now() - stats.t0) / 1000), dpr: devicePixelRatio, size: [renderer.domElement.width, renderer.domElement.height] };
+  },
+  info() {
+    const em = vrm.expressionManager, sb = vrm.springBoneManager;
+    let joints = 0; sb?.joints.forEach(() => joints++);
+    return { meta: vrm.meta.name, metaVersion: vrm.meta.metaVersion, licenseUrl: vrm.meta.licenseUrl, expressions: em.expressions.map((e) => e.expressionName), springJoints: joints, springs: sb?.springs?.size ?? sb?.springs?.length, lookAt: vrm.lookAt?.constructor?.name, bones: Object.keys(hum.humanBones).length, height: size.y, materials: [...new Set(vrm.materials?.map((m) => m.type))] };
+  },
+  arm() { model.updateWorldMatrix(true, true); const s = B('rightUpperArm').getWorldPosition(new THREE.Vector3()), e = B('rightLowerArm').getWorldPosition(new THREE.Vector3()), h = B('rightHand').getWorldPosition(new THREE.Vector3()); return { shoulder: s.toArray(), length: s.distanceTo(e) + e.distanceTo(h) }; },
+  ikError() { if (!S.reach) return null; model.updateWorldMatrix(true, true); return B('rightHand').getWorldPosition(new THREE.Vector3()).distanceTo(S.reach); },
+  springSample() { // world x of the CHILD of a few spring joints, relative to the model root: the spring rotates the joint bone, so only the child moves; the nudge itself cancels out
+    const out = []; model.updateWorldMatrix(true, true);
+    vrm.springBoneManager?.joints.forEach((j) => { if (out.length < 6 && j.child) out.push(+(j.child.getWorldPosition(new THREE.Vector3()).x - model.position.x).toFixed(4)); }); return out;
+  },
+};
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  const ex = { 1: 'happy', 2: 'angry', 3: 'sad', 4: 'relaxed', 5: 'surprised', 0: 'neutral' }[k]; if (ex) return lab.expression(ex);
+  if (k === 'b') lab.blink(!S.blink); else if (k === 't') lab.talk(!S.talk); else if (k === 'l') lab.lookOn(!S.look); else if (k === 'i') lab.breathe(!S.breathe);
+  else if (k === 'w') lab.action('wave'); else if (k === 'h') lab.action('hop'); else if (k === 'n') lab.nudge(0.9 * (Math.random() < 0.5 ? -1 : 1), 0.3);
+  else if (k === 'r') { S.reach ? lab.reach(null) : lab.reachScreen(S.mouse.x, S.mouse.y); }
+  else if (k === 'a') lab.play('vrma', './clips/test.vrma').catch((err) => { window.__error = String(err.stack || err); });
+  else if (k === 'm') lab.play('mixamo', './clips/SambaDancing.fbx').catch((err) => { window.__error = String(err.stack || err); });
+  else if (k === ' ') lab.stop(); else if (k === 'g') lab.hud(!S.hudOn);
+});
+requestAnimationFrame(frame);
+window.__ready = true;
+</script>
+</body></html>

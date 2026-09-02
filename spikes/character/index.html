@@ -1,0 +1,373 @@
+<!doctype html><html><head><meta charset="utf-8"><title>character lab</title>
+<style>
+ html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+ canvas{display:block;width:100%;height:100%}
+ #hud{position:fixed;left:8px;top:8px;font:11px ui-monospace,Consolas,monospace;color:#9fe;
+      text-shadow:0 1px 2px #000;line-height:1.5;pointer-events:none;white-space:pre}
+</style></head><body>
+<canvas id="c"></canvas><div id="hud"></div>
+<script>
+// ===========================================================================================
+// Character lab: a first-pass procedural rig over the v005 parts. Bones are derived from the
+// art (joint = centroid of one part's band under its neighbour), parts are skinned to bone
+// chains with distance weights, and a small action + expression system drives it. No Live2D,
+// no editor. It shows the mechanism, not final polish.
+// ===========================================================================================
+const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, DEG=Math.PI/180;
+const smooth=(t)=>t*t*(3-2*t);
+
+// ------------------------------------------------------------------------------- bones
+class Bone{
+  constructor(name,parent,head,tail){ this.name=name; this.parent=parent; this.head=head; this.tail=tail;
+    this.restAngle=Math.atan2(tail[1]-head[1],tail[0]-head[0]); this.len=Math.hypot(tail[0]-head[0],tail[1]-head[1]);
+    this.delta=0; this.wpos=[head[0],head[1]]; this.wang=this.restAngle; this.vel=0; this.dyn=null; }
+}
+const bones={}; const order=[];
+function bone(name,parent,head,tail){ const b=new Bone(name,parent?bones[parent]:null,head,tail); bones[name]=b; order.push(b); return b; }
+function solveBones(root){
+  for(const b of order){
+    if(!b.parent){ b.wang=b.restAngle+b.delta; b.wpos=[b.head[0]+root.tx,b.head[1]+root.ty]; continue; }
+    const p=b.parent, rot=p.wang-p.restAngle, c=Math.cos(rot), s=Math.sin(rot);
+    const dx=b.head[0]-p.head[0], dy=b.head[1]-p.head[1];
+    b.wpos=[p.wpos[0]+dx*c-dy*s, p.wpos[1]+dx*s+dy*c];
+    b.wang=b.restAngle+(p.wang-p.restAngle)+b.delta;
+  }
+}
+// distance from point to a bone's rest segment
+function segDist(b,x,y){ const ax=b.head[0],ay=b.head[1],bx=b.tail[0],by=b.tail[1];
+  const l2=(bx-ax)**2+(by-ay)**2; let t=l2?((x-ax)*(bx-ax)+(y-ay)*(by-ay))/l2:0; t=clamp(t,0,1);
+  return Math.hypot(x-(ax+t*(bx-ax)), y-(ay+t*(by-ay))); }
+
+// ------------------------------------------------------------------------------- gl
+const cv=document.getElementById('c');
+const gl=cv.getContext('webgl2',{alpha:true,premultipliedAlpha:false,antialias:true});
+const VS='#version 300 es\nin vec2 aPos; in vec2 aUV; uniform vec4 uView; uniform vec4 uRoot; uniform vec2 uPivot; out vec2 vUV;\n'+
+'void main(){ vUV=aUV; vec2 p=(aPos-uPivot)*uRoot.zw+uPivot+uRoot.xy; gl_Position=vec4((p.x-uView.x)*uView.z, -(p.y-uView.y)*uView.w, 0., 1.); }';
+const FS='#version 300 es\nprecision highp float; in vec2 vUV; uniform sampler2D uTex; uniform float uAlpha; out vec4 o;\n'+
+'void main(){ vec4 t=texture(uTex,vUV); float a=t.a*uAlpha; o=vec4(t.rgb*a, a); }';
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram(); gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS)); gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+gl.bindAttribLocation(prog,0,'aPos'); gl.bindAttribLocation(prog,1,'aUV'); gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const U={view:gl.getUniformLocation(prog,'uView'),root:gl.getUniformLocation(prog,'uRoot'),pivot:gl.getUniformLocation(prog,'uPivot'),alpha:gl.getUniformLocation(prog,'uAlpha')};
+gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+function mkTex(img){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);return t;}
+
+// ------------------------------------------------------------------------------- parts
+class Part{
+  constructor(id,info,tex){ this.id=id; this.info=info; this.tex=tex; this.z=info.z; this.visible=true; this.alpha=1;
+    this.chain=null; this.offset=[0,0]; this.depth=0; this.scaleAbout=null;
+    const nx=Math.max(1,Math.round(info.w/14)), ny=Math.max(1,Math.round(info.h/14));
+    const pos=[],uv=[],idx=[];
+    for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){ const u=i/nx,v=j/ny; pos.push(info.x+u*info.w, info.y+v*info.h); uv.push(u,v); }
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){ const a=j*(nx+1)+i,b=a+1,c=a+nx+1,d=c+1; idx.push(a,b,c,b,d,c); }
+    this.rest=new Float32Array(pos); this.pos=new Float32Array(pos); this.count=idx.length;
+    this.vao=gl.createVertexArray(); gl.bindVertexArray(this.vao);
+    this.pb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,this.pb); gl.bufferData(gl.ARRAY_BUFFER,this.pos,gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+    const ub=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,ub); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(uv),gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,2,gl.FLOAT,false,0,0);
+    const ib=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(idx),gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+  }
+  bind(chainNames,{falloff=1.0}={}){                 // per-vertex weights over the chain's bones
+    this.chain=chainNames.map(n=>bones[n]); const n=this.rest.length/2, k=this.chain.length;
+    this.w=new Float32Array(n*k);
+    for(let v=0;v<n;v++){ const x=this.rest[v*2],y=this.rest[v*2+1];
+      if(k===1){ this.w[v]=1; continue; }
+      const d=this.chain.map(b=>segDist(b,x,y)+2);
+      // two nearest bones, inverse-square, blended
+      const ord=d.map((v,i)=>i).sort((a,b)=>d[a]-d[b]); const i0=ord[0],i1=ord[1];
+      const a=1/Math.pow(d[i0],2*falloff), b=1/Math.pow(d[i1],2*falloff); const s=a+b;
+      this.w[v*k+i0]=a/s; this.w[v*k+i1]=b/s; }
+    return this;
+  }
+  deform(){
+    if(!this.chain) return;
+    const k=this.chain.length, n=this.rest.length/2, ox=this.offset[0], oy=this.offset[1];
+    for(let v=0;v<n;v++){ const x=this.rest[v*2],y=this.rest[v*2+1]; let px=0,py=0;
+      for(let i=0;i<k;i++){ const w=this.w[v*k+i]; if(!w) continue; const b=this.chain[i];
+        const rot=b.wang-b.restAngle, c=Math.cos(rot), s=Math.sin(rot); const dx=x-b.head[0], dy=y-b.head[1];
+        px+=w*(b.wpos[0]+dx*c-dy*s); py+=w*(b.wpos[1]+dx*s+dy*c); }
+      this.pos[v*2]=px+ox; this.pos[v*2+1]=py+oy; }
+    if(this.scaleAbout){ const [cx,cy,sx,sy]=this.scaleAbout; for(let v=0;v<n;v++){ this.pos[v*2]=cx+(this.pos[v*2]-cx)*sx; this.pos[v*2+1]=cy+(this.pos[v*2+1]-cy)*sy; } }
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.pb); gl.bufferSubData(gl.ARRAY_BUFFER,0,this.pos);
+  }
+  draw(){ if(!this.visible||this.alpha<=0) return; gl.uniform1f(U.alpha,this.alpha); gl.bindTexture(gl.TEXTURE_2D,this.tex); gl.bindVertexArray(this.vao); gl.drawElements(gl.TRIANGLES,this.count,gl.UNSIGNED_SHORT,0); }
+}
+
+// ------------------------------------------------------------------------------- rig
+const parts={}; let man=null, ready=false; let drawList=[];
+const HIDDEN_AT_REST=new Set(['eyelid_fill_l','eyelid_fill_r','mouth_cover_skin','closed_eye_line_l','closed_eye_line_r','closed_mouth_line',
+  'torso_base','neck','shoulder_l','shoulder_r','upper_arm_l','upper_arm_r','forearm_l','forearm_r','hip_base','thigh_l','thigh_r','lower_leg_l','lower_leg_r','foot_l','foot_r']);
+const G=(id)=>man.geometry[id], J=(id)=>man.joints[id];
+const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+
+function buildRig(){
+  const g=man.geometry, j=man.joints;
+  const hip=g.skirt_front_center.top, chest=g.dress_torso.centroid, neck=g.head_base.bottom, headC=g.head_base.centroid, crown=g.head_base.top;
+  bone('hip',null,[hip[0],hip[1]+10],hip);
+  bone('torso','hip',hip,chest);
+  bone('chest','torso',chest,neck);
+  bone('head','chest',neck,crown);
+  for(const s of ['l','r']){
+    const sh=j['shoulder_'+s]||g['sleeve_upper_'+s].top, el=j['elbow_'+s]||g['sleeve_upper_'+s].bottom, wr=j['wrist_'+s]||g['cuff_'+s].top;
+    const hd=j['hand_'+s]||g['hand_'+s].centroid, tip=g['hand_'+s].bottom;
+    bone('upper_arm_'+s,'chest',sh,el); bone('forearm_'+s,'upper_arm_'+s,el,wr); bone('hand_'+s,'forearm_'+s,wr,tip);
+    const hipS=g['stocking_'+s].top, knee=mid(g['stocking_'+s].top,g['stocking_'+s].bottom), ank=j['ankle_'+s]||g['stocking_'+s].bottom, toe=g['shoe_'+s].bottom;
+    bone('thigh_'+s,'hip',hipS,knee); bone('shin_'+s,'thigh_'+s,knee,ank); bone('foot_'+s,'shin_'+s,ank,toe);
+  }
+  // tail: base under the skirt, chain along the stock to the fork, one bone into each fluke
+  const tb=j.tail_base||G('tail_root').centroid, fork=j.tail_fork_upper||G('tail_stock').right;
+  const N=6; let prev='hip'; let last=tb;
+  for(let i=0;i<N;i++){ const t=(i+1)/N; const p=[lerp(tb[0],fork[0],t),lerp(tb[1],fork[1],t)]; bone('tail'+i,prev,last,p); prev='tail'+i; last=p; }
+  bone('fluke_u',prev,fork,G('tail_fluke_upper').top); bone('fluke_l',prev,fork,G('tail_fluke_lower').right);
+  // hair, skirt, ears, ahoge, bows: pendulum chains root->tip (two bones each)
+  const pend=(id,parent,from,to)=>{ if(!g[id]) return; const m=mid(from,to); bone(id+'_a',parent,from,m); bone(id+'_b',id+'_a',m,to); };
+  for(const h of ['hair_back_base','hair_back_outer_l','hair_back_inner_l','hair_back_strand_l','hair_back_outer_r','hair_back_inner_r','hair_back_strand_r','side_lock_root_l','side_lock_root_r'])
+    if(g[h]) pend(h,'head',g[h].top,g[h].bottom);
+  for(const h of ['side_lock_tip_l','side_lock_tip_r']) if(g[h]) pend(h,h.replace('tip','root')+'_b',g[h].top,g[h].bottom);
+  for(const h of ['bang_l','bang_center','bang_r','bang_strand_l','bang_strand_r']) if(g[h]) pend(h,'head',g[h].top,g[h].bottom);
+  if(g.ahoge_root){ pend('ahoge_root','head',g.ahoge_root.bottom,g.ahoge_root.top); if(g.ahoge_tip) pend('ahoge_tip','ahoge_root_b',g.ahoge_tip.bottom,g.ahoge_tip.top); }
+  if(g.fin_ear_l) pend('fin_ear_l','head',g.fin_ear_l.left,g.fin_ear_l.right);
+  if(g.fin_ear_r) pend('fin_ear_r','head',g.fin_ear_r.right,g.fin_ear_r.left);
+  for(const s of ['skirt_front_l','skirt_front_center','skirt_front_r','skirt_back','underskirt_frill_l','underskirt_frill_center','underskirt_frill_r','apron_panel','apron_waist_frill'])
+    if(g[s]) pend(s,'hip',g[s].top,g[s].bottom);
+  for(const b of ['hair_bow_tail_l','hair_bow_tail_r','chest_bow_tail_l','chest_bow_tail_r','hip_bow_l','hip_bow_r'])
+    if(g[b]) pend(b, b.startsWith('hair')?'head':b.startsWith('chest')?'chest':'hip', g[b].top,g[b].bottom);
+}
+
+function bindParts(){
+  const g=man.geometry;
+  const has=(id)=>!!parts[id];
+  const pendChain=(id)=>[id+'_a',id+'_b'].filter(n=>bones[n]);
+  for(const [id,p] of Object.entries(parts)){
+    let chain=null, falloff=1.0;
+    if(id==='tail_root') chain=['tail0','tail1'];
+    else if(id==='tail_stock') chain=['tail0','tail1','tail2','tail3','tail4','tail5'];
+    else if(id==='tail_fluke_upper') chain=['tail5','fluke_u'];
+    else if(id==='tail_fluke_lower') chain=['tail5','fluke_l'];
+    else if(/^sleeve_upper_([lr])$/.test(id)) chain=['chest','upper_arm_'+id.slice(-1),'forearm_'+id.slice(-1)];
+    else if(/^sleeve_lower_([lr])$/.test(id)) chain=['upper_arm_'+id.slice(-1),'forearm_'+id.slice(-1),'hand_'+id.slice(-1)];
+    else if(/^cuff_([lr])$/.test(id)) chain=['forearm_'+id.slice(-1),'hand_'+id.slice(-1)];
+    else if(/^hand_([lr])$/.test(id)) chain=['hand_'+id.slice(-1)];
+    else if(/^stocking_([lr])$/.test(id)) chain=['thigh_'+id.slice(-1),'shin_'+id.slice(-1)];
+    else if(/^shoe_([lr])$/.test(id)) chain=['foot_'+id.slice(-1)];
+    else if(bones[id+'_a']) chain=pendChain(id);
+    else if(/^(dress_torso|collar_frill_l|collar_frill_r|chest_bow_knot|chest_bow_loop_l|chest_bow_loop_r|chest_gem)$/.test(id)) chain=['torso','chest'];
+    else if(/^(apron_emblem)$/.test(id)) chain=pendChain('apron_panel').length?pendChain('apron_panel'):['torso'];
+    else if(/^(head_base|hair_front_base|bonnet_base|bonnet_frill_l|bonnet_frill_center|bonnet_frill_r|hair_bow_l|hair_bow_r)$/.test(id)) chain=['head'];
+    else if(man.parts[id].generated||/^(eye_|iris|pupil|upper_lash|lower_lash|brow_|nose|mouth|upper_lip|lower_lip|upper_teeth|lower_teeth|tongue|blush|eyelid_fill|closed_eye|closed_mouth|face_shadow|panic_shadow|tear|sweat|anger|question|sparkle|sleepy|heart|bubble|tail_splash)/.test(id)) chain=['head'];
+    else chain=['torso'];
+    p.bind(chain,{falloff});
+    // 2.5D depth for the head-turn parallax: bangs in front move most, back hair least
+    if(/^(iris|pupil|eye_highlight|iris_detail)/.test(id)) p.depth=1.0;
+    else if(/^(eye_white|upper_lash|lower_lash|eyelid_fill|closed_eye)/.test(id)) p.depth=0.85;
+    else if(/^(brow_|nose|mouth|upper_lip|lower_lip|upper_teeth|lower_teeth|tongue|closed_mouth|blush)/.test(id)) p.depth=0.8;
+    else if(/^bang_/.test(id)) p.depth=1.25;
+    else if(/^(side_lock|hair_front_base)/.test(id)) p.depth=1.05;
+    else if(/^(head_base|bonnet|hair_bow|fin_ear|ahoge)/.test(id)) p.depth=0.55;
+    else if(/^hair_back/.test(id)) p.depth=0.2;
+    else p.depth=0;
+    if(HIDDEN_AT_REST.has(id)||man.parts[id].generated) p.visible=false;
+    // tail splash / bubbles are FX: keep hidden
+  }
+  drawList=Object.values(parts).sort((a,b)=>a.z-b.z);
+}
+
+// ------------------------------------------------------------------------------- state
+const S={ t:0, action:'idle', actionT:0, actionDur:2.2, look:[0,0], lookTarget:[0,0], expr:'neutral', blinkT:2.5, blinkPhase:0,
+  root:{tx:0,ty:0,sx:1,sy:1}, reach:null, mouth:'idle', mouthT:0, chew:0, breath:0, energy:1, log:[] };
+const pend={};   // secondary motion state per pendulum root
+function pendulums(dt,rootVel){
+  for(const b of order){
+    if(!/_a$|_b$/.test(b.name) && !/^tail\d|^fluke/.test(b.name)) continue;
+    if(!b.dyn) b.dyn={v:0};
+    // drive: attach point velocity perpendicular to the bone swings it; spring back to rest
+    const stiff=/^tail|fluke/.test(b.name)?18:/skirt|underskirt|apron/.test(b.name)?26:/hair_back|side_lock/.test(b.name)?22:/bang|ahoge/.test(b.name)?30:24;
+    const damp=/^tail|fluke/.test(b.name)?3.2:5.5;
+    const gain=/^tail|fluke/.test(b.name)?0.0:/skirt|underskirt|apron/.test(b.name)?0.0035:0.0045;
+    const perp=-Math.sin(b.wang)*rootVel[0]+Math.cos(b.wang)*rootVel[1];
+    const acc=-stiff*b.delta-damp*b.dyn.v-gain*perp;
+    b.dyn.v+=acc*dt; b.delta+=b.dyn.v*dt; b.delta=clamp(b.delta,-0.6,0.6);
+  }
+}
+// tail: a travelling wave, stiff at the base and flexible toward the tip (the opposite of the
+// first spike's solver), plus impulses from drag / touch
+const tail={A:0.10,impulse:0,mood:0};
+function tailWave(dt){
+  const flex=[0.15,0.3,0.5,0.75,1.0,1.2];
+  for(let i=0;i<6;i++){ const b=bones['tail'+i]; const wave=Math.sin(S.t*1.6-i*0.55)*tail.A*flex[i];
+    const target=wave+tail.mood*0.12*flex[i]+tail.impulse*flex[i]*0.9;
+    b.dyn=b.dyn||{v:0}; const acc=(target-b.delta)*(34-i*3)-b.dyn.v*(6+i*0.4); b.dyn.v+=acc*dt; b.delta+=b.dyn.v*dt; }
+  for(const f of ['fluke_u','fluke_l']){ const b=bones[f]; b.dyn=b.dyn||{v:0}; const target=bones.tail5.delta*0.6*(f==='fluke_u'?1:0.8)+tail.impulse*0.5;
+    const acc=(target-b.delta)*30-b.dyn.v*5; b.dyn.v+=acc*dt; b.delta+=b.dyn.v*dt; }
+  tail.impulse*=Math.exp(-2.5*dt);
+}
+// two-bone IK for an arm toward a canvas-space target
+function armIK(side,target,strength=1){
+  const ua=bones['upper_arm_'+side], fa=bones['forearm_'+side], hd=bones['hand_'+side];
+  const sh=ua.wpos, l1=ua.len, l2=fa.len+hd.len*0.4;
+  const dx=target[0]-sh[0], dy=target[1]-sh[1]; const d=clamp(Math.hypot(dx,dy),1,l1+l2-1);
+  const base=Math.atan2(dy,dx);
+  const cosA=clamp((l1*l1+d*d-l2*l2)/(2*l1*d),-1,1), cosB=clamp((l1*l1+l2*l2-d*d)/(2*l1*l2),-1,1);
+  const bend=side==='l'?1:-1;
+  const uaAng=base+bend*Math.acos(cosA);            // absolute
+  const faAng=uaAng+bend*(Math.acos(cosB)-Math.PI);  // absolute
+  const parentRot=ua.parent.wang-ua.parent.restAngle;
+  const uaDelta=uaAng-ua.restAngle-parentRot, faDelta=faAng-fa.restAngle-(uaAng-ua.restAngle);
+  ua.delta=lerp(ua.delta,uaDelta,strength); fa.delta=lerp(fa.delta,faDelta,strength); hd.delta=lerp(hd.delta,0,strength);
+}
+
+// expressions: which overlays show, brow/eye/mouth shaping
+const EXPR={
+  neutral:{}, happy:{show:['closed_eye_line_l','closed_eye_line_r','eyelid_fill_l','eyelid_fill_r','blush_l','blush_r'],hideEyes:true,mouth:'smile',brow:[0.1,-0.05]},
+  sad:{show:['tear_l','tear_r','tear_drop_l','tear_drop_r'],brow:[-0.22,0.06],mouth:'closed',eyeScale:0.95},
+  angry:{show:['anger_mark'],brow:[0.28,-0.08],mouth:'closed',eyeScale:0.9},
+  surprised:{show:['sparkle_l','sparkle_r'],brow:[0,-0.16],eyeScale:1.18,mouth:'open'},
+  think:{show:['sweat_drop'],brow:[-0.12,0.02],mouth:'closed',lookBias:[0.5,-0.4]},
+  awkward:{show:['sweat_drop','blush_l','blush_r'],brow:[-0.1,0.04],mouth:'closed',lookBias:[-0.6,0.2]},
+  question:{show:['question_mark'],brow:[-0.05,-0.1],mouth:'closed',headTilt:0.12},
+  curious:{brow:[0,-0.1],eyeScale:1.1,headTilt:-0.1,mouth:'open'},
+  sleepy:{show:['sleepy_marks'],lids:0.6,brow:[-0.06,0.08],mouth:'closed'},
+  affection:{show:['pupil_heart_l','pupil_heart_r','blush_l','blush_r','heart_fx'],hidePupils:true,mouth:'smile',brow:[0.06,-0.03]},
+  panic:{show:['pupil_spiral_l','pupil_spiral_r','panic_shadow','tear_drop_l','tear_drop_r','sweat_drop'],hidePupils:true,brow:[-0.25,-0.1],mouth:'open',eyeScale:1.12},
+};
+const OVERLAYS=['closed_eye_line_l','closed_eye_line_r','eyelid_fill_l','eyelid_fill_r','blush_l','blush_r','tear_l','tear_r','tear_drop_l','tear_drop_r','anger_mark','sparkle_l','sparkle_r','sweat_drop','question_mark','sleepy_marks','pupil_heart_l','pupil_heart_r','pupil_spiral_l','pupil_spiral_r','panic_shadow','face_shadow','heart_fx','closed_mouth_line','mouth_cover_skin','bubble_fx_l','bubble_fx_r','tail_splash_fx'];
+function applyExpression(e,blink){
+  for(const o of OVERLAYS) if(parts[o]) parts[o].visible=false;
+  const show=new Set(e.show||[]);
+  const eyesClosed=blink||e.hideEyes;
+  for(const o of show) if(parts[o]) parts[o].visible=true;
+  if(blink){ for(const o of ['eyelid_fill_l','eyelid_fill_r','closed_eye_line_l','closed_eye_line_r']) if(parts[o]) parts[o].visible=true; }
+  const eyeParts=['eye_white_l','eye_white_r','iris_l','iris_r','pupil_l','pupil_r','iris_detail_l','iris_detail_r','eye_highlight_primary_l','eye_highlight_primary_r','eye_highlight_secondary_l','eye_highlight_secondary_r','upper_lash_l','upper_lash_r','lower_lash_l','lower_lash_r'];
+  for(const p of eyeParts) if(parts[p]) parts[p].visible=!eyesClosed;
+  if(e.hidePupils&&!eyesClosed) for(const p of ['pupil_l','pupil_r','iris_detail_l','iris_detail_r']) if(parts[p]) parts[p].visible=false;
+  // half-closed lids: eyelid fill at partial alpha
+  for(const o of ['eyelid_fill_l','eyelid_fill_r']) if(parts[o]&&e.lids&&!eyesClosed){ parts[o].visible=true; parts[o].alpha=e.lids; } else if(parts[o]) parts[o].alpha=1;
+  // brows: [inner-down/up angle, lift]
+  const [ba,bl]=e.brow||[0,0];
+  for(const s of ['l','r']){ const b=parts['brow_'+s]; if(!b) continue; const g=man.geometry['brow_'+s]; const sign=s==='l'?1:-1;
+    b.scaleAbout=null; b.extraRot={cx:g.centroid[0],cy:g.centroid[1],a:ba*sign*0.9}; b.offset=[0,bl*40]; }
+  // eyes open amount
+  const es=e.eyeScale||1;
+  for(const p of eyeParts) if(parts[p]){ const g=man.geometry[p]; if(g) parts[p].scaleAbout=[g.centroid[0],g.centroid[1],1,es]; }
+  // mouth
+  const m=e.mouth||S.mouth||'idle';
+  const openParts=['mouth_cavity','upper_teeth','lower_teeth','tongue','mouth_highlight'];
+  const talking=S.mouth==='talk'&&Math.sin(S.t*14)>0.1;
+  const open=(m==='open')||talking||(S.chew>0&&Math.sin(S.t*9)>0);
+  for(const p of openParts) if(parts[p]) parts[p].visible=open;
+  if(parts.mouth_cover_skin) parts.mouth_cover_skin.visible=!open;
+  if(parts.closed_mouth_line) parts.closed_mouth_line.visible=!open&&m!=='smile';
+  for(const p of ['upper_lip_line','lower_lip_line','mouth_corner_l','mouth_corner_r']) if(parts[p]) parts[p].visible=open||m==='smile';
+}
+
+// actions: phase functions writing bone deltas / root / IK targets on top of the physics layer
+const ACTIONS={
+  idle:{dur:2.4,loop:true,fn:(p)=>{ bones.torso.delta=Math.sin(S.t*0.9)*0.012; bones.head.delta=Math.sin(S.t*0.7)*0.02; }},
+  wave:{dur:2.2,fn:(p)=>{ const up=smooth(clamp(p*3,0,1))*(1-smooth(clamp((p-0.8)*5,0,1)));
+      bones.upper_arm_r.delta=-2.3*up; bones.forearm_r.delta=(-0.9+Math.sin(S.t*11)*0.45)*up; bones.hand_r.delta=Math.sin(S.t*11)*0.3*up; bones.head.delta=0.08*up; }},
+  reach:{dur:1.6,fn:(p)=>{ const t=S.reach||S.cursor||[700,900]; const s=smooth(clamp(p*2.5,0,1)); armIK('l',t,s); bones.torso.delta=0.06*s*Math.sign(t[0]-512); bones.head.delta=0.05*s; }},
+  inspect:{dur:2.6,fn:(p)=>{ const t=S.reach||S.cursor||[700,900]; const s=smooth(clamp(p*2,0,1)); armIK('l',[t[0],t[1]+40],s); bones.torso.delta=0.12*s; bones.chest.delta=0.08*s; S.lookTarget=[clamp((t[0]-512)/400,-1,1),clamp((t[1]-1100)/500,-1,1)]; }},
+  hop:{dur:0.9,fn:(p)=>{ const a=Math.sin(p*Math.PI); S.root.ty=-140*a; S.root.sy=p<0.15?1-0.12*(p/0.15):p>0.85?1-0.12*((p-0.85)/0.15):1+0.05*a; S.root.sx=2-S.root.sy;
+      for(const s of ['l','r']){ bones['thigh_'+s].delta=(s==='l'?-1:1)*0.35*a; bones['shin_'+s].delta=(s==='l'?1:-1)*0.5*a; } bones.upper_arm_l.delta=-0.5*a; bones.upper_arm_r.delta=0.5*a; }},
+  celebrate:{dur:2.4,fn:(p)=>{ const a=Math.abs(Math.sin(p*Math.PI*3)); bones.upper_arm_l.delta=2.6; bones.upper_arm_r.delta=-2.6; bones.forearm_l.delta=0.5+0.3*a; bones.forearm_r.delta=-0.5-0.3*a;
+      S.root.ty=-40*a; bones.head.delta=Math.sin(p*Math.PI*6)*0.08; for(const o of ['sparkle_l','sparkle_r']) if(parts[o]) parts[o].visible=true; }},
+  sleep:{dur:4,loop:true,fn:(p)=>{ bones.torso.delta=0.10; bones.chest.delta=0.08; bones.head.delta=0.35+Math.sin(S.t*0.6)*0.02; S.root.ty=8; S.energy=0.4; }},
+  wake:{dur:1.4,fn:(p)=>{ const s=smooth(p); bones.head.delta=0.35*(1-s)-0.15*Math.sin(p*Math.PI); bones.torso.delta=0.1*(1-s)-0.06*Math.sin(p*Math.PI); bones.upper_arm_l.delta=-1.8*Math.sin(p*Math.PI); bones.upper_arm_r.delta=1.8*Math.sin(p*Math.PI); }},
+  stretch:{dur:2.2,fn:(p)=>{ const s=Math.sin(p*Math.PI); bones.upper_arm_l.delta=2.9*s; bones.upper_arm_r.delta=-2.9*s; bones.forearm_l.delta=0.2*s; bones.forearm_r.delta=-0.2*s; bones.torso.delta=-0.08*s; bones.head.delta=-0.12*s; S.root.ty=-14*s; }},
+  eat:{dur:3.2,fn:(p)=>{ const g=man.geometry.mouth_cavity||man.geometry.nose; const mouth=[g.centroid[0]+20,g.centroid[1]+30];
+      const cycle=Math.min(1,p*1.6); const s=smooth(clamp(cycle*2,0,1)); armIK('r',[mouth[0]+(1-s)*120,mouth[1]+(1-s)*260],s);
+      S.chew=(p>0.35&&p<0.9)?1:0; bones.head.delta=0.06*s; if(p>0.9){ armIK('r',[mouth[0]+160,mouth[1]+320],smooth((p-0.9)*10)); } }},
+  walk:{dur:1.2,loop:true,fn:(p)=>{ const w=p*Math.PI*2; const bob=Math.abs(Math.sin(w))*10; S.root.ty=-bob;
+      for(const s of ['l','r']){ const ph=s==='l'?w:w+Math.PI; bones['thigh_'+s].delta=Math.sin(ph)*0.42; bones['shin_'+s].delta=Math.max(0,-Math.sin(ph))*0.7*(s==='l'?1:1); bones['foot_'+s].delta=Math.sin(ph)*0.15;
+        bones['upper_arm_'+s].delta=-Math.sin(ph)*0.35*(s==='l'?1:-1)*-1; } bones.torso.delta=Math.sin(w*2)*0.02; bones.head.delta=Math.sin(w*2)*0.03; }},
+  stumble:{dur:1.6,fn:(p)=>{ const k=p<0.35?smooth(p/0.35):1-smooth((p-0.35)/0.65); bones.torso.delta=-0.22*k; bones.head.delta=-0.18*k; S.root.tx=-30*k; S.root.ty=6*k;
+      bones.upper_arm_l.delta=-1.2*k; bones.upper_arm_r.delta=0.9*k; for(const s of ['l','r']) bones['thigh_'+s].delta=(s==='l'?0.2:-0.25)*k; }},
+  sit:{dur:3,loop:true,fn:(p)=>{ const s=smooth(clamp(p*2,0,1)); S.root.ty=95*s; for(const q of ['l','r']){ bones['thigh_'+q].delta=(q==='l'?-1.25:1.25)*s; bones['shin_'+q].delta=(q==='l'?1.25:-1.25)*s; bones['foot_'+q].delta=0; }
+      bones.torso.delta=0.05*s; bones.upper_arm_l.delta=-0.35*s; bones.upper_arm_r.delta=0.35*s; }},
+  tail_react:{dur:1.4,fn:(p)=>{ if(p<0.05) tail.impulse=1.0; bones.head.delta=0.1*Math.sin(p*Math.PI); bones.torso.delta=-0.05*Math.sin(p*Math.PI); }},
+  look:{dur:3,loop:true,fn:(p)=>{ S.lookTarget=[Math.sin(p*Math.PI*2)*0.9, Math.cos(p*Math.PI*2)*0.5]; }},
+};
+
+function startAction(name){ if(!ACTIONS[name]) return; S.action=name; S.actionT=0; S.actionDur=ACTIONS[name].dur; S.chew=0; S.energy=1; }
+function setExpression(name){ if(EXPR[name]) S.expr=name; }
+
+// ------------------------------------------------------------------------------- frame
+let prev=0, lastRoot=[0,0];
+const stats={frames:0,sumMs:0,maxMs:0};
+function frame(t){
+  requestAnimationFrame(frame);
+  const dt=prev?Math.min(0.05,(t-prev)/1000):1/60; prev=t; if(!ready) return;
+  const t0=performance.now(); S.t+=dt;
+  // reset the animated layer
+  for(const b of order) if(!/_a$|_b$/.test(b.name)&&!/^tail\d|^fluke/.test(b.name)) b.delta=0;
+  S.root.tx=0; S.root.ty=0; S.root.sx=1; S.root.sy=1;
+  for(const p of Object.values(parts)){ p.offset=[0,0]; p.scaleAbout=null; p.extraRot=null; }
+  // action
+  const A=ACTIONS[S.action]; S.actionT+=dt; let ph=S.actionT/S.actionDur;
+  if(ph>=1){ if(A.loop){ S.actionT=0; ph=0; } else { S.action='idle'; S.actionT=0; ph=0; } }
+  ACTIONS[S.action].fn(ph);
+  // breathing + living micro-motion on top
+  S.breath=(Math.sin(S.t*Math.PI*0.55*S.energy)+1)*0.5;
+  bones.chest.delta+=S.breath*0.02-0.01; S.root.ty+=S.breath*2.5-1.25;
+  // gaze / head 2.5D
+  S.look[0]=lerp(S.look[0],S.lookTarget[0],1-Math.exp(-6*dt)); S.look[1]=lerp(S.look[1],S.lookTarget[1],1-Math.exp(-6*dt));
+  const e=EXPR[S.expr]; const lb=e.lookBias||[0,0]; const lx=clamp(S.look[0]+lb[0],-1,1), ly=clamp(S.look[1]+lb[1],-1,1);
+  bones.head.delta+=lx*0.10+(e.headTilt||0); bones.chest.delta+=lx*0.03;
+  // blink
+  S.blinkT-=dt; let blink=false; if(S.blinkT<=0){ S.blinkPhase+=dt; blink=S.blinkPhase<0.13; if(S.blinkPhase>0.13){ S.blinkPhase=0; S.blinkT=2+Math.random()*3.5; } }
+  applyExpression(e,blink);
+  // physics
+  const rootVel=[(S.root.tx-lastRoot[0])/dt,(S.root.ty-lastRoot[1])/dt]; lastRoot=[S.root.tx,S.root.ty];
+  const headSwing=bones.head.delta; pendulums(dt,[rootVel[0]+headSwing*900, rootVel[1]]);
+  tailWave(dt);
+  solveBones(S.root);
+  // 2.5D parallax offsets on head parts
+  for(const p of Object.values(parts)) if(p.depth){ p.offset[0]+=lx*26*p.depth; p.offset[1]+=ly*14*p.depth; }
+  for(const p of Object.values(parts)) if(p.extraRot){ const {cx,cy,a}=p.extraRot; const c=Math.cos(a),s=Math.sin(a); for(let v=0;v<p.rest.length;v+=2){ /* applied after deform via scaleAbout-like pass */ } }
+  for(const p of drawList) p.deform();
+  // brow rotation pass (after deform)
+  for(const p of drawList) if(p.extraRot){ const {cx,cy,a}=p.extraRot; const c=Math.cos(a),s=Math.sin(a); for(let v=0;v<p.pos.length;v+=2){ const dx=p.pos[v]-cx-p.offset[0], dy=p.pos[v+1]-cy-p.offset[1]; p.pos[v]=cx+p.offset[0]+dx*c-dy*s; p.pos[v+1]=cy+p.offset[1]+dx*s+dy*c; } gl.bindBuffer(gl.ARRAY_BUFFER,p.pb); gl.bufferSubData(gl.ARRAY_BUFFER,0,p.pos); }
+  // view
+  const dpr=Math.min(2,window.devicePixelRatio||1); const W=Math.round(cv.clientWidth*dpr),H=Math.round(cv.clientHeight*dpr);
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;} gl.viewport(0,0,W,H); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  const box=[60,420,960,1640]; const bw=box[2]-box[0], bh=box[3]-box[1]; const s=Math.min(W/bw,H/bh)*0.92;
+  gl.uniform4f(U.view,(box[0]+box[2])/2,(box[1]+box[3])/2,2*s/W,2*s/H);
+  const feet=man.geometry.shoe_l?man.geometry.shoe_l.bottom[1]:1600;
+  gl.uniform4f(U.root,0,0,S.root.sx,S.root.sy); gl.uniform2f(U.pivot,512,feet);
+  for(const p of drawList) p.draw();
+  const ms=performance.now()-t0; stats.frames++; stats.sumMs+=ms; stats.maxMs=Math.max(stats.maxMs,ms);
+  if(stats.frames%10===0) document.getElementById('hud').textContent=
+    `action ${S.action} ${(ph*100).toFixed(0)}%   expression ${S.expr}\ncpu ${ms.toFixed(2)} ms  avg ${(stats.sumMs/stats.frames).toFixed(2)}  max ${stats.maxMs.toFixed(1)}\n`+
+    `bones ${order.length}  parts ${drawList.length}\nkeys: 1-9,0,-,= actions  q..] expressions  mouse look  click reach  T tail`;
+}
+
+// ------------------------------------------------------------------------------- input
+const ACTION_KEYS={'1':'idle','2':'wave','3':'reach','4':'hop','5':'celebrate','6':'sleep','7':'wake','8':'stretch','9':'eat','0':'walk','-':'stumble','=':'sit','i':'inspect','l':'look'};
+const EXPR_KEYS={'q':'neutral','w':'happy','e':'sad','r':'angry','t':'surprised','y':'think','u':'awkward','o':'question','p':'curious','[':'sleepy',']':'affection','\\':'panic'};
+addEventListener('keydown',ev=>{ if(ACTION_KEYS[ev.key]) startAction(ACTION_KEYS[ev.key]); if(EXPR_KEYS[ev.key]) setExpression(EXPR_KEYS[ev.key]); if(ev.key==='T') startAction('tail_react'); if(ev.key===' ') S.mouth=S.mouth==='talk'?'idle':'talk'; });
+function canvasPoint(ev){ const r=cv.getBoundingClientRect(); const dpr=Math.min(2,window.devicePixelRatio||1); const W=cv.width,H=cv.height; const box=[60,420,960,1640]; const s=Math.min(W/(box[2]-box[0]),H/(box[3]-box[1]))*0.92;
+  const x=(ev.clientX-r.left)*dpr, y=(ev.clientY-r.top)*dpr; return [(x-W/2)/s+(box[0]+box[2])/2, (y-H/2)/s+(box[1]+box[3])/2]; }
+addEventListener('pointermove',ev=>{ const p=canvasPoint(ev); S.cursor=p; const hc=man?man.geometry.head_base.centroid:[512,800]; S.lookTarget=[clamp((p[0]-hc[0])/350,-1,1),clamp((p[1]-hc[1])/450,-1,1)]; });
+addEventListener('pointerdown',ev=>{ S.reach=canvasPoint(ev); startAction('reach'); });
+
+// ------------------------------------------------------------------------------- boot
+const load=(src)=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});
+(async()=>{
+  man=await (await fetch('parts/manifest.json')).json();
+  const ids=Object.keys(man.parts);
+  const imgs=await Promise.all(ids.map(id=>load('parts/'+man.parts[id].file)));
+  ids.forEach((id,i)=>{ parts[id]=new Part(id,man.parts[id],mkTex(imgs[i])); });
+  buildRig(); bindParts(); solveBones(S.root); ready=true; window.__ready=true;
+  requestAnimationFrame(frame);
+})().catch(e=>{ window.__error=String(e&&e.stack||e); document.getElementById('hud').textContent='ERROR '+e.message; });
+
+window.lab={ ready:()=>ready, action:startAction, expression:setExpression, look:(x,y)=>{S.lookTarget=[x,y];}, reach:(x,y)=>{S.reach=[x,y];startAction('reach');},
+  talk:(on)=>{S.mouth=on?'talk':'idle';}, phase:()=>S.actionT/S.actionDur, setPhase:(p)=>{S.actionT=p*S.actionDur;}, stats:()=>({frames:stats.frames,avgMs:stats.sumMs/Math.max(1,stats.frames),maxMs:stats.maxMs}),
+  actions:()=>Object.keys(ACTIONS), expressions:()=>Object.keys(EXPR), joints:()=>man.joints, bones:()=>order.length, hud:(v)=>{document.getElementById('hud').style.display=v?'block':'none';}, noBlink:()=>{S.blinkT=1e9;} };
+</script></body></html>
