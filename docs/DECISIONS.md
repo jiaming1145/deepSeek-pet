@@ -148,3 +148,35 @@ the second illustration view is no longer needed.
 
 **Evidence.** `spikes/character/evidence/` (the rejected cutout result), the owner's ruling of
 2026-09-01, the community kit's overview sheet.
+
+## D-2026-09-02-05 · The asset is authored in VRoid Studio (commission later), not auto-generated and auto-rigged
+
+**Decision.** The VRM that the runtime animates is authored in VRoid Studio by the owner from the
+card `spikes/model/OWNER_CARD_vroid.md`, exported as VRM 1.0, and may later be replaced by a
+commissioned custom VRM built to the same acceptance sheet. The generated-mesh-plus-auto-rig path
+(Meshy multi-view image-to-3D, Meshy API rigging, `tools/vrm/chains.meshy01.json`) is closed as the
+source of the character. The runtime, action controller, expression mapping and the Blender
+`tools/vrm/` build stay; they take any VRM.
+
+**Why.** The Meshy asset was taken to the end of what procedural repair can do (runs meshy-01 to
+meshy-08, 2026-09-02): baked clip stripped, elbows and hand bones relocated, arm weights cleaned by
+segment radius, zone and radial profile, chains selected relative to bones. The remaining defects
+are structural to a generated asset: one welded surface (hair, skirt, body, face cannot move
+independently), no blendshapes (no facial expression and no mouth, the face swap was impossible on
+one material), auto-rig weights that bleed across parts, and adult-proportion clips on a chibi. The
+owner watched the live tour and ruled the rig not acceptable. A VRoid Studio model is a properly
+authored VRM: humanoid rig, blendshape face with every VRM expression and viseme, hair strands and
+skirt as separate spring-bone groups, and the stock-VRM test in this same window already proved
+fluid motion, look-at and expressions on such a file.
+
+**What it rules out.** Further Meshy or Tripo regeneration for the character; hand-separating a
+generated shell in Blender; the face-atlas projection onto a single-material head.
+
+**What it leaves open.** Style match to the reference (VRoid look vs the drawing), solved by a
+commission if wanted; fin ears and tail built from hair strands and re-parented to the hips at build
+time; the chibi motion set (VRoid Hub VRMA pack and Mixamo retargets tuned for 2.2-head proportions).
+
+**Evidence.** `tools/vrm/out/whalechan/meshy-08/` sheets and window captures, the raw-vs-rigged
+vertex comparison (0 of 48,244 vertices differ: the mesh was fine, the rig was not), the owner's
+ruling of 2026-09-02 after the live tour, `docs/3D_PIPELINE.md` "Repairing an auto-rig".
+
