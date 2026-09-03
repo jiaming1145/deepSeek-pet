@@ -124,6 +124,13 @@ python tools/vrm/hookup_whalechan.py --glb <run>/whalechan_restyled.blend --chai
   leaves VRoid's materials untouched. A chain file with `"height": null` keeps the model's own size.
 - Evidence: `tools/vrm/out/whalechan/vroid-05/` (compare sheet, window action and emotion sheets).
 
+Second pass (same day): `--hair-from <donor.vrm> --hair-textures <dir>` transplants a donor VRoid model's hair
+(Sendagaya Shino, CC0: long straight hair) onto the base head, joints renamed and joined under the head bone with
+its spring definitions copied; `--chibi` scales head x1.38 and limbs x0.7-0.78 about the joints (vertices, shape
+keys and bones together, feet re-floored); `accessories` in the palette add a maid headdress on the hair
+ellipsoid, an ahoge curl and two temple bows, and the texture repaint draws a whale emblem on the apron. Current
+evidence: `tools/vrm/out/whalechan/vroid-10/` (restyle_render.png, compare sheet, window sheets).
+
 Known limits of the automated restyle: the hairstyle and outfit silhouette are the base's (side ponytail,
 one-piece), not the drawing's; the tail and fins are simple procedural shapes; proportions are the base's
 human ratio (accepted by the owner on 2026-09-02). Two hours in VRoid Studio on top of this
