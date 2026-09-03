@@ -1,0 +1,339 @@
+{
+  "_about": "Spring-bone chains for the Meshy rigged Whale-chan (whalechan_meshy_rigged.glb, 2026-09-02). Selections are boxes RELATIVE TO THE RIG'S OWN BONES in world units of the built model (height 1.0, facing -Y, so 'behind' is +y). On this chibi the head bone sits at the chin (z 0.54) and the head fills the top 0.46 of the height; hips z 0.49. Measured: the tail is the only geometry on her right side more than 0.16 behind the hips and below them; the back hair is the only geometry more than 0.13 behind the head bone below the neck line; the ahoge is the only geometry above 0.92 of height; the fin ears stick out past |x| 0.17 at eye height. Skirt and bangs are left static on purpose (they share space with legs and face).",
+  "height": 1.0,
+  "bone_fixups": {
+    "_why": "Meshy put the left elbow 0.14 behind the back (y +0.097 while shoulder and hand sit at y -0.04..-0.07), so the forearm bone ran diagonally through the skirt side and the upper arm through the hair; vertices along that path kept arm weights and rose with the arm. Elbows are moved onto the shoulder-hand line, pushed 0.035 outward. Moving a joint does not deform the rest mesh. Hand bones were as long as forearms and pointed down through the skirt hem; shortened to chibi hand length so the skirt side is no longer 'near the hand'.",
+    "joints": [
+      {
+        "bone": "leftLowerArm",
+        "head": [
+          0.1774,
+          -0.0568,
+          0.4727
+        ],
+        "_was": [
+          0.166,
+          0.097,
+          0.461
+        ]
+      },
+      {
+        "bone": "rightLowerArm",
+        "head": [
+          -0.202,
+          -0.0601,
+          0.4533
+        ],
+        "_was": [
+          -0.223,
+          0.057,
+          0.454
+        ]
+      },
+      {
+        "bone": "leftHand",
+        "length": 0.06,
+        "_was": "0.187, pointing down through the skirt"
+      },
+      {
+        "bone": "rightHand",
+        "length": 0.06,
+        "_was": "0.164"
+      }
+    ]
+  },
+  "weight_cleanup": {
+    "_why": "Meshy weighted skirt and side hair to the arm/shoulder bones; forcing the T-pose dragged them up like sails. Arm bones may only influence vertices within a sleeve radius of their own segment; inside the skirt zone the radius is a tight hand core because the hands hang against the skirt in the A-pose.",
+    "bones": [
+      "leftShoulder",
+      "leftUpperArm",
+      "leftLowerArm",
+      "leftHand",
+      "rightShoulder",
+      "rightUpperArm",
+      "rightLowerArm",
+      "rightHand"
+    ],
+    "radius": {
+      "default": 0.085,
+      "leftShoulder": 0.06,
+      "rightShoulder": 0.06,
+      "leftLowerArm": 0.075,
+      "rightLowerArm": 0.075,
+      "leftHand": 0.07,
+      "rightHand": 0.07
+    },
+    "zones": [
+      {
+        "name": "skirt",
+        "select": {
+          "rel": {
+            "bone": "hips",
+            "min": [
+              -0.45,
+              -0.45,
+              -0.34
+            ],
+            "max": [
+              0.45,
+              0.45,
+              -0.02
+            ]
+          }
+        },
+        "radius": 0.045,
+        "profile": {
+          "axis_bone": "hips",
+          "margin": 0.015,
+          "z_bin": 0.02,
+          "angle_bin_deg": 15,
+          "_why": "skirt wall fused to the left cuff: anything on the skirt's radial profile (mirrored from the free side) is skirt, anything protruding is hand"
+        }
+      }
+    ],
+    "fallback": [
+      "hips",
+      "leftUpperLeg",
+      "rightUpperLeg",
+      "spine",
+      "chest",
+      "upperChest",
+      "neck",
+      "head"
+    ]
+  },
+  "colliders": {
+    "hips_colliders": [
+      {
+        "bone": "hips",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "radius": 0.11
+      }
+    ],
+    "head_colliders": [
+      {
+        "bone": "head",
+        "offset": [
+          0,
+          0,
+          0.04
+        ],
+        "radius": 0.13
+      }
+    ],
+    "chest_colliders": [
+      {
+        "bone": "chest",
+        "offset": [
+          0,
+          0,
+          0
+        ],
+        "radius": 0.1
+      }
+    ]
+  },
+  "chains": [
+    {
+      "name": "tail",
+      "select": {
+        "rel": {
+          "bone": "hips",
+          "min": [
+            -0.45,
+            0.16,
+            -0.5
+          ],
+          "max": [
+            0.02,
+            0.6,
+            -0.04
+          ]
+        }
+      },
+      "bones": 7,
+      "parent": "hips",
+      "stiffness": 0.9,
+      "stiffness_tip": 0.35,
+      "drag": 0.3,
+      "gravity": 0.2,
+      "gravity_dir": [
+        0,
+        -1,
+        0
+      ],
+      "hit_radius": 0.03,
+      "blend_root": 0.15,
+      "collider_groups": [
+        "hips_colliders"
+      ]
+    },
+    {
+      "name": "hair_back_L",
+      "select": {
+        "rel": {
+          "bone": "head",
+          "min": [
+            0.0,
+            0.13,
+            -0.34
+          ],
+          "max": [
+            0.3,
+            0.6,
+            0.05
+          ]
+        }
+      },
+      "bones": 5,
+      "parent": "head",
+      "stiffness": 0.7,
+      "stiffness_tip": 0.3,
+      "drag": 0.35,
+      "gravity": 0.15,
+      "hit_radius": 0.02,
+      "blend_root": 0.1,
+      "collider_groups": [
+        "head_colliders",
+        "chest_colliders"
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "name": "hair_back_R",
+      "select": {
+        "rel": {
+          "bone": "head",
+          "min": [
+            -0.3,
+            0.13,
+            -0.34
+          ],
+          "max": [
+            0.0,
+            0.6,
+            0.05
+          ]
+        }
+      },
+      "bones": 5,
+      "parent": "head",
+      "stiffness": 0.7,
+      "stiffness_tip": 0.3,
+      "drag": 0.35,
+      "gravity": 0.15,
+      "hit_radius": 0.02,
+      "blend_root": 0.1,
+      "collider_groups": [
+        "head_colliders",
+        "chest_colliders"
+      ],
+      "axis": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "name": "ahoge",
+      "select": {
+        "rel": {
+          "bone": "head",
+          "min": [
+            -0.1,
+            -0.12,
+            0.37
+          ],
+          "max": [
+            0.1,
+            0.12,
+            0.5
+          ]
+        }
+      },
+      "bones": 3,
+      "parent": "head",
+      "stiffness": 1.3,
+      "stiffness_tip": 0.7,
+      "drag": 0.4,
+      "gravity": 0.0,
+      "hit_radius": 0.01,
+      "blend_root": 0.3,
+      "axis": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "name": "ear_L",
+      "select": {
+        "rel": {
+          "bone": "head",
+          "min": [
+            0.17,
+            -0.12,
+            0.16
+          ],
+          "max": [
+            0.4,
+            0.1,
+            0.31
+          ]
+        }
+      },
+      "bones": 2,
+      "parent": "head",
+      "stiffness": 1.2,
+      "stiffness_tip": 0.7,
+      "drag": 0.4,
+      "gravity": 0.0,
+      "hit_radius": 0.01,
+      "blend_root": 0.25,
+      "axis": [
+        1,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "ear_R",
+      "select": {
+        "rel": {
+          "bone": "head",
+          "min": [
+            -0.4,
+            -0.12,
+            0.16
+          ],
+          "max": [
+            -0.17,
+            0.1,
+            0.31
+          ]
+        }
+      },
+      "bones": 2,
+      "parent": "head",
+      "stiffness": 1.2,
+      "stiffness_tip": 0.7,
+      "drag": 0.4,
+      "gravity": 0.0,
+      "hit_radius": 0.01,
+      "blend_root": 0.25,
+      "axis": [
+        -1,
+        0,
+        0
+      ]
+    }
+  ]
+}

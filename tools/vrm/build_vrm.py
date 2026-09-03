@@ -25,6 +25,7 @@ Options (all optional except --input/--output):
 import argparse
 import json
 import math
+import collections
 import os
 import re
 import sys
@@ -135,10 +136,29 @@ def find_armature_and_meshes():
     if not arms:
         die("no armature found in input (export the model WITH its rig)")
     arm = max(arms, key=lambda a: len(a.data.bones))
+    # Auto-riggers ship the GLB with an animation clip on the armature (Meshy: 'Armature|clip0|baselayer').
+    # Blender evaluates it at the current frame, so every render, probe and weight scan would see a posed
+    # mesh instead of the bind pose. Strip it and reset the pose.
+    clips = [a.name for a in bpy.data.actions]
+    for o in bpy.data.objects:
+        if o.animation_data:
+            o.animation_data_clear()
+    for a in list(bpy.data.actions):
+        bpy.data.actions.remove(a)
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix.Identity(4)
+    if clips:
+        log(f"cleared {len(clips)} animation clip(s) baked into the input: {clips}")
     meshes = [o for o in bpy.data.objects if o.type == "MESH"]
     skinned = [
         m for m in meshes if any(md.type == "ARMATURE" and md.object == arm for md in m.modifiers)
     ]
+    # helper geometry that is neither skinned nor parented to the rig (Meshy adds a stray icosphere) is dropped
+    stray = [m for m in meshes if m not in skinned and m.parent is None]
+    for m in stray:
+        log(f"dropping stray mesh {m.name!r} ({len(m.data.vertices)} verts): not skinned and not parented to the rig")
+        bpy.data.objects.remove(m, do_unlink=True)
+    meshes = [m for m in meshes if m not in stray]
     log(f"armature: {arm.name} ({len(arm.data.bones)} bones); meshes={len(meshes)} skinned={len(skinned)}")
     return arm, meshes
 
@@ -367,6 +387,168 @@ def apply_humanoid(arm, mapping):
 # ----------------------------------------------------------------------------------------------
 # T-pose
 # ----------------------------------------------------------------------------------------------
+def apply_bone_fixups(arm, mapping, spec):
+    """Move joints of the imported rig (world coords). Skinning at rest is identity whatever the joint
+    positions, so this never deforms the rest mesh; it only changes where limbs pivot. Used when an
+    auto-rigger drops a joint somewhere absurd (Meshy: an elbow behind the back)."""
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+    inv = arm.matrix_world.inverted()
+    for j in spec.get("joints", []):
+        bname = mapping.get(j["bone"]) or j["bone"]
+        eb = arm.data.edit_bones.get(bname)
+        if eb is None:
+            log(f"bone-fixup: {j['bone']!r} not found; skipped")
+            continue
+        if "head" in j:
+            new_head = inv @ Vector([float(x) for x in j["head"]])
+            old_head = eb.head.copy()
+            parent = eb.parent
+            if parent is not None and (parent.tail - old_head).length < 1e-5:
+                parent.tail = new_head  # connected (or coincident) parent tail follows the joint
+            eb.head = new_head
+            log(f"bone-fixup: {bname} head {tuple(round(v, 3) for v in (arm.matrix_world @ old_head))} -> {tuple(round(v, 3) for v in (arm.matrix_world @ new_head))}")
+        if "length" in j:  # keep the direction, set the length (auto-rig hand bones can be as long as a forearm)
+            d = (eb.tail - eb.head)
+            old_len = d.length
+            eb.tail = eb.head + d.normalized() * float(j["length"])
+            log(f"bone-fixup: {bname} length {old_len:.3f} -> {float(j['length']):.3f}")
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _seg_dist(p, a, b):
+    """Distance from point p to segment ab."""
+    ab = b - a
+    l2 = ab.length_squared
+    if l2 < 1e-12:
+        return (p - a).length
+    t = max(0.0, min(1.0, (p - a).dot(ab) / l2))
+    return (p - (a + ab * t)).length
+
+
+def clean_far_weights(arm, meshes, mapping, spec):
+    """Auto-riggers (Meshy, Tripo) bleed arm/shoulder weights into skirts and hair; forcing a T-pose then
+    drags those parts up with the arms. Rule: the listed bones may only influence vertices within
+    `radius` of their own segment (rest pose, world units). Farther vertices lose that weight; the rest
+    is renormalised, and a vertex left with nothing is given to the nearest `fallback` bone."""
+    rspec = spec.get("radius", 0.09)   # number, or {"default": r, "<humanoid name>": r, ...}
+    rmap = dict(rspec) if isinstance(rspec, dict) else {"default": float(rspec)}
+    rdefault = float(rmap.get("default", 0.09))
+    bones = [mapping.get(b) or b for b in spec.get("bones", [])]
+    bones = [b for b in bones if b in arm.data.bones]
+    bone_radius = {}
+    for hname in spec.get("bones", []):
+        bname = mapping.get(hname) or hname
+        bone_radius[bname] = float(rmap.get(hname, rdefault))
+    # zones: regions (e.g. the skirt) where every cleanup bone gets a tighter radius, because the
+    # hands hang against the skirt and would otherwise keep dragging it
+    global _REL_ARM, _REL_MAP
+    _REL_ARM, _REL_MAP = arm, mapping
+    zone_of = {}  # (mesh name, vertex index) -> radius
+    for z in spec.get("zones", []):
+        zr = float(z["radius"])
+        for m, idx in select_vertices(z, meshes):
+            for i in idx:
+                zone_of[(m.name, i)] = min(zr, zone_of.get((m.name, i), zr))
+        log(f"weight-cleanup zone {z.get('name', '?')}: radius {zr:.3f}")
+    fallback = [mapping.get(b) or b for b in spec.get("fallback", ["hips", "spine", "chest", "upperChest", "neck", "head"])]
+    fallback = [b for b in fallback if b in arm.data.bones]
+    segs = {b: (arm.matrix_world @ arm.data.bones[b].head_local, arm.matrix_world @ arm.data.bones[b].tail_local) for b in bones + fallback}
+    stripped = {b: 0 for b in bones}
+    orphans = 0
+    for m in meshes:
+        gi = {vg.index: vg.name for vg in m.vertex_groups}
+        by_name = {vg.name: vg for vg in m.vertex_groups}
+        target_idx = {by_name[b].index for b in bones if b in by_name}
+        if not target_idx:
+            continue
+        for v in m.data.vertices:
+            hits = [g for g in v.groups if g.group in target_idx and g.weight > 0.0]
+            if not hits:
+                continue
+            w = m.matrix_world @ v.co
+            removed = 0.0
+            zr = zone_of.get((m.name, v.index))
+            for g in hits:
+                b = gi[g.group]
+                a, t = segs[b]
+                r = bone_radius.get(b, rdefault) if zr is None else min(zr, bone_radius.get(b, rdefault))
+                if _seg_dist(w, a, t) > r:
+                    removed += g.weight
+                    by_name[b].remove([v.index])
+                    stripped[b] += 1
+            if removed <= 0.0:
+                continue
+            rest = [(gi[g.group], g.weight) for g in v.groups if g.weight > 0.0]
+            total = sum(x for _, x in rest)
+            if total > 1e-6:
+                for name, x in rest:
+                    by_name[name].add([v.index], x / total, "REPLACE")
+            else:
+                orphans += 1
+                best = min(fallback, key=lambda b: _seg_dist(w, *segs[b])) if fallback else None
+                if best:
+                    if best not in by_name:
+                        by_name[best] = m.vertex_groups.new(name=best)
+                    by_name[best].add([v.index], 1.0, "REPLACE")
+    # second pass: a skirt-like zone is a surface of revolution around its axis bone. Vertices still holding
+    # arm weight that sit ON the zone's radial profile (built from arm-free vertices, mirrored across x) are
+    # skirt wall fused to a hand/cuff; strip them. Vertices protruding beyond the profile are the hand.
+    for z in spec.get("zones", []):
+        prof = z.get("profile")
+        if not prof:
+            continue
+        axis_b = mapping.get(prof.get("axis_bone", "hips")) or prof.get("axis_bone", "hips")
+        ax = arm.matrix_world @ arm.data.bones[axis_b].head_local
+        margin = float(prof.get("margin", 0.015))
+        zbin, abin = float(prof.get("z_bin", 0.02)), math.radians(float(prof.get("angle_bin_deg", 15)))
+        zsel = {(m.name, i) for m, idx in select_vertices(z, meshes) for i in idx}
+        bins = {}
+        pending = []
+        for m in meshes:
+            gi = {vg.index: vg.name for vg in m.vertex_groups}
+            by_name = {vg.name: vg for vg in m.vertex_groups}
+            for v in m.data.vertices:
+                if (m.name, v.index) not in zsel:
+                    continue
+                w = m.matrix_world @ v.co
+                r = math.hypot(w.x - ax.x, w.y - ax.y)
+                key = (int((w.z - ax.z) // zbin), int(math.atan2(abs(w.x - ax.x), w.y - ax.y) // abin))
+                armw = [(gi[g.group], g.weight) for g in v.groups if gi[g.group] in bones and g.weight > 0.0]
+                if armw:
+                    pending.append((m, v, w, r, key, armw, by_name, gi))
+                else:
+                    bins.setdefault(key, []).append(r)
+        ref = {k: sorted(v)[len(v) // 2] for k, v in bins.items() if len(v) >= 6}
+        stripped2 = collections.Counter()
+        kept = 0
+        for m, v, w, r, key, armw, by_name, gi in pending:
+            rr = ref.get(key)
+            if rr is None:  # try neighbouring angle bins
+                cands = [ref[k] for k in (
+                    (key[0], key[1] - 1), (key[0], key[1] + 1), (key[0] - 1, key[1]), (key[0] + 1, key[1])) if k in ref]
+                rr = sum(cands) / len(cands) if cands else None
+            if rr is None or r > rr + margin:
+                kept += 1
+                continue
+            for name, x in armw:
+                by_name[name].remove([v.index]); stripped2[name] += 1
+            rest = [(gi[g.group], g.weight) for g in v.groups if g.weight > 0.0]
+            total = sum(x for _, x in rest)
+            if total > 1e-6:
+                for name, x in rest:
+                    by_name[name].add([v.index], x / total, "REPLACE")
+            else:
+                best = min(fallback, key=lambda b: _seg_dist(w, *segs[b])) if fallback else None
+                if best:
+                    if best not in by_name:
+                        by_name[best] = m.vertex_groups.new(name=best)
+                    by_name[best].add([v.index], 1.0, "REPLACE")
+        log(f"weight-cleanup profile {z.get('name', '?')}: {len(ref)} profile bins from arm-free verts; {len(pending)} ambiguous verts -> "
+            f"stripped on-profile {dict(stripped2)}; kept protruding {kept}")
+    log(f"weight-cleanup: radius {rdefault:.3f} ({len(zone_of)} zone verts); stripped " + ", ".join(f"{b}:{n}" for b, n in stripped.items() if n) + f"; {orphans} verts re-homed to nearest of {fallback}")
+
+
 def force_tpose(arm, meshes, mapping):
     """Rotate arm chains to point straight along +/-X (VRM's T-pose convention) and bake as rest pose."""
     if any(m.data.shape_keys for m in meshes):
@@ -415,6 +597,10 @@ def force_tpose(arm, meshes, mapping):
 # ----------------------------------------------------------------------------------------------
 # extra chains (tail / ears / hair / skirt)
 # ----------------------------------------------------------------------------------------------
+_REL_ARM = None     # armature used by "rel" selectors; set by build_chain
+_REL_MAP = {}       # vrm humanoid name -> bone name
+
+
 def select_vertices(spec, meshes):
     """Return list of (mesh_obj, [vertex indices]) matching a chain selector."""
     sel = spec.get("select", {})
@@ -422,6 +608,18 @@ def select_vertices(spec, meshes):
     vg_name = sel.get("vertex_group")
     mat_re = re.compile(sel["material"], re.I) if "material" in sel else None
     bbox = sel.get("bbox")  # {"min":[x,y,z],"max":[x,y,z]} in world space (Blender Z-up)
+    rel = sel.get("rel")    # {"bone": name, "min": [dx,dy,dz], "max": [dx,dy,dz]} offsets from that bone's head, world units
+    if rel and _REL_ARM is not None:
+        bname = rel["bone"]
+        bone = _REL_ARM.data.bones.get(bname) or _REL_ARM.data.bones.get(_REL_MAP.get(bname, bname))
+        if bone is None:
+            log(f"select: rel bone {bname!r} not found; selector matches nothing")
+            return []
+        head = _REL_ARM.matrix_world @ bone.head_local
+        lo = [head[i] + float(rel["min"][i]) for i in range(3)]
+        hi = [head[i] + float(rel["max"][i]) for i in range(3)]
+        bbox = {"min": lo, "max": hi}
+        log(f"select: rel to {bone.name} head=({head.x:.3f},{head.y:.3f},{head.z:.3f}) -> bbox {tuple(round(v,3) for v in lo)}..{tuple(round(v,3) for v in hi)}")
     vg_min = float(sel.get("vertex_group_min", 0.5))
     out = []
     for m in meshes:
@@ -475,6 +673,8 @@ def build_chain(arm, meshes, spec, mapping):
     if parent_bone not in arm.data.bones:
         log(f"chain {name}: parent bone {parent_key!r} not found; skipping")
         return None
+    global _REL_ARM, _REL_MAP
+    _REL_ARM, _REL_MAP = arm, mapping
     sel = select_vertices(spec, meshes)
     if not sel:
         log(f"chain {name}: selector matched no vertices; skipping")
@@ -484,6 +684,10 @@ def build_chain(arm, meshes, spec, mapping):
         mw = m.matrix_world
         pts.extend([tuple(mw @ m.data.vertices[i].co) for i in idx])
     centroid, axis, tmin, tmax = principal_axis(pts)
+    if spec.get("axis"):  # explicit root->tip direction (hanging hair = [0,0,-1]); PCA picks the width of a wide slab
+        axis = Vector([float(x) for x in spec["axis"]]).normalized()
+        ts = [(Vector(p) - centroid).dot(axis) for p in pts]
+        tmin, tmax = min(ts), max(ts)
     # root = end closest to parent bone head
     parent_head_w = arm.matrix_world @ arm.data.bones[parent_bone].head_local
     end_a = centroid + axis * tmin
@@ -974,14 +1178,20 @@ def main():
     mapping, missing = map_humanoid(arm)
     if missing:
         die(f"required humanoid bones missing: {missing}. Rename bones or extend build_vrm.SIDED/UNSIDED.")
+    chains = None
+    if args.chains:
+        with open(args.chains, encoding="utf-8") as f:
+            chains = json.load(f)
+    if chains and chains.get("bone_fixups"):
+        apply_bone_fixups(arm, mapping, chains["bone_fixups"])
+    if chains and chains.get("weight_cleanup"):
+        clean_far_weights(arm, meshes, mapping, chains["weight_cleanup"])
     if args.force_tpose:
         force_tpose(arm, meshes, mapping)
     apply_humanoid(arm, mapping)
     set_meta(arm, args.name, args.author, args.version)
 
-    if args.chains:
-        with open(args.chains, encoding="utf-8") as f:
-            chains = json.load(f)
+    if chains:
         if chains.get("colliders", True):
             add_default_colliders(arm, mapping, chains)
         for spec in chains.get("chains", []):
