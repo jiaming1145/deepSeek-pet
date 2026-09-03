@@ -106,6 +106,20 @@ def recolour_outfit(img: Image.Image, overlays=None, lace_px=10, thin_px=6):
         m = (np.asarray(layer) > 127) & c["opaque"] & ~c["gold"] & ~thin_pink
         white = ramp((lum - 0.2) / 0.8, (0.75, 0.78, 0.85), (0.98, 0.98, 1.0))
         out[..., :3] = np.where(m[..., None], white, out[..., :3])
+        # emblems: a little whale (body ellipse + fluke + eye) drawn flat in light blue on an overlay
+        for ov in overlays:
+            em = ov.get("emblem")
+            if not em:
+                continue
+            ex, ey = em["center"][0] * W, em["center"][1] * H
+            r = em.get("size", 0.05) * W
+            el = Image.new("L", (W, H), 0)
+            de = ImageDraw.Draw(el)
+            de.ellipse([ex - r, ey - r * 0.55, ex + r * 0.55, ey + r * 0.55], fill=255)                 # body
+            de.polygon([(ex + r * 0.45, ey), (ex + r * 0.95, ey - r * 0.5), (ex + r * 0.95, ey + r * 0.5)], fill=255)  # fluke
+            de.ellipse([ex - r * 0.62, ey - r * 0.12, ex - r * 0.42, ey + r * 0.08], fill=0)            # eye
+            me = (np.asarray(el) > 127) & c["opaque"]
+            out[..., :3] = np.where(me[..., None], np.array(em.get("color", [0.45, 0.70, 0.95])), out[..., :3])
     return Image.fromarray((np.clip(out, 0, 1) * 255).astype(np.uint8), "RGBA"), {
         "lace_px": int(lace.sum()), "thin_pink_px": int(thin_pink.sum()), "fabric_px": int(fab.sum()), "gold_px": int(c["gold"].sum())}
 

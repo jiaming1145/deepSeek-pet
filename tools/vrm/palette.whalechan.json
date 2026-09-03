@@ -24,7 +24,19 @@
        0.375,
        0.895
       ]
-     ]
+     ],
+     "emblem": {
+      "center": [
+       0.5,
+       0.8
+      ],
+      "size": 0.045,
+      "color": [
+       0.45,
+       0.7,
+       0.95
+      ]
+     }
     },
     {
      "name": "apron_bib",
@@ -133,12 +145,12 @@
     0.42,
     0.72
    ],
-   "length": 0.48,
-   "root_radius": 0.075,
+   "length": 0.4,
+   "root_radius": 0.07,
    "tip_radius": 0.024,
-   "fluke_span": 0.36,
-   "fluke_len": 0.15,
-   "drop": 0.5
+   "fluke_span": 0.3,
+   "fluke_len": 0.13,
+   "drop": 0.42
   },
   "fins": {
    "top": [
@@ -154,6 +166,44 @@
    "length": 0.115,
    "height": 0.07,
    "thickness": 0.012
+  }
+ },
+ "chibi": {
+  "head": 1.38,
+  "arm": 0.78,
+  "leg": 0.7,
+  "_why": "reference is ~2.2 heads tall; VRoid base is ~6.5; this lands near 3.5 without tearing the mesh"
+ },
+ "accessories": {
+  "headdress": {
+   "enabled": true,
+   "band_width": 0.06,
+   "frill": 0.024,
+   "white": [
+    0.98,
+    0.98,
+    1.0
+   ]
+  },
+  "ahoge": {
+   "enabled": true,
+   "length": 0.1,
+   "radius": 0.014,
+   "color": [
+    0.14,
+    0.3,
+    0.68
+   ]
+  },
+  "bows": {
+   "enabled": true,
+   "size": 0.075,
+   "height_frac": 0.72,
+   "color": [
+    0.55,
+    0.8,
+    0.98
+   ]
   }
  }
 }
