@@ -1,6 +1,7 @@
 // Electron harness for the actions lab (same window as the pet: transparent, frameless, on top, 640x900).
 //   cd D:\ds\apps\desktop
 //   npx electron ../../spikes/vrm/actions/main.js            interactive (keys on the HUD)
+//   npx electron ../../spikes/vrm/actions/main.js --tour     real-time showcase of every action + emotion + look, loops until closed
 //   npx electron ../../spikes/vrm/actions/main.js --capture  every action at 20/50/80 % + every emotion -> shots/, report.json, then exit
 // Pattern copied from ../main.js. Capture frames are stepped deterministically (lab.begin / lab.stepTo,
 // 1/60 s steps); the fps numbers come from the real rAF loop afterwards.
@@ -10,6 +11,7 @@ const fs = require('node:fs');
 
 app.commandLine.appendSwitch('allow-file-access-from-files');
 const CAPTURE = process.argv.includes('--capture');
+const TOUR = process.argv.includes('--tour');      // real-time showcase: every action + emotion + look pattern, forever
 const SHOTS = path.join(__dirname, 'shots');
 const WIN = { width: 640, height: 900, x: 80, y: 40 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,6 +39,40 @@ app.whenReady().then(async () => {
   if (!ready) { console.error('renderer never became ready (60 s)'); app.exit(1); return; }
   const info = await js('lab.info()');
   console.log('ready', JSON.stringify(info));
+  if (TOUR) {
+    // real-time, HUD on, keys still work; each action plays for its own duration (open-ended ones for a nominal time)
+    const armL = await js("lab.arm('left')"), armR = await js("lab.arm('right')");
+    const RL = armL.length * 0.85, [lx, ly, lz] = armL.shoulder;
+    const RR = armR.length * 0.85, [rx, ry, rz] = armR.shoulder;
+    const reachTarget = [lx + RL * 0.45, ly + RL * 0.35, lz + RL * 0.75];
+    const inspectTarget = [rx - RR * 0.55, ry - RR * 0.45, rz + RR * 0.65];
+    const tour = [
+      ['idle', {}, 3.0, 'neutral', 'follow'], ['happy idle', {}, 0, 'happy', 'follow'], ['walk', {}, 4.0, 'happy', 'follow'], ['hop', {}, null, 'surprised', 'follow'],
+      ['stretch', {}, null, 'neutral', 'up'], ['wave', {}, null, 'happy', 'follow'], ['celebrate', {}, null, 'happy', 'follow'],
+      ['reach', { target: reachTarget, duration: 2.5 }, null, 'curious', 'none'], ['inspect', { target: inspectTarget }, null, 'think', 'none'],
+      ['eat', { bites: 4 }, null, 'happy', 'none'], ['drink', {}, null, 'neutral', 'none'], ['tail_react', {}, null, 'surprised', 'follow'],
+      ['stumble', {}, null, 'awkward', 'none'], ['recover', {}, null, 'awkward', 'follow'], ['sit', {}, 4.0, 'neutral', 'wander'],
+      ['sleep', {}, 5.0, 'neutral', 'none'], ['wake', {}, null, 'question', 'follow'], ['sad idle', {}, 0, 'sad', 'down'], ['angry idle', {}, 0, 'angry', 'cursorLock'],
+    ];
+    (async () => {
+      for (let round = 0; !win.isDestroyed(); round++) {
+        for (const [label, opts, nominal, emotion, look] of tour) {
+          if (win.isDestroyed()) return;
+          const name = label.replace(/^\w+ idle$/, 'idle');
+          try {
+            await js(`lab.emotion(${JSON.stringify(emotion)}); lab.look(${JSON.stringify(look)})`);
+            const r = await js(`lab.start(${JSON.stringify(name)}, ${JSON.stringify(opts)})`);
+            const D = r?.duration ?? nominal ?? 2.5;
+            console.log(`tour ${round}: ${label} ${D.toFixed(1)}s [${r?.source ?? '?'}] emotion=${emotion} look=${look}`);
+            await wait(Math.max(1.5, D + 0.6) * 1000);
+          } catch (e) { console.error('tour', label, e.message || e); await wait(1500); }
+          const err = await js('window.__error || null');
+          if (err) { console.error('RENDERER ERROR during tour ' + label + '\n' + err); await js('window.__error = null'); }
+        }
+      }
+    })();
+    return;
+  }
   if (!CAPTURE) return;
 
   fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true });
