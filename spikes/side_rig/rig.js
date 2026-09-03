@@ -246,7 +246,7 @@ A.sleep = (tau) => {
   const u = smooth(clamp(tau / 1.0, 0, 1));
   S_.rootRot = -S_.facing * (Math.PI / 2) * u;                 // lie down with the head toward her front
   S_.rootY = 0.0 + 0.16 * u;
-  S_.rootX = -S_.facing * 0.85 * u;                             // she pivots at the feet: slide so the lying body stays in frame
+  S_.rootX = S_.facing * 0.7 * u;                               // pivot is at the feet inside the mirrored group: slide so the lying body stays in frame
   S_.eyesClosed = u;
   bones.chest.userData.pose = 0.03 * Math.sin(tau * 0.9);
   for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = S_.facing * -0.35 * u; bones['shin_' + s].userData.pose = S_.facing * 0.5 * u; }
