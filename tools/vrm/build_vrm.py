@@ -322,12 +322,67 @@ def bone_depth(b):
     return d
 
 
+HUMANOID_NAMES = (
+    "hips spine chest upperChest neck head leftEye rightEye jaw "
+    "leftShoulder leftUpperArm leftLowerArm leftHand rightShoulder rightUpperArm rightLowerArm rightHand "
+    "leftUpperLeg leftLowerLeg leftFoot leftToes rightUpperLeg rightLowerLeg rightFoot rightToes "
+    "leftThumbMetacarpal leftThumbProximal leftThumbDistal leftIndexProximal leftIndexIntermediate leftIndexDistal "
+    "leftMiddleProximal leftMiddleIntermediate leftMiddleDistal leftRingProximal leftRingIntermediate leftRingDistal "
+    "leftLittleProximal leftLittleIntermediate leftLittleDistal "
+    "rightThumbMetacarpal rightThumbProximal rightThumbDistal rightIndexProximal rightIndexIntermediate rightIndexDistal "
+    "rightMiddleProximal rightMiddleIntermediate rightMiddleDistal rightRingProximal rightRingIntermediate rightRingDistal "
+    "rightLittleProximal rightLittleIntermediate rightLittleDistal"
+).split()
+VRM0_TO_VRM1 = {"leftThumbIntermediate": "leftThumbDistal", "leftThumbDistal": None,
+                "rightThumbIntermediate": "rightThumbDistal", "rightThumbDistal": None}
+
+
+def humanoid_from_extension(arm):
+    """A VRM input (VRoid export, any VRM 0.x/1.0) already carries its humanoid map; use it instead of
+    guessing from bone names. Returns {} when the input is not a VRM."""
+    try:
+        ext = armature_ext(arm.data)
+    except Exception:
+        return {}
+    mapping = {}
+    try:
+        for b in ext.vrm0.humanoid.human_bones:
+            name = b.node.bone_name
+            if b.bone and name and name in arm.data.bones:
+                # VRM 0.x thumb naming: proximal/intermediate/distal -> 1.0 metacarpal/proximal/distal
+                key = {"leftThumbProximal": "leftThumbMetacarpal", "leftThumbIntermediate": "leftThumbProximal",
+                       "rightThumbProximal": "rightThumbMetacarpal", "rightThumbIntermediate": "rightThumbProximal"}.get(b.bone, b.bone)
+                mapping[key] = name
+    except Exception:
+        pass
+    if "hips" not in mapping:
+        try:
+            hb = ext.vrm1.humanoid.human_bones
+            for key in HUMANOID_NAMES:
+                prop = getattr(hb, key, None)
+                name = getattr(getattr(prop, "node", None), "bone_name", "") if prop else ""
+                if name and name in arm.data.bones:
+                    mapping[key] = name
+        except Exception:
+            pass
+    return mapping
+
+
 def map_humanoid(arm):
     bones = arm.data.bones
     mapping = {}  # vrm -> bone name
     unmapped = []
     spine_chain = []
     conflicts = []
+    from_ext = humanoid_from_extension(arm)
+    if all(k in from_ext for k in ("hips", "spine", "head")):
+        missing = [r for r in REQUIRED if r not in from_ext]
+        log(f"humanoid mapping: {len(from_ext)} bones taken from the input's own VRM humanoid map (no name guessing)")
+        for k in sorted(from_ext):
+            log(f"  {k:24s} <- {from_ext[k]}")
+        if missing:
+            log(f"  MISSING required: {missing}")
+        return from_ext, missing
     for b in sorted(bones, key=bone_depth):
         v, why = classify(b.name)
         if v == "SPINECHAIN":
@@ -1118,6 +1173,46 @@ def apply_morph_map(arm, meshes, morph_map):
     return made
 
 
+VRM0_PRESET_TO_VRM1 = {"neutral": "neutral", "a": "aa", "i": "ih", "u": "ou", "e": "ee", "o": "oh",
+                       "blink": "blink", "blink_l": "blinkLeft", "blink_r": "blinkRight",
+                       "joy": "happy", "angry": "angry", "sorrow": "sad", "fun": "relaxed", "surprised": "surprised",
+                       "lookup": "lookUp", "lookdown": "lookDown", "lookleft": "lookLeft", "lookright": "lookRight"}
+
+
+def migrate_vrm0_expressions(arm):
+    """Copy VRM 0.x blend-shape groups into VRM 1.0 expression morph binds. The add-on does this itself when
+    a .vrm is imported and exported in one session, but not after a .blend round trip; doing it explicitly
+    makes the build deterministic. Presets already holding binds are left alone."""
+    ext = armature_ext(arm.data)
+    try:
+        groups = list(ext.vrm0.blend_shape_master.blend_shape_groups)
+    except Exception:
+        return 0
+    made = 0
+    for g in groups:
+        binds = [(b.mesh.mesh_object_name, b.index, float(b.weight)) for b in g.binds if b.mesh.mesh_object_name and b.index]
+        if not binds:
+            continue
+        preset = VRM0_PRESET_TO_VRM1.get((g.preset_name or "unknown").lower())
+        name = preset or g.name
+        grp, kind = expression_group(ext, name)
+        if len(grp.morph_target_binds):
+            continue
+        for mesh_name, key, w in binds:
+            obj = bpy.data.objects.get(mesh_name)
+            if obj is None or not obj.data.shape_keys or key not in obj.data.shape_keys.key_blocks:
+                continue
+            b = grp.morph_target_binds.add()
+            b.node.mesh_object_name = mesh_name
+            b.index = key
+            b.weight = w if w <= 1.0 else w / 100.0
+            made += 1
+        grp.is_binary = bool(getattr(g, "is_binary", False))
+    if made:
+        log(f"expressions: {made} morph binds copied from the input's VRM 0.x blend-shape groups")
+    return made
+
+
 def auto_morph_map(meshes):
     found = {}
     for m in meshes:
@@ -1214,6 +1309,7 @@ def main():
         with open(args.face_atlas, encoding="utf-8") as f:
             apply_face_atlas(arm, meshes, face_mat, json.load(f))
 
+    migrate_vrm0_expressions(arm)
     morphs = {}
     if args.auto_morphs:
         morphs.update(auto_morph_map(meshes))

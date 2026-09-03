@@ -1,0 +1,159 @@
+{
+ "_about": "Whale-chan palette and UV overlays for the AvatarSample_G (CC0 VRoid sample) base. Overlay polygons are in texture UV space, origin top-left, 0..1.",
+ "hair_tip_from": 0.55,
+ "textures": {
+  "F00_002_Onepiece_01": {
+   "kind": "outfit",
+   "overlays": [
+    {
+     "name": "apron_front_panel",
+     "poly": [
+      [
+       0.455,
+       0.63
+      ],
+      [
+       0.545,
+       0.63
+      ],
+      [
+       0.625,
+       0.895
+      ],
+      [
+       0.375,
+       0.895
+      ]
+     ]
+    },
+    {
+     "name": "apron_bib",
+     "poly": [
+      [
+       0.462,
+       0.3
+      ],
+      [
+       0.538,
+       0.3
+      ],
+      [
+       0.548,
+       0.455
+      ],
+      [
+       0.452,
+       0.455
+      ]
+     ]
+    }
+   ]
+  },
+  "F00_002_Shoes_01": {
+   "kind": "outfit"
+  },
+  "F00_000_Hair_00_01": {
+   "kind": "hair"
+  },
+  "F00_000_Hair_00_02": {
+   "kind": "hair"
+  },
+  "F00_000_Hair_00_03": {
+   "kind": "hair"
+  },
+  "F00_000_HairBack_00": {
+   "kind": "hair"
+  }
+ },
+ "material_factors": {
+  "_about": "applied in Blender by restyle_vroid.py: material name regex -> MToon factors (baked hair textures get a white tint)",
+  "Hair": {
+   "base_color": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "shade_color": [
+    0.55,
+    0.65,
+    0.85
+   ]
+  },
+  "HairBack": {
+   "base_color": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "shade_color": [
+    0.55,
+    0.65,
+    0.85
+   ]
+  },
+  "FaceBrow": {
+   "base_color": [
+    0.16,
+    0.28,
+    0.62,
+    1
+   ],
+   "shade_color": [
+    0.1,
+    0.18,
+    0.42
+   ]
+  },
+  "Onepice|Onepiece": {
+   "shade_color": [
+    0.55,
+    0.62,
+    0.85
+   ]
+  },
+  "Shoes": {
+   "shade_color": [
+    0.55,
+    0.62,
+    0.85
+   ]
+  }
+ },
+ "parts": {
+  "tail": {
+   "top": [
+    0.12,
+    0.19,
+    0.42
+   ],
+   "belly": [
+    0.28,
+    0.42,
+    0.72
+   ],
+   "length": 0.48,
+   "root_radius": 0.075,
+   "tip_radius": 0.024,
+   "fluke_span": 0.36,
+   "fluke_len": 0.15,
+   "drop": 0.5
+  },
+  "fins": {
+   "top": [
+    0.12,
+    0.19,
+    0.42
+   ],
+   "inner": [
+    0.2,
+    0.34,
+    0.7
+   ],
+   "length": 0.115,
+   "height": 0.07,
+   "thickness": 0.012
+  }
+ }
+}

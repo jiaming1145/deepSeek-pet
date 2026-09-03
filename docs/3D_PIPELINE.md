@@ -93,6 +93,43 @@ height that only `hookup_whalechan.py` resolves into absolute boxes. Check `prob
 material name before the first run; `--face-material` defaults to `face|skin_face|head` and the
 script warns when more than one material matches.
 
+### The VRoid-base route (current, 2026-09-02): a proper VRM with no editor and no artist
+
+After the Meshy auto-rig was ruled unacceptable (`docs/DECISIONS.md` D-05), the character is built by
+restyling a CC0 VRoid sample model instead. It keeps everything a generated mesh cannot give: a real
+humanoid rig, the full VRoid blendshape face (every VRM expression and viseme), hair strands, skirt,
+sleeves and bust as separate spring-bone groups. Three scripts, all headless:
+
+```powershell
+# 1. dump the base model's textures (once), repaint them into her palette
+blender --background --python <dump script>          # see spikes/model/generated/base/_survey/G_textures
+python toolsrmestyle_textures.py --src <dumped textures> --out <restyled dir>
+# 2. swap textures into the base, tint materials, build the whale tail and fin ears, save a .blend
+blender --background --python toolsrmestyle_vroid.py -- --input <base.vrm> --textures <restyled dir> --output <run>\whalechan_restyled.blend
+# 3. the normal hookup on that .blend: tail + fin chains, VRoid materials kept, no T-pose forcing
+python toolsrm\hookup_whalechan.py --glb <run>\whalechan_restyled.blend --chains toolsrm\chains.vroidbase.json --no-face --no-tpose --keep-materials --run-name vroid-NN
+```
+
+- Base: `AvatarSample_G.vrm` from pixiv's VRoid sample pack (CC0; OpenGameArt mirror). Frilly one-piece,
+  puff sleeves, white thigh-highs, blue eyes, 41 face shape keys, 25 spring groups, VRM 0.x.
+- `restyle_textures.py` repaints by colour class, not by pixel: fabric goes navy by luminance, white lace
+  near pink stays white, gold stays, thin pink accents become light blue, hair strands go navy with
+  light-blue tips (the hair tint becomes white because the colour is baked). `palette.whalechan.json`
+  holds the colours, the UV polygons for the white apron panel and bib, and the tail and fin sizes.
+- `restyle_vroid.py` copies pixels into the packed images (a filepath reload is ignored on packed VRM
+  images), applies MToon colour factors by material-name regex, and builds the tail (bezier tube with
+  flukes) and fin ears (flat teardrops) as separate objects skinned to hips / head.
+- `build_vrm.py` now takes the humanoid map from the input's own VRM extension before guessing from
+  names, copies VRM 0.x blend-shape groups into 1.0 expression binds explicitly (the add-on only does it
+  when a .vrm is imported and exported in one session), and `--no-mtoon` (hookup `--keep-materials`)
+  leaves VRoid's materials untouched. A chain file with `"height": null` keeps the model's own size.
+- Evidence: `tools/vrm/out/whalechan/vroid-05/` (compare sheet, window action and emotion sheets).
+
+Known limits of the automated restyle: the hairstyle and outfit silhouette are the base's (side ponytail,
+one-piece), not the drawing's; the tail and fins are simple procedural shapes; proportions are the base's
+human ratio (accepted by the owner on 2026-09-02). Two hours in VRoid Studio on top of this
+(`spikes/model/OWNER_CARD_vroid.md`) would fix the first two.
+
 ### Repairing an auto-rig (what the Meshy run needed, 2026-09-02)
 
 Meshy's API rig of her mesh needed four repairs before the skirt and hair behaved. All of them live in
