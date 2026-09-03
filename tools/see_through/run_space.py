@@ -39,7 +39,13 @@ def main():
 
     tok = token()
     print(f"token: {'present' if tok else 'none (anonymous; the Space rejects this)'}", file=sys.stderr)
-    client = Client(a.space, hf_token=tok) if tok else Client(a.space)
+    if tok:
+        try:
+            client = Client(a.space, token=tok)          # gradio_client >= 1.x
+        except TypeError:
+            client = Client(a.space, hf_token=tok)       # older releases
+    else:
+        client = Client(a.space)
     t0 = time.time()
     psd, gallery = client.predict(os.path.abspath(a.image), a.resolution, a.seed, a.tblr, api_name="/inference")
     os.makedirs(a.out, exist_ok=True)
