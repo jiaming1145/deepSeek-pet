@@ -310,11 +310,14 @@ function tick(dt) {
   const fn = A[S_.action] || A.idle;
   fn(S_.tau);
   // locomotion
-  if (S_.speed) {
+  if (S_.speed && !S_.turn) {
     S_.x += S_.facing * S_.speed * dt;
-    const lim = 0.62;
-    if (S_.x > lim) { S_.x = lim; S_.turn = { t0: S_.t, from: S_.facing }; }
-    if (S_.x < -lim) { S_.x = -lim; S_.turn = { t0: S_.t, from: S_.facing }; }
+    // she spans ~0.4 units ahead of the hips and ~0.8 behind (the tail); keep both inside the window
+    const halfW = VIEW_H * aspect / 2, ahead = 0.42, behind = 0.82;
+    const front = S_.facing < 0 ? -halfW + ahead : halfW - ahead;
+    const back = S_.facing < 0 ? halfW - behind : -halfW + behind;
+    if (S_.facing < 0 ? S_.x < front : S_.x > front) { S_.x = front; S_.turn = { t0: S_.t, from: S_.facing }; }
+    if (S_.facing < 0 ? S_.x > back : S_.x < back) S_.x = back;
   }
   if (S_.turn) {
     const u = (S_.t - S_.turn.t0) / 0.28;
@@ -344,7 +347,7 @@ const lab = window.lab = {
   info: () => ({ bones: boneList.length, layers: Object.keys(layerMeshes).filter((k) => !k.endsWith('#tex')).length, actions: ACTIONS, emotions: Object.keys(EMO) }),
   actions: () => ACTIONS,
   start(name) { if (!A[name]) throw new Error('unknown action ' + name); S_.action = name; S_.tau = 0; if (name === 'turn') S_.turn = null; return { name }; },
-  begin(name) { lab.start(name); S_.t = 0; S_.blink.next = 9; S_.blink.phase = 0; for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } S_.prevPos.clear(); return { name }; },
+  begin(name) { lab.start(name); S_.t = 0; S_.x = -0.15; S_.facing = -1; group.scale.x = -1; S_.turn = null; S_.blink.next = 9; S_.blink.phase = 0; for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } S_.prevPos.clear(); return { name }; },
   step(sec) { const n = Math.max(1, Math.round(sec * 60)); for (let i = 0; i < n; i++) tick(1 / 60); renderer.render(scene, camera); },
   stop() { S_.action = 'idle'; S_.tau = 0; },
   pause(v) { S_.paused = !!v; },
