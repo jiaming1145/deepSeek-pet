@@ -173,7 +173,7 @@ function stepSprings(dt) {
 
 // ------------------------------------------------------------------ actions
 const A = {};
-const poseReset = () => { for (const b of boneList) b.userData.pose = 0; S_.rootY = 0; S_.rootRot = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; };
+const poseReset = () => { for (const b of boneList) b.userData.pose = 0; S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; };
 const walkCycle = (tau, f, amp, knee, armAmp) => {
   const ph = 2 * Math.PI * f * tau;
   const fwd = S_.facing;                       // -1: forward is -x. rotation.z positive = CCW; a down-pointing leg swings to +x with +rot
@@ -246,6 +246,7 @@ A.sleep = (tau) => {
   const u = smooth(clamp(tau / 1.0, 0, 1));
   S_.rootRot = -S_.facing * (Math.PI / 2) * u;                 // lie down with the head toward her front
   S_.rootY = 0.0 + 0.16 * u;
+  S_.rootX = -S_.facing * 0.85 * u;                             // she pivots at the feet: slide so the lying body stays in frame
   S_.eyesClosed = u;
   bones.chest.userData.pose = 0.03 * Math.sin(tau * 0.9);
   for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = S_.facing * -0.35 * u; bones['shin_' + s].userData.pose = S_.facing * 0.5 * u; }
@@ -253,7 +254,7 @@ A.sleep = (tau) => {
   bones.upper_arm_far.userData.pose = S_.facing * -0.5 * u; bones.forearm_far.userData.pose = S_.facing * -0.7 * u;
   bones.head.userData.pose = S_.facing * 0.12 * u;
 };
-A.wake = (tau) => { const u = 1 - smooth(clamp(tau / 1.0, 0, 1)); A.sleep(1.0); S_.rootRot *= u; S_.rootY *= u; S_.eyesClosed = u; for (const b of boneList) b.userData.pose *= u; if (u <= 0) A.idle(tau); };
+A.wake = (tau) => { const u = 1 - smooth(clamp(tau / 1.0, 0, 1)); A.sleep(1.0); S_.rootRot *= u; S_.rootY *= u; S_.rootX *= u; S_.eyesClosed = u; for (const b of boneList) b.userData.pose *= u; if (u <= 0) A.idle(tau); };
 A.turn = (tau) => { A.idle(tau); if (!S_.turn) S_.turn = { t0: S_.t, from: S_.facing }; };
 A.stretch = (tau) => {
   poseReset();
@@ -324,7 +325,7 @@ function tick(dt) {
     if (u >= 1) { S_.facing = -S_.turn.from; group.scale.x = S_.facing; S_.turn = null; if (S_.action === 'turn') S_.action = 'idle'; }
     else group.scale.x = S_.turn.from * Math.max(0.05, Math.abs(Math.cos(Math.PI * u))) * (u < 0.5 ? 1 : -1);
   }
-  group.position.x = S_.x; group.position.y = GROUND_Y;
+  group.position.x = S_.x + (S_.rootX || 0); group.position.y = GROUND_Y;
   applyPose();
   stepSprings(dt);
   applyPose();
