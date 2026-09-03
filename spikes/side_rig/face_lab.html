@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob:;">
+<title>face kit lab</title>
+<script type="importmap">
+{ "imports": { "three": "../../apps/desktop/node_modules/three/build/three.module.js" } }
+</script>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  canvas { display: block; }
+  #hud { position: fixed; left: 8px; top: 8px; font: 11px/1.35 Consolas, monospace; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: pre; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="hud"></div>
+<script type="module">
+import * as THREE from 'three';
+import { FaceKit } from './facekit.js';
+const hud = document.getElementById('hud');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
+renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace; document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const VIEW_H = 2.4, aspect = window.innerWidth / window.innerHeight;
+const camera = new THREE.OrthographicCamera(-VIEW_H * aspect / 2, VIEW_H * aspect / 2, VIEW_H / 2, -VIEW_H / 2, -10, 10); camera.position.z = 5;
+// face space: neutral.png 1360x1152 px, centred, 1152 px = 2.0 units
+const FW = 1360, FH = 1152, PX = 2.0 / FH;
+const place = (px, py) => new THREE.Vector3((px - FW / 2) * PX, (FH / 2 - py) * PX, 0);
+const head = new THREE.Group(); scene.add(head);
+const loader = new THREE.TextureLoader();
+const tex = (f) => new Promise((res, rej) => loader.load(f, (t) => { t.colorSpace = THREE.SRGBColorSpace; res(t); }, undefined, rej));
+const BASE = '../model/face';
+try {
+  const skin = await tex(`${BASE}/base_skin_nose.png`);
+  const baseMesh = new THREE.Mesh(new THREE.PlaneGeometry(FW * PX, FH * PX), new THREE.MeshBasicMaterial({ map: skin, transparent: true, depthTest: false, depthWrite: false }));
+  baseMesh.renderOrder = 0; head.add(baseMesh);
+  const kit = await new FaceKit({ base: BASE, parent: head, place, pxScale: PX, renderOrder: 10 }).load();
+  const S = { paused: false, t: 0, last: performance.now(), talk: false, talkT: 0, fps: [] };
+  const VIS = ['aa', 'ih', 'ou', 'ee', 'oh'];
+  function tick(dt) {
+    S.t += dt;
+    if (S.talk) { S.talkT += dt; kit.setViseme(VIS[Math.floor(S.talkT * 9) % VIS.length]); } else kit.setViseme(null);
+    kit.update(dt);
+  }
+  function frame() {
+    const now = performance.now(); const dt = Math.min(0.05, (now - S.last) / 1000); S.last = now;
+    if (!S.paused) tick(dt);
+    renderer.render(scene, camera);
+    S.fps.push(dt); if (S.fps.length > 120) S.fps.shift();
+    hud.textContent = `face kit  ${(S.fps.length / S.fps.reduce((a, b) => a + b, 0)).toFixed(0)} fps  mood ${kit.mood}${S.talk ? '  talking' : ''}${kit.look ? '  look ' + kit.look : ''}\n[1-9,0,q..] moods  [T] talk  [arrows] look  [Space] neutral`;
+    requestAnimationFrame(frame);
+  }
+  const lab = window.lab = {
+    info: () => ({ moods: kit.moods(), fx: Object.keys(kit.fx) }),
+    moods: () => kit.moods(),
+    mood(m) { kit.setMood(m); },
+    talk(v) { S.talk = !!v; if (!v) kit.setViseme(null); },
+    look(d) { kit.setLook(d || null); },
+    viseme(v) { kit.setViseme(v || null); },
+    blink() { kit.blink.phase = 0.001; },
+    eyesClosed(v) { kit.eyesClosed = v ? 1 : 0; },
+    step(sec) { const n = Math.max(1, Math.round(sec * 60)); for (let i = 0; i < n; i++) tick(1 / 60); renderer.render(scene, camera); },
+    pause(v) { S.paused = !!v; },
+    hud(v) { hud.style.display = v ? 'block' : 'none'; },
+    fps: () => +(S.fps.length / S.fps.reduce((a, b) => a + b, 0)).toFixed(1),
+  };
+  const moods = kit.moods();
+  window.addEventListener('keydown', (e) => {
+    const keys = '1234567890qwertyuiopasdfghjklzxcvbnm';
+    const i = keys.indexOf(e.key.toLowerCase());
+    try {
+      if (e.key === ' ') kit.setMood('neutral');
+      else if (e.key === 'T' || (e.key === 't' && e.shiftKey)) lab.talk(!S.talk);
+      else if (e.key.startsWith('Arrow')) lab.look({ ArrowLeft: 'right', ArrowRight: 'left', ArrowUp: 'up', ArrowDown: 'down' }[e.key]);
+      else if (i >= 0 && i < moods.length) kit.setMood(moods[i]);
+    } catch (err) { window.__error = String(err.stack || err); }
+  });
+  requestAnimationFrame(frame);
+  window.__ready = true;
+} catch (err) { window.__error = String(err.stack || err); }
+window.addEventListener('error', (e) => { window.__error = String(e.error?.stack || e.message); });
+window.addEventListener('unhandledrejection', (e) => { window.__error = String(e.reason?.stack || e.reason); });
+</script>
+</body>
+</html>
