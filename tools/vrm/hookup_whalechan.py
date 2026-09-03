@@ -128,6 +128,9 @@ def resolve_chains(spec, probe, height):
     mesh_names = [m["name"] for m in probe["meshes"]]
     mat_names = [m["name"] for m in probe["materials"]]
     resolved = {"colliders": spec.get("colliders", True), "chains": [], "_resolution": []}
+    for passthrough in ("weight_cleanup", "bone_fixups"):
+        if spec.get(passthrough):
+            resolved[passthrough] = spec[passthrough]
     for c in spec["chains"]:
         c = dict(c)
         prefer = c.pop("prefer", {}) or {}
@@ -138,7 +141,9 @@ def resolve_chains(spec, probe, height):
         obj_hits = [n for n in mesh_names if prefer.get("object") and re.search(prefer["object"], n, re.I)]
         mat_hits = [n for n in mat_names if prefer.get("material") and re.search(prefer["material"], n, re.I)]
         box_src = frac
-        sel = {}
+        sel = dict(c.get("select") or {})  # explicit selectors (rel / bbox / object / vertex_group) pass through untouched
+        if sel and not frac and not frac_mat:
+            route = "explicit"
         if obj_hits:
             route = "object"
             sel["object"] = prefer["object"]

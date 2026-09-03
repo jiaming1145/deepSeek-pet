@@ -93,6 +93,42 @@ height that only `hookup_whalechan.py` resolves into absolute boxes. Check `prob
 material name before the first run; `--face-material` defaults to `face|skin_face|head` and the
 script warns when more than one material matches.
 
+### Repairing an auto-rig (what the Meshy run needed, 2026-09-02)
+
+Meshy's API rig of her mesh needed four repairs before the skirt and hair behaved. All of them live in
+`tools/vrm/chains.meshy01.json` and run inside `build_vrm.py`; pass the file with `--chains`:
+
+```powershell
+python toolsrm\hookup_whalechan.py --glb spikes\model\generated\meshy\whalechan_meshy_rigged.glb --chains toolsrm\chains.meshy01.json --run-name meshy-08
+```
+
+- **Baked clip and stray mesh.** The GLB carries an animation clip (`Armature|clip0|baselayer`) and a
+  32-vertex icosphere. Blender evaluates the clip at the current frame, so every render and vertex
+  scan saw a posed mesh. `find_armature_and_meshes` now clears all clips, resets the pose and drops
+  unskinned, unparented meshes.
+- **`bone_fixups`.** Both elbows sat 0.14 behind her back and the hand bones were as long as the
+  forearms, pointing down through the skirt. `{"bone": "leftLowerArm", "head": [x, y, z]}` moves a
+  joint (rest skinning is identity, so the rest mesh never deforms); `{"bone": "leftHand", "length":
+  0.06}` shortens a bone along its own direction.
+- **`weight_cleanup`.** Arm bones may only influence vertices within a sleeve radius of their own
+  segment (`radius` is a number or `{"default", "<humanoid name>": r}`); `zones` give a region a
+  tighter radius (the skirt, because the hands hang against it), and a zone `profile` treats the
+  region as a surface of revolution around `axis_bone`: vertices on the mirrored radial profile are
+  skirt, vertices protruding beyond it are hand. Stripped weight is renormalised; a vertex left
+  with nothing goes to the nearest `fallback` bone. Runs before `--force-tpose`, which is what
+  used to drag the skirt up like a sail.
+- **Bone-relative chain selectors.** `"select": {"rel": {"bone": "hips", "min": [dx, dy, dz],
+  "max": [...]}}` boxes in world units around a humanoid bone's head, so a chain file survives a
+  regenerated mesh as long as the proportions hold. `"axis": [0, 0, -1]` forces a root-to-tip
+  direction when PCA would pick the width of a wide slab (back hair). On this chibi the head bone
+  sits at the chin (z 0.54 of 1.0) and the head fills the top 0.46, which is why the hair, ear and
+  ahoge boxes are where they are.
+
+Known remaining defect of the current mesh: her left cuff and the skirt side are one fused surface
+(the turnaround had the arms against the dress), so a triangle of skirt rises with the left arm in
+arm-above-shoulder actions. No weight rule can split a welded surface; the upstream fix is a
+turnaround with the hands clear of the skirt (`spikes/model/OWNER_CARD_regen.md`).
+
 ## Licence chain
 
 | link | licence | what it means for the pet |
