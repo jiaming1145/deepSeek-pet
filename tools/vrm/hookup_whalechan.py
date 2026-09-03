@@ -72,6 +72,7 @@ def parse_args():
     p.add_argument("--face-dir", default=FACE_DIR, help="where face_texture.png / face_atlas_states.json / neutral.png live")
     p.add_argument("--no-face", action="store_true", help="skip the face texture entirely")
     p.add_argument("--no-tpose", action="store_true", help="do not pass --force-tpose")
+    p.add_argument("--keep-materials", action="store_true", help="pass --no-mtoon: keep the input's own MToon materials (VRoid exports)")
     p.add_argument("--no-auto-morphs", action="store_true")
     p.add_argument("--name", default="Whale-chan")
     p.add_argument("--author", default="owner")
@@ -314,7 +315,7 @@ def main():
         raise SystemExit(f"Blender not found: {a.blender} (pass --blender or set BLENDER_EXE)")
     with open(a.chains, encoding="utf-8") as f:
         chain_spec = json.load(f)
-    height = a.height or float(chain_spec.get("height", 1.0))
+    height = a.height if a.height is not None else (float(chain_spec["height"]) if chain_spec.get("height") is not None else None)  # None: keep the input's own size
 
     stamp = a.run_name or dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run = os.path.abspath(os.path.join(a.out, stamp))
@@ -348,6 +349,10 @@ def main():
         f"{probe['humanoid']['mapped_count']} mapped, {len(probe['meshes'])} meshes, {len(probe['materials'])} materials")
 
     # 2. chains ------------------------------------------------------------------------------
+    if height is None:
+        height = float(probe["height"])
+        summary["height"] = height
+        log(f"height: none requested; keeping the input's own {height:.3f} m")
     resolved = resolve_chains(chain_spec, probe, height)
     chains_path = os.path.join(run, "chains.resolved.json")
     with open(chains_path, "w", encoding="utf-8") as f:
@@ -397,6 +402,8 @@ def main():
                   "--name", a.name, "--author", a.author] + face_args
     if not a.no_tpose:
         build_args.append("--force-tpose")
+    if a.keep_materials:
+        build_args.append("--no-mtoon")
     if not a.no_auto_morphs:
         build_args.append("--auto-morphs")
     build_log = run_blender(a.blender, "build_vrm.py", build_args, os.path.join(run, "build.log"), "build")

@@ -1,0 +1,31 @@
+{
+  "_about": "Spring-bone chains for the restyled VRoid base (AvatarSample_G, CC0). The base already carries VRoid's own hair, skirt, sleeve and bust springs (migrated to VRM 1.0 by the add-on); this file only adds the procedural whale tail and fin ears that restyle_vroid.py generated as separate objects skinned to hips / head. Selection is by object name, so it survives any base swap.",
+  "height": null,
+  "colliders": {
+    "hips_colliders": [{"bone": "hips", "offset": [0, 0, 0], "radius": 0.13}],
+    "head_colliders": [{"bone": "head", "offset": [0, 0, 0.08], "radius": 0.12}]
+  },
+  "chains": [
+    {
+      "name": "tail",
+      "select": {"object": "^WhaleTail$"},
+      "bones": 7, "parent": "hips",
+      "stiffness": 0.85, "stiffness_tip": 0.3, "drag": 0.3, "gravity": 0.25, "gravity_dir": [0, -1, 0],
+      "hit_radius": 0.04, "blend_root": 0.1, "collider_groups": ["hips_colliders"]
+    },
+    {
+      "name": "ear_L",
+      "select": {"object": "^FinEar_L$"},
+      "bones": 2, "parent": "head",
+      "stiffness": 1.2, "stiffness_tip": 0.7, "drag": 0.4, "gravity": 0.0,
+      "hit_radius": 0.01, "blend_root": 0.2
+    },
+    {
+      "name": "ear_R",
+      "select": {"object": "^FinEar_R$"},
+      "bones": 2, "parent": "head",
+      "stiffness": 1.2, "stiffness_tip": 0.7, "drag": 0.4, "gravity": 0.0,
+      "hit_radius": 0.01, "blend_root": 0.2
+    }
+  ]
+}
