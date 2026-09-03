@@ -99,7 +99,7 @@ Meshy's API rig of her mesh needed four repairs before the skirt and hair behave
 `tools/vrm/chains.meshy01.json` and run inside `build_vrm.py`; pass the file with `--chains`:
 
 ```powershell
-python toolsrm\hookup_whalechan.py --glb spikes\model\generated\meshy\whalechan_meshy_rigged.glb --chains toolsrm\chains.meshy01.json --run-name meshy-08
+python tools\vrm\hookup_whalechan.py --glb spikes\model\generated\meshy\whalechan_meshy_rigged.glb --chains tools\vrm\chains.meshy01.json --run-name meshy-08
 ```
 
 - **Baked clip and stray mesh.** The GLB carries an animation clip (`Armature|clip0|baselayer`) and a
