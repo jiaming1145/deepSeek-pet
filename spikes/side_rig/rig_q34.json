@@ -1,0 +1,921 @@
+{
+ "canvas": [
+  768,
+  768
+ ],
+ "floor": 729,
+ "facing": "front",
+ "view": "front",
+ "bones": [
+  {
+   "name": "root",
+   "parent": null,
+   "head": [
+    340.5,
+    729
+   ],
+   "tail": [
+    340.5,
+    699
+   ]
+  },
+  {
+   "name": "hips",
+   "parent": "root",
+   "head": [
+    340.5,
+    423.0
+   ],
+   "tail": [
+    340.5,
+    356.5
+   ]
+  },
+  {
+   "name": "chest",
+   "parent": "hips",
+   "head": [
+    340.5,
+    356.5
+   ],
+   "tail": [
+    327.0,
+    335
+   ]
+  },
+  {
+   "name": "neck",
+   "parent": "chest",
+   "head": [
+    327.0,
+    335
+   ],
+   "tail": [
+    327.0,
+    282
+   ]
+  },
+  {
+   "name": "head",
+   "parent": "neck",
+   "head": [
+    327.0,
+    282
+   ],
+   "tail": [
+    345.5,
+    161
+   ]
+  },
+  {
+   "name": "thigh_l",
+   "parent": "hips",
+   "head": [
+    343.9,
+    423.0
+   ],
+   "tail": [
+    349.0,
+    600.5
+   ]
+  },
+  {
+   "name": "shin_l",
+   "parent": "thigh_l",
+   "head": [
+    349.0,
+    600.5
+   ],
+   "tail": [
+    355.0,
+    698
+   ]
+  },
+  {
+   "name": "foot_l",
+   "parent": "shin_l",
+   "head": [
+    355.0,
+    698
+   ],
+   "tail": [
+    355.0,
+    723
+   ]
+  },
+  {
+   "name": "thigh_r",
+   "parent": "hips",
+   "head": [
+    317.9,
+    423.0
+   ],
+   "tail": [
+    284.0,
+    632.0
+   ]
+  },
+  {
+   "name": "shin_r",
+   "parent": "thigh_r",
+   "head": [
+    284.0,
+    632.0
+   ],
+   "tail": [
+    271.5,
+    647
+   ]
+  },
+  {
+   "name": "foot_r",
+   "parent": "shin_r",
+   "head": [
+    271.5,
+    647
+   ],
+   "tail": [
+    271.5,
+    723
+   ]
+  },
+  {
+   "name": "upper_arm_l",
+   "parent": "chest",
+   "head": [
+    387,
+    347.68
+   ],
+   "tail": [
+    393.75,
+    411.84000000000003
+   ]
+  },
+  {
+   "name": "forearm_l",
+   "parent": "upper_arm_l",
+   "head": [
+    393.75,
+    411.84000000000003
+   ],
+   "tail": [
+    400.5,
+    476
+   ]
+  },
+  {
+   "name": "hand_l",
+   "parent": "forearm_l",
+   "head": [
+    400.5,
+    476
+   ],
+   "tail": [
+    400.5,
+    494
+   ]
+  },
+  {
+   "name": "upper_arm_r",
+   "parent": "chest",
+   "head": [
+    294,
+    347.68
+   ],
+   "tail": [
+    308.5,
+    386.34000000000003
+   ]
+  },
+  {
+   "name": "forearm_r",
+   "parent": "upper_arm_r",
+   "head": [
+    308.5,
+    386.34000000000003
+   ],
+   "tail": [
+    323.0,
+    425
+   ]
+  },
+  {
+   "name": "hand_r",
+   "parent": "forearm_r",
+   "head": [
+    323.0,
+    425
+   ],
+   "tail": [
+    323.0,
+    443
+   ]
+  },
+  {
+   "name": "hair_l_1",
+   "parent": "head",
+   "head": [
+    358.0,
+    222.9
+   ],
+   "tail": [
+    369.0,
+    278.72
+   ]
+  },
+  {
+   "name": "hair_l_2",
+   "parent": "hair_l_1",
+   "head": [
+    369.0,
+    278.72
+   ],
+   "tail": [
+    375.5,
+    334.54
+   ]
+  },
+  {
+   "name": "hair_l_3",
+   "parent": "hair_l_2",
+   "head": [
+    375.5,
+    334.54
+   ],
+   "tail": [
+    375.5,
+    390.36
+   ]
+  },
+  {
+   "name": "hair_l_4",
+   "parent": "hair_l_3",
+   "head": [
+    375.5,
+    390.36
+   ],
+   "tail": [
+    361.0,
+    446.18000000000006
+   ]
+  },
+  {
+   "name": "hair_l_5",
+   "parent": "hair_l_4",
+   "head": [
+    361.0,
+    446.18000000000006
+   ],
+   "tail": [
+    361.0,
+    502.0
+   ]
+  },
+  {
+   "name": "hair_r_1",
+   "parent": "head",
+   "head": [
+    264.5,
+    222.9
+   ],
+   "tail": [
+    230.0,
+    285.92
+   ]
+  },
+  {
+   "name": "hair_r_2",
+   "parent": "hair_r_1",
+   "head": [
+    230.0,
+    285.92
+   ],
+   "tail": [
+    213.5,
+    348.94
+   ]
+  },
+  {
+   "name": "hair_r_3",
+   "parent": "hair_r_2",
+   "head": [
+    213.5,
+    348.94
+   ],
+   "tail": [
+    212.5,
+    411.96000000000004
+   ]
+  },
+  {
+   "name": "hair_r_4",
+   "parent": "hair_r_3",
+   "head": [
+    212.5,
+    411.96000000000004
+   ],
+   "tail": [
+    212.5,
+    474.98
+   ]
+  },
+  {
+   "name": "hair_r_5",
+   "parent": "hair_r_4",
+   "head": [
+    212.5,
+    474.98
+   ],
+   "tail": [
+    217.0,
+    538.0
+   ]
+  },
+  {
+   "name": "tail_1",
+   "parent": "hips",
+   "head": [
+    451.0,
+    647.4736842105264
+   ],
+   "tail": [
+    490.0,
+    641.0841121495328
+   ]
+  },
+  {
+   "name": "tail_2",
+   "parent": "tail_1",
+   "head": [
+    490.0,
+    641.0841121495328
+   ],
+   "tail": [
+    529.0,
+    570.0277777777778
+   ]
+  },
+  {
+   "name": "tail_3",
+   "parent": "tail_2",
+   "head": [
+    529.0,
+    570.0277777777778
+   ],
+   "tail": [
+    568.0,
+    555.5
+   ]
+  },
+  {
+   "name": "tail_4",
+   "parent": "tail_3",
+   "head": [
+    568.0,
+    555.5
+   ],
+   "tail": [
+    607.0,
+    534.5
+   ]
+  },
+  {
+   "name": "tail_5",
+   "parent": "tail_4",
+   "head": [
+    607.0,
+    534.5
+   ],
+   "tail": [
+    646.0,
+    553.5
+   ]
+  },
+  {
+   "name": "tail_6",
+   "parent": "tail_5",
+   "head": [
+    646.0,
+    553.5
+   ],
+   "tail": [
+    685.0,
+    548.5
+   ]
+  },
+  {
+   "name": "skirt_1",
+   "parent": "hips",
+   "head": [
+    340.5,
+    401
+   ],
+   "tail": [
+    340.5,
+    512.0
+   ]
+  },
+  {
+   "name": "skirt_2",
+   "parent": "skirt_1",
+   "head": [
+    340.5,
+    512.0
+   ],
+   "tail": [
+    340.5,
+    623
+   ]
+  },
+  {
+   "name": "ahoge_1",
+   "parent": "head",
+   "head": [
+    364.0,
+    150.0
+   ],
+   "tail": [
+    313.0,
+    91.0
+   ]
+  },
+  {
+   "name": "ahoge_2",
+   "parent": "ahoge_1",
+   "head": [
+    313.0,
+    91.0
+   ],
+   "tail": [
+    344.0,
+    35.0
+   ]
+  }
+ ],
+ "attach": {
+  "face": {
+   "rigid": "head"
+  },
+  "front_hair": {
+   "rigid": "head"
+  },
+  "headwear": {
+   "rigid": "head"
+  },
+  "eyewhite": {
+   "rigid": "head"
+  },
+  "irides": {
+   "rigid": "head"
+  },
+  "eyelash": {
+   "rigid": "head"
+  },
+  "eyebrow": {
+   "rigid": "head"
+  },
+  "mouth": {
+   "rigid": "head"
+  },
+  "neck": {
+   "rigid": "neck"
+  },
+  "topwear": {
+   "chain": [
+    "hips",
+    "chest"
+   ],
+   "axis": "y",
+   "grid": [
+    6,
+    8
+   ]
+  },
+  "legwear_l": {
+   "chain": [
+    "thigh_l",
+    "shin_l"
+   ],
+   "axis": "y",
+   "grid": [
+    4,
+    8
+   ]
+  },
+  "footwear_l": {
+   "rigid": "foot_l"
+  },
+  "legwear_r": {
+   "chain": [
+    "thigh_r",
+    "shin_r"
+   ],
+   "axis": "y",
+   "grid": [
+    4,
+    8
+   ]
+  },
+  "footwear_r": {
+   "rigid": "foot_r"
+  },
+  "handwear_l": {
+   "chain": [
+    "upper_arm_l",
+    "forearm_l",
+    "hand_l"
+   ],
+   "axis": "y",
+   "grid": [
+    4,
+    10
+   ]
+  },
+  "handwear_r": {
+   "chain": [
+    "upper_arm_r",
+    "forearm_r",
+    "hand_r"
+   ],
+   "axis": "y",
+   "grid": [
+    4,
+    10
+   ]
+  },
+  "back_hair_l": {
+   "chain": [
+    "head",
+    "hair_l_1",
+    "hair_l_2",
+    "hair_l_3",
+    "hair_l_4",
+    "hair_l_5"
+   ],
+   "axis": "y",
+   "grid": [
+    8,
+    16
+   ],
+   "rigid_above": 222.9
+  },
+  "back_hair_r": {
+   "chain": [
+    "head",
+    "hair_r_1",
+    "hair_r_2",
+    "hair_r_3",
+    "hair_r_4",
+    "hair_r_5"
+   ],
+   "axis": "y",
+   "grid": [
+    8,
+    16
+   ],
+   "rigid_above": 222.9
+  },
+  "tail": {
+   "chain": [
+    "tail_1",
+    "tail_2",
+    "tail_3",
+    "tail_4",
+    "tail_5",
+    "tail_6"
+   ],
+   "axis": "x",
+   "grid": [
+    18,
+    8
+   ]
+  },
+  "bottomwear": {
+   "chain": [
+    "skirt_1",
+    "skirt_2"
+   ],
+   "axis": "y",
+   "grid": [
+    10,
+    8
+   ]
+  }
+ },
+ "duplicates": [],
+ "order": [
+  "tail",
+  "legwear_l",
+  "legwear_r",
+  "footwear_l",
+  "footwear_r",
+  "bottomwear",
+  "back_hair_l",
+  "back_hair_r",
+  "neck",
+  "topwear",
+  "headwear",
+  "handwear_l",
+  "handwear_r",
+  "face",
+  "mouth",
+  "eyewhite",
+  "eyebrow",
+  "irides",
+  "eyelash",
+  "front_hair"
+ ],
+ "layers": {
+  "tail": {
+   "file": "tail.png",
+   "bbox": [
+    128,
+    457,
+    695,
+    736
+   ]
+  },
+  "legwear": {
+   "file": "legwear.png",
+   "bbox": [
+    221,
+    562,
+    355,
+    703
+   ]
+  },
+  "footwear": {
+   "file": "footwear.png",
+   "bbox": [
+    196,
+    637,
+    366,
+    729
+   ]
+  },
+  "bottomwear": {
+   "file": "bottomwear.png",
+   "bbox": [
+    158,
+    395,
+    463,
+    629
+   ]
+  },
+  "back_hair": {
+   "file": "back_hair.png",
+   "bbox": [
+    79,
+    97,
+    408,
+    550
+   ]
+  },
+  "neck": {
+   "file": "neck.png",
+   "bbox": [
+    304,
+    282,
+    350,
+    335
+   ]
+  },
+  "topwear": {
+   "file": "topwear.png",
+   "bbox": [
+    286,
+    325,
+    395,
+    451
+   ]
+  },
+  "headwear": {
+   "file": "headwear.png",
+   "bbox": [
+    201,
+    66,
+    387,
+    360
+   ]
+  },
+  "handwear": {
+   "file": "handwear.png",
+   "bbox": [
+    300,
+    345,
+    457,
+    500
+   ]
+  },
+  "face": {
+   "file": "face.png",
+   "bbox": [
+    269,
+    141,
+    422,
+    323
+   ]
+  },
+  "mouth": {
+   "file": "mouth.png",
+   "bbox": [
+    390,
+    288,
+    408,
+    305
+   ]
+  },
+  "eyewhite": {
+   "file": "eyewhite.png",
+   "bbox": [
+    362,
+    229,
+    403,
+    275
+   ]
+  },
+  "eyebrow": {
+   "file": "eyebrow.png",
+   "bbox": [
+    357,
+    195,
+    398,
+    216
+   ]
+  },
+  "irides": {
+   "file": "irides.png",
+   "bbox": [
+    377,
+    228,
+    391,
+    274
+   ]
+  },
+  "eyelash": {
+   "file": "eyelash.png",
+   "bbox": [
+    356,
+    217,
+    403,
+    262
+   ]
+  },
+  "front_hair": {
+   "file": "front_hair.png",
+   "bbox": [
+    292,
+    31,
+    441,
+    309
+   ]
+  },
+  "legwear_l": {
+   "file": "legwear_l.png",
+   "bbox": [
+    221,
+    562,
+    355,
+    703
+   ]
+  },
+  "footwear_l": {
+   "file": "footwear_l.png",
+   "bbox": [
+    196,
+    637,
+    366,
+    729
+   ]
+  },
+  "legwear_r": {
+   "file": "legwear_r.png",
+   "bbox": [
+    221,
+    562,
+    355,
+    703
+   ]
+  },
+  "footwear_r": {
+   "file": "footwear_r.png",
+   "bbox": [
+    196,
+    637,
+    366,
+    729
+   ]
+  },
+  "handwear_l": {
+   "file": "handwear_l.png",
+   "bbox": [
+    300,
+    345,
+    457,
+    500
+   ]
+  },
+  "handwear_r": {
+   "file": "handwear_r.png",
+   "bbox": [
+    300,
+    345,
+    457,
+    500
+   ]
+  },
+  "back_hair_l": {
+   "file": "back_hair_l.png",
+   "bbox": [
+    79,
+    97,
+    408,
+    550
+   ]
+  },
+  "back_hair_r": {
+   "file": "back_hair_r.png",
+   "bbox": [
+    79,
+    97,
+    408,
+    550
+   ]
+  }
+ },
+ "eyes": {
+  "center": [
+   345.5,
+   252.0
+  ]
+ },
+ "mouth": {
+  "center": [
+   399.0,
+   296.5
+  ]
+ },
+ "springs": {
+  "skirt": {
+   "bones": [
+    "skirt_1",
+    "skirt_2"
+   ],
+   "stiffness": 120,
+   "damping": 9,
+   "inertia": 0.7,
+   "limit": 0.35
+  },
+  "tail": {
+   "bones": [
+    "tail_1",
+    "tail_2",
+    "tail_3",
+    "tail_4",
+    "tail_5",
+    "tail_6"
+   ],
+   "stiffness": 60,
+   "damping": 6,
+   "inertia": 0.9,
+   "limit": 0.6
+  },
+  "hair_l": {
+   "bones": [
+    "hair_l_1",
+    "hair_l_2",
+    "hair_l_3",
+    "hair_l_4",
+    "hair_l_5"
+   ],
+   "stiffness": 80,
+   "damping": 7,
+   "inertia": 1.2,
+   "limit": 0.5
+  },
+  "hair_r": {
+   "bones": [
+    "hair_r_1",
+    "hair_r_2",
+    "hair_r_3",
+    "hair_r_4",
+    "hair_r_5"
+   ],
+   "stiffness": 80,
+   "damping": 7,
+   "inertia": 1.2,
+   "limit": 0.5
+  },
+  "ahoge": {
+   "bones": [
+    "ahoge_1",
+    "ahoge_2"
+   ],
+   "stiffness": 140,
+   "damping": 8,
+   "inertia": 1.5,
+   "limit": 0.6
+  }
+ },
+ "assets": "assets_q34"
+}

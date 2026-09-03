@@ -30,36 +30,9 @@ window.addEventListener('resize', () => {
 
 const S_ = { t: 0, dt: 0, paused: false, hudOn: true, action: 'idle', tau: 0, facing: -1, x: 0.15, emotion: 'neutral',
   blink: { next: 2.2, phase: 0 }, look: { yaw: 0, pitch: 0 }, talking: false, fps: [], lastFrame: performance.now(), prevPos: new Map(), turn: null };
-const rig = await (await fetch('./rig.json')).json();
-const FLOOR_Y = toW([0, rig.floor]).y;
-
-// ------------------------------------------------------------------ skeleton
-const group = new THREE.Group();               // facing flip + locomotion live here
-scene.add(group);
-const bones = {};
-const boneList = [];
-const restHead = {};
-for (const b of rig.bones) {
-  const bone = new THREE.Bone();
-  bone.name = b.name;
-  const h = toW(b.head), t = toW(b.tail);
-  restHead[b.name] = h;
-  bone.userData = { head: h, tail: t, len: h.distanceTo(t), pose: 0, spring: 0, springVel: 0, dir: Math.atan2(t.y - h.y, t.x - h.x) };
-  if (b.parent) { const ph = restHead[b.parent]; bone.position.set(h.x - ph.x, h.y - ph.y, 0); bones[b.parent].add(bone); }
-  else { bone.position.set(h.x, h.y, 0); group.add(bone); }
-  bones[b.name] = bone; boneList.push(bone);
-}
-group.updateMatrixWorld(true);
-const skeleton = new THREE.Skeleton(boneList);
-const boneIndex = Object.fromEntries(boneList.map((b, i) => [b.name, i]));
-
 // ------------------------------------------------------------------ layers
 const loader = new THREE.TextureLoader();
-const loadTex = (file) => new Promise((res, rej) => loader.load('./assets/' + file, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; res(t); }, undefined, rej));
-const layerMeshes = {};   // name -> mesh
-const facePieces = {};    // eyes/mouth/brows for expressions
-const drawOrder = [...rig.order];
-for (const d of rig.duplicates) { const at = drawOrder.indexOf(d.z_before); drawOrder.splice(at < 0 ? 0 : at, 0, d.name); }
+const loadTex = (file) => new Promise((res, rej) => loader.load(`./${ASSETS}/` + file, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; res(t); }, undefined, rej));
 
 function chainPolyline(names) {
   const pts = names.map((n) => bones[n].userData.head.clone());
@@ -93,6 +66,7 @@ function chainWeights(p, poly, names) {
   const w = [1 - w1 - w0, w1, w0, 0];
   return { idx, w };
 }
+
 function buildLayer(name, spec, texName, tint, order) {
   const lay = rig.layers[texName];
   const [x0, y0, x1, y1] = lay.bbox;
@@ -131,26 +105,75 @@ function buildLayer(name, spec, texName, tint, order) {
   layerMeshes[name] = mesh;
   return mesh;
 }
-for (const name of rig.order) layerMeshes[name + '#tex'] = await loadTex(rig.layers[name].file);
-for (const [i, name] of drawOrder.entries()) {
-  const dup = rig.duplicates.find((d) => d.name === name);
-  if (dup) buildLayer(name, dup, dup.from, dup.tint ?? 1, i);
-  else buildLayer(name, rig.attach[name] || { rigid: 'head' }, name, 1, i);
+const Q = new URLSearchParams(location.search);
+const RIG_FILE = Q.get('rig') || 'rig.json';
+const FRONT_FILE = Q.get('front') || null;
+
+let rig, group, bones, boneList, restHead, skeleton, boneIndex, layerMeshes, facePieces, FLOOR_Y, GROUND_Y, springs, ASSETS, VIEW_NAME;
+const VIEWS = {};
+
+async function buildView(name, file) {
+  const rigJ = await (await fetch('./' + file)).json();
+  const floorY = toW([0, rigJ.floor]).y;
+  const grp = new THREE.Group();
+  scene.add(grp);
+  const B = {}, list = [], rest = {};
+  for (const b of rigJ.bones) {
+    const bone = new THREE.Bone();
+    bone.name = b.name;
+    const h = toW(b.head), t = toW(b.tail);
+    rest[b.name] = h;
+    bone.userData = { head: h, tail: t, len: h.distanceTo(t), pose: 0, spring: 0, springVel: 0, dir: Math.atan2(t.y - h.y, t.x - h.x) };
+    if (b.parent) { const ph = rest[b.parent]; bone.position.set(h.x - ph.x, h.y - ph.y, 0); B[b.parent].add(bone); }
+    else { bone.position.set(h.x, h.y, 0); grp.add(bone); }
+    B[b.name] = bone; list.push(bone);
+  }
+  for (const part of ['thigh', 'shin', 'foot', 'upper_arm', 'forearm', 'hand']) {
+    if (!B[part + '_near'] && B[part + '_l']) { B[part + '_near'] = B[part + '_l']; B[part + '_far'] = B[part + '_r'] || B[part + '_l']; }
+  }
+  for (const n of ['thigh_near', 'thigh_far', 'shin_near', 'shin_far', 'foot_near', 'foot_far', 'upper_arm_near', 'upper_arm_far', 'forearm_near', 'forearm_far', 'hand_near', 'hand_far', 'chest', 'neck', 'head', 'hips']) {
+    if (!B[n]) B[n] = new THREE.Bone();
+  }
+  for (let i = 1; i <= 6; i++) if (!B['tail_' + i]) B['tail_' + i] = new THREE.Bone();
+  grp.updateMatrixWorld(true);
+  const skel = new THREE.Skeleton(list);
+  const view = { name, rig: rigJ, group: grp, bones: B, boneList: list, restHead: rest, skeleton: skel, boneIndex: Object.fromEntries(list.map((b, i) => [b.name, i])),
+    layerMeshes: {}, facePieces: {}, floorY, assets: rigJ.assets || 'assets', springs: Object.values(rigJ.springs || {}), meshes: [] };
+  const prev = current();
+  activate(view);
+  const drawOrder = [...rigJ.order];
+  for (const d of rigJ.duplicates || []) { const at = drawOrder.indexOf(d.z_before); drawOrder.splice(at < 0 ? 0 : at, 0, d.name); }
+  for (const nm of Object.keys(rigJ.layers)) layerMeshes[nm + '#tex'] = await loadTex(rigJ.layers[nm].file);
+  for (const [i, nm] of drawOrder.entries()) {
+    const dup = (rigJ.duplicates || []).find((d) => d.name === nm);
+    view.meshes.push(dup ? buildLayer(nm, dup, dup.from, dup.tint ?? 1, i) : buildLayer(nm, rigJ.attach[nm] || { rigid: 'head' }, nm, 1, i));
+  }
+  for (const k of ['eyewhite', 'irides', 'eyelash', 'eyebrow', 'mouth']) facePieces[k] = layerMeshes[k];
+  const eyeC = toW(rigJ.eyes.center), mouthC = toW(rigJ.mouth.center), headH = bones.head.userData.head || new THREE.Vector2();
+  for (const k of Object.keys(facePieces)) {
+    const m = facePieces[k]; if (!m) continue;
+    const c = k === 'mouth' ? mouthC : eyeC;
+    m.geometry.translate(-(c.x - headH.x), -(c.y - headH.y), 0); m.position.set(c.x - headH.x, c.y - headH.y, 0);
+    m.userData.base = m.position.clone();
+  }
+  grp.position.set(S_.x, -VIEW_H / 2 + 0.03 - floorY, 0);
+  view.groundY = grp.position.y;
+  grp.scale.x = name === 'side' ? S_.facing : 1;
+  VIEWS[name] = view;
+  activate(prev || view);
+  return view;
 }
-for (const k of ['eyewhite', 'irides', 'eyelash', 'eyebrow', 'mouth']) facePieces[k] = layerMeshes[k];
-const eyeC = toW(rig.eyes.center), mouthC = toW(rig.mouth.center), headH = bones.head.userData.head;
-// pivot face pieces about their own centres (they are bone-local meshes: shift geometry, move mesh)
-for (const k of Object.keys(facePieces)) {
-  const m = facePieces[k]; const c = k === 'mouth' ? mouthC : eyeC;
-  m.geometry.translate(-(c.x - headH.x), -(c.y - headH.y), 0); m.position.set(c.x - headH.x, c.y - headH.y, 0);
-  m.userData.base = m.position.clone();
+function current() { return VIEW_NAME ? VIEWS[VIEW_NAME] : null; }
+function activate(view) {
+  VIEW_NAME = view.name; rig = view.rig; group = view.group; bones = view.bones; boneList = view.boneList; restHead = view.restHead;
+  skeleton = view.skeleton; boneIndex = view.boneIndex; layerMeshes = view.layerMeshes; facePieces = view.facePieces;
+  FLOOR_Y = view.floorY; GROUND_Y = view.groundY; springs = view.springs; ASSETS = view.assets;
 }
-group.position.set(S_.x, -VIEW_H / 2 + 0.03 - FLOOR_Y, 0); // feet on the window floor
-const GROUND_Y = group.position.y;
-group.scale.x = S_.facing;
+function showOnly(name) {
+  for (const v of Object.values(VIEWS)) { const on = v.name === name; v.group.visible = on; for (const m of v.meshes) if (m.isSkinnedMesh) m.visible = on; }
+}
 
 // ------------------------------------------------------------------ springs
-const springs = Object.values(rig.springs);
 function stepSprings(dt) {
   group.updateMatrixWorld(true);
   const v = new THREE.Vector3();
@@ -268,6 +291,10 @@ A.celebrate = (tau) => { A.hop(tau); bones.upper_arm_near.userData.pose = 2.8; b
 A.tail_react = (tau) => { A.idle(tau); const k = Math.exp(-tau * 1.2) * Math.sin(tau * 9); for (const [i, n] of ['tail_1', 'tail_2', 'tail_3', 'tail_4', 'tail_5', 'tail_6'].entries()) bones[n].userData.pose = 0.35 * k * (0.4 + i * 0.15); };
 A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI); bones.hips.userData.pose = S_.facing * 0.35 * u; bones.chest.userData.pose = S_.facing * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; };
 const ACTIONS = Object.keys(A);
+const VIEW_FOR = { walk: 'side', run: 'side', hop: 'side', sleep: 'side', wake: 'side', turn: 'side', stumble: 'side',
+  idle: 'front', look: 'front', talk: 'front', wave: 'front', sit: 'front', stretch: 'front', celebrate: 'front', tail_react: 'front' };
+function wantView(action) { const w = VIEW_FOR[action] || VIEW_NAME; return VIEWS[w] ? w : (VIEWS.side ? 'side' : Object.keys(VIEWS)[0]); }
+function switchView(name) { if (name === VIEW_NAME || !VIEWS[name]) return; S_.viewSwap = { t0: S_.t, from: VIEW_NAME, to: name }; }
 
 const EMO = {
   neutral: { browRot: 0, browY: 0, eyeScale: 1, mouthW: 1, mouthH: 1, closed: 0 },
@@ -328,6 +355,13 @@ function tick(dt) {
   }
   const sc = S_.rootScale || 1;
   group.scale.set(Math.sign(group.scale.x || S_.facing) * Math.abs(S_.turn ? group.scale.x : 1) * sc, sc, 1);
+  if (S_.viewSwap) {
+    const u = (S_.t - S_.viewSwap.t0) / 0.24;
+    if (u >= 0.5 && VIEW_NAME !== S_.viewSwap.to) { activate(VIEWS[S_.viewSwap.to]); showOnly(S_.viewSwap.to); S_.prevPos.clear(); for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } }
+    const sq = Math.max(0.04, Math.abs(Math.cos(Math.PI * u)));
+    group.scale.x = (VIEW_NAME === 'side' ? S_.facing : 1) * sq * sc; group.scale.y = sc;
+    if (u >= 1) S_.viewSwap = null;
+  } else if (VIEW_NAME !== 'side' && !S_.turn) { group.scale.x = sc; }
   group.position.x = S_.x + (S_.rootX || 0); group.position.y = GROUND_Y;
   applyPose();
   stepSprings(dt);
@@ -341,24 +375,24 @@ function frame() {
   if (!S_.paused) tick(dt);
   renderer.render(scene, camera);
   S_.fps.push(dt); if (S_.fps.length > 120) S_.fps.shift();
-  if (S_.hudOn) hud.textContent = `side rig  ${(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(0)} fps  action ${S_.action} ${S_.tau.toFixed(1)}s  facing ${S_.facing > 0 ? '+x' : '-x'}  emotion ${S_.emotion}\n` +
+  if (S_.hudOn) hud.textContent = `rig [${VIEW_NAME}]  ${(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(0)} fps  action ${S_.action} ${S_.tau.toFixed(1)}s  facing ${S_.facing > 0 ? '+x' : '-x'}  emotion ${S_.emotion}\n` +
     `[I] idle [W] walk [R] run [H] hop [V] wave [L] look [T] talk [S] sit [Z] sleep [K] wake [F] turn [X] stretch [C] celebrate [B] tail [U] stumble\n[1-9] neutral happy sad angry surprised think awkward question curious  [Space] stop  [G] hud`;
   requestAnimationFrame(frame);
 }
 
 // ------------------------------------------------------------------ control surface
 const lab = window.lab = {
-  info: () => ({ bones: boneList.length, layers: Object.keys(layerMeshes).filter((k) => !k.endsWith('#tex')).length, actions: ACTIONS, emotions: Object.keys(EMO) }),
+  info: () => ({ views: Object.keys(VIEWS), view: VIEW_NAME, bones: boneList.length, layers: Object.keys(layerMeshes).filter((k) => !k.endsWith('#tex')).length, actions: ACTIONS, emotions: Object.keys(EMO) }),
   actions: () => ACTIONS,
-  start(name) { if (!A[name]) throw new Error('unknown action ' + name); S_.action = name; S_.tau = 0; if (name === 'turn') S_.turn = null; return { name }; },
-  begin(name) { lab.start(name); S_.t = 0; S_.x = -0.15; S_.facing = -1; group.scale.x = -1; S_.turn = null; S_.blink.next = 9; S_.blink.phase = 0; for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } S_.prevPos.clear(); return { name }; },
+  start(name) { if (!A[name]) throw new Error('unknown action ' + name); S_.action = name; S_.tau = 0; if (name === 'turn') S_.turn = null; switchView(wantView(name)); return { name, view: wantView(name) }; },
+  begin(name) { lab.start(name); S_.t = 0; S_.x = -0.15; S_.facing = -1; S_.turn = null; if (S_.viewSwap) { activate(VIEWS[S_.viewSwap.to]); showOnly(S_.viewSwap.to); S_.viewSwap = null; } group.scale.set(VIEW_NAME === 'side' ? -1 : 1, 1, 1); S_.blink.next = 9; S_.blink.phase = 0; for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } S_.prevPos.clear(); return { name }; },
   step(sec) { const n = Math.max(1, Math.round(sec * 60)); for (let i = 0; i < n; i++) tick(1 / 60); renderer.render(scene, camera); },
   stop() { S_.action = 'idle'; S_.tau = 0; },
   pause(v) { S_.paused = !!v; },
   hud(v) { S_.hudOn = !!v; hud.style.display = v ? 'block' : 'none'; },
   emotion(name) { if (!EMO[name]) throw new Error('unknown emotion ' + name); S_.emotion = name; },
   look(yaw, pitch) { S_.look.yaw = clamp(yaw || 0, -1, 1); S_.look.pitch = clamp(pitch || 0, -1, 1); },
-  snapshot: () => ({ action: S_.action, tau: +S_.tau.toFixed(2), x: +S_.x.toFixed(3), facing: S_.facing, rootY: +(S_.rootY || 0).toFixed(3), springs: Object.fromEntries(springs.flatMap((s) => s.bones).map((n) => [n, +bones[n].userData.spring.toFixed(3)])) }),
+  snapshot: () => ({ view: VIEW_NAME, action: S_.action, tau: +S_.tau.toFixed(2), x: +S_.x.toFixed(3), facing: S_.facing, rootY: +(S_.rootY || 0).toFixed(3), springs: Object.fromEntries(springs.flatMap((s) => s.bones).map((n) => [n, +bones[n].userData.spring.toFixed(3)])) }),
   fps: () => +(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(1),
 };
 window.addEventListener('keydown', (e) => {
@@ -371,6 +405,9 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('error', (e) => { window.__error = String(e.error?.stack || e.message); });
 window.addEventListener('unhandledrejection', (e) => { window.__error = String(e.reason?.stack || e.reason); });
+await buildView('side', RIG_FILE);
+if (FRONT_FILE) await buildView('front', FRONT_FILE);
+activate(VIEWS.side); showOnly('side');
 lab.hud(true);
 requestAnimationFrame(frame);
 window.__ready = true;
