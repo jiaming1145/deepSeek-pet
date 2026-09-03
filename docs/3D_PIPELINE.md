@@ -103,11 +103,13 @@ sleeves and bust as separate spring-bone groups. Three scripts, all headless:
 ```powershell
 # 1. dump the base model's textures (once), repaint them into her palette
 blender --background --python <dump script>          # see spikes/model/generated/base/_survey/G_textures
-python toolsrmestyle_textures.py --src <dumped textures> --out <restyled dir>
+python toolsrm
+estyle_textures.py --src <dumped textures> --out <restyled dir>
 # 2. swap textures into the base, tint materials, build the whale tail and fin ears, save a .blend
-blender --background --python toolsrmestyle_vroid.py -- --input <base.vrm> --textures <restyled dir> --output <run>\whalechan_restyled.blend
+blender --background --python toolsrm
+estyle_vroid.py -- --input <base.vrm> --textures <restyled dir> --output <run>\whalechan_restyled.blend
 # 3. the normal hookup on that .blend: tail + fin chains, VRoid materials kept, no T-pose forcing
-python toolsrm\hookup_whalechan.py --glb <run>\whalechan_restyled.blend --chains toolsrm\chains.vroidbase.json --no-face --no-tpose --keep-materials --run-name vroid-NN
+python tools/vrm/hookup_whalechan.py --glb <run>/whalechan_restyled.blend --chains tools/vrm/chains.vroidbase.json --no-face --no-tpose --keep-materials --run-name vroid-NN
 ```
 
 - Base: `AvatarSample_G.vrm` from pixiv's VRoid sample pack (CC0; OpenGameArt mirror). Frilly one-piece,
