@@ -10,7 +10,7 @@ const fs = require('node:fs');
 app.commandLine.appendSwitch('allow-file-access-from-files');
 const CAPTURE = process.argv.includes('--capture');
 const TOUR = process.argv.includes('--tour');
-const SHOTS = path.join(__dirname, 'shots');
+const SHOTS = path.join(__dirname, process.argv.includes('--front') ? 'shots_views' : process.argv.includes('--rig') ? 'shots_' + path.basename(process.argv[process.argv.indexOf('--rig') + 1], '.json') : 'shots');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
@@ -21,7 +21,9 @@ app.whenReady().then(async () => {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => { if (level >= 2) console.log(`[renderer] ${message} (${sourceId}:${line})`); });
-  await win.loadFile(path.join(__dirname, 'index.html'));
+  const argOf = (flag) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : null; };
+  const query = {}; if (argOf('--rig')) query.rig = argOf('--rig'); if (argOf('--front')) query.front = argOf('--front');
+  await win.loadFile(path.join(__dirname, 'index.html'), Object.keys(query).length ? { query } : undefined);
   const js = (s) => win.webContents.executeJavaScript(s, true);
   let ready = false;
   for (let i = 0; i < 300; i++) {

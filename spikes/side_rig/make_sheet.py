@@ -6,7 +6,9 @@ import os
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SHOTS = os.path.join(HERE, "shots")
+import sys
+TAG = sys.argv[1] if len(sys.argv) > 1 else ""          # e.g. rig_q34 -> shots_rig_q34, sheet_actions_rig_q34.png
+SHOTS = os.path.join(HERE, "shots_" + TAG if TAG else "shots")
 OUT = os.path.join(HERE, "evidence")
 os.makedirs(OUT, exist_ok=True)
 rep = json.load(open(os.path.join(SHOTS, "report.json")))
@@ -34,7 +36,7 @@ for a in acts:
             continue
         x, y = (i % cols) * cell[0], 18 + (i // cols) * (cell[1] + 16)
         sheet.paste(tile(p), (x, y)); d.text((x + 4, y + cell[1] + 2), f"{a} {[20, 50, 80][k]}%", fill=(200, 230, 255)); i += 1
-sheet.save(os.path.join(OUT, "sheet_actions.png"))
+sheet.save(os.path.join(OUT, f"sheet_actions{("_" + TAG) if TAG else ""}.png"))
 emos = rep["emotions"]
 es = Image.new("RGB", (len(emos) * cell[0], cell[1] + 34), (20, 20, 24))
 d = ImageDraw.Draw(es)
@@ -42,5 +44,5 @@ for i, e in enumerate(emos):
     p = os.path.join(SHOTS, f"emo_{e}.png")
     if os.path.exists(p):
         es.paste(tile(p), (i * cell[0], 18)); d.text((i * cell[0] + 4, cell[1] + 20), e, fill=(200, 230, 255))
-es.save(os.path.join(OUT, "sheet_emotions.png"))
-print("sheets:", os.path.join(OUT, "sheet_actions.png"), os.path.join(OUT, "sheet_emotions.png"), "errors:", rep["errors"])
+es.save(os.path.join(OUT, f"sheet_emotions{("_" + TAG) if TAG else ""}.png"))
+print("sheets for", TAG or "side", "errors:", rep["errors"])
