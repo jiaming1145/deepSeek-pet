@@ -6,7 +6,7 @@
 # path(s) and exits 1. PNGs and other binaries are out of scope: key-window captures must use an
 # empty field. Never bypass with --no-verify; fix the staged content instead.
 
-pattern='(sk-[A-Za-z0-9]{20,}|msy_[A-Za-z0-9]{20,})'
+pattern='(sk-[A-Za-z0-9]{20,}|msy_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,})'
 offenders=$(git diff --cached --name-only --diff-filter=ACMR -z \
   | tr '\0' '\n' \
   | while IFS= read -r path; do
