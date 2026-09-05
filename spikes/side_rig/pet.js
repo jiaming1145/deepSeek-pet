@@ -13,7 +13,7 @@ const bubble = document.getElementById('say');
 let bubbleUntil = 0;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, log: [] };
 const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
@@ -70,7 +70,7 @@ function touched() { P.lastTouch = P.t; }
 // --- her voice -------------------------------------------------------------------------------------------
 // The bubble follows her head, so it reads as her speaking rather than as a notification.
 function say(line) {
-  if (!line || !bubble) return;
+  if (!line || !bubble || P.quiet) return;   // out-of-character mode keeps her quiet
   bubble.textContent = line;
   bubble.classList.add('on');
   bubbleUntil = P.t + readTime(line);
@@ -191,7 +191,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'p') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); }
 });
 if (bridge && bridge.onIdle) bridge.onIdle((sec) => { P.userIdle = sec; });
-if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
+if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'plain' || cmd === 'character') { P.quiet = cmd === 'plain'; if (P.quiet && bubble) bubble.classList.remove('on'); } else if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
 
 // Things worth remembering are saved as they happen, not only on the 30 s timer: a pat that arrives seconds
 // before you close her should still be there tomorrow.

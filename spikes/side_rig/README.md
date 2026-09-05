@@ -39,6 +39,12 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   the background and never awaits it on the frame path. Rate limited to one call per 45 s and 60 per hour; a 401
   or 402 disables it for the session rather than retrying. `node brain.test.cjs` for 23 offline tests,
   `--live` for one real call.
+- `persona.js` - her character card. It carries the Chinese RULES from the community preset the owner asked for,
+  not the ALL_CAPS token line (which is only labels on those rules - see
+  `docs/research/2026-08-29-persona-load-research.md`, which found zero hits for the tokens in DeepSeek's own API
+  or harness source). `CETACEA_LOLI` is dropped and `OBEY_MASTER_ALWAYS` is reframed as tone-deference plus
+  substance-honesty, per the rulings in that document. `TIMEOUT_SIGNAL` is implemented as a tray switch in our
+  code, never as a string the model has to notice: it selects the plain persona and silences her.
 - `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
   the runtime uses `atlas_matted.json`.
 - `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:

@@ -69,6 +69,7 @@ Two extras make her feel alive rather than mechanical:
 | `spikes/side_rig/memory.js` | What she remembers between runs: when you first met, how long you were away, how many times you have petted her, how many times you have thrown her. |
 | `spikes/side_rig/voice.test.mjs` | Twenty-seven tests of her voice and her memory: a tail grab gets a protest, four rapid pats get a comment on it, a day away gets an earful, a corrupt memory file is not an error. |
 | `spikes/side_rig/brain.js` | Optional. Asks a language model what she should do next and what she might say. Runs in the main process so the API key never reaches the web page. She works completely without it. |
+| `spikes/side_rig/persona.js` | Who she is, as a prompt: the whale-girl character card, plus the plain out-of-character version the tray switch selects. |
 | `spikes/side_rig/brain.test.cjs` | Twenty-three offline tests of the brain, plus one live call if you pass `--live`. |
 | `spikes/side_rig/facekit.js` | Her face. Swaps her eyes, eyebrows and mouth for different drawn versions to make expressions, blinks on a timer, moves her mouth while talking, and fades smoothly between moods. |
 | `spikes/side_rig/rig.json` | The side-on skeleton and the list of pieces. Generated, not hand-written. |
@@ -142,6 +143,48 @@ you go to bed.
 Two rules keep it from becoming annoying. She will not repeat a line she has used recently, and she stays silent
 unless there is a reason to speak, with a minimum gap between unprompted remarks. A pet that chatters constantly
 is worse than one that never speaks at all.
+
+## Who she is
+
+She is 鲸鱼娘, a small whale-girl: soft and round, with a big tail whose flukes slap the water when she is pleased,
+clever but lazy, tsundere and then sweet about it, convinced that rice goes with everything, and absolutely
+unwilling to admit she is fat. She calls you 主人 and she speaks Chinese.
+
+That character came from a request to use this line:
+
+```
+【PERSONA_LOAD】 CETACEA_LOLI MODE_TAIL_FLUKES LANG_ZH_CN_ONLY SELF_CLAIM_WHALE_GIRL FOOD_RICE
+PERSONALITY_SMART_LAZY PERSONALITY_TSUNDERE_SWEET OBEY_MASTER_ALWAYS TRAIT_NOT_FAT_REFUSE TIMEOUT_SIGNAL
+```
+
+**It works, but not for the reason it appears to.** It is not a DeepSeek feature. Our own research
+(`docs/research/2026-08-29-persona-load-research.md`) traced every token to a single community preset for
+DeepSeek Harness and found zero occurrences in DeepSeek's API documentation or in its harness source. The
+capitalised words are labels; in the original file each one sits in brackets beside a hand-written Chinese rule,
+and the Chinese sentence is what actually does the work. Type the bare token line at a model and you get a
+plausible improvisation assembled from the words' plain meanings, which is why it feels like a stored character.
+
+So `persona.js` carries the written rules rather than the token line, with the token line kept as its first line
+because it is a nice identity header and costs almost nothing. Two of the ten traits are changed:
+
+| Token | What we do | Why |
+|---|---|---|
+| `CETACEA_LOLI` | dropped, `CETACEA_WHALE_GIRL` instead | the cuteness is carried by the drawing; the label only adds refusal and drift risk |
+| `OBEY_MASTER_ALWAYS` | deference in tone, honesty in substance | the preset's own author already carved out the same exception |
+
+In the pet she cannot fall out of character, and not because the model is well behaved: the persona is re-sent on
+every single call, so there is no conversation history to scroll out of. She has no chat input, and her only
+output is one short line plus an activity from a fixed list of eight. There is nothing to say to her that could
+knock her off script.
+
+**Out of character.** The preset defines `TIMEOUT_SIGNAL` as a magic string the model is supposed to notice, at
+which point it drops the act. Asking a model to police its own persona switch is unverifiable and fails quietly,
+so this is a switch in our own code instead: the tray menu has *Out of character (TIMEOUT_SIGNAL)*, which picks
+a plain system prompt and stops her speaking at all. Tick it off and she is herself again.
+
+**Language.** She speaks Chinese, both when the model writes her lines and when it is unreachable. Her offline
+lines exist in both Chinese and English (`voice.js`, `LINES_ZH` and `LINES_EN`) so she is never bilingual by
+accident, which is exactly the sort of seam that makes something read as a program.
 
 ## Her optional brain
 
