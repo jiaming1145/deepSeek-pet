@@ -14,6 +14,7 @@ export class FaceKit {
     this.place = opts.place;                     // (px, py) face px -> THREE.Vector3 in parent space
     this.pxScale = opts.pxScale;                 // world units per face px
     this.renderOrder = opts.renderOrder || 100;
+    this.atlasJson = opts.atlasJson || 'atlas.json';   // 'atlas_matted.json': cells re-matted to the drawn feature only
     this.mood = 'neutral'; this.pending = null; this.fade = 0; this.FADE = 0.12;
     this.blink = { next: 2.5, phase: 0 }; this.viseme = null; this.look = null; this.eyesClosed = 0;
     this.regions = {}; this.fx = {}; this.state = {};
@@ -21,7 +22,7 @@ export class FaceKit {
 
   async load() {
     const j = async (f) => (await fetch(`${this.base}/${f}`)).json();
-    this.atlas = await j('atlas.json');
+    this.atlas = await j(this.atlasJson);
     this.states = await j('face_atlas_states.json');
     const loader = new THREE.TextureLoader();
     const tex = (f) => new Promise((res, rej) => loader.load(`${this.base}/${f}`, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; res(t); }, undefined, rej));
