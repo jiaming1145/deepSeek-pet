@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(HERE, "shots_pet")
 OUT = os.path.join(HERE, "evidence")
 os.makedirs(OUT, exist_ok=True)
-rep = json.load(open(os.path.join(SHOTS, "report.json")))
+rep = json.load(open(os.path.join(SHOTS, "report.json"), encoding="utf-8"))   # her log is Chinese now
 cell = (300, 340)
 cols = 7
 shots = rep["shots"]

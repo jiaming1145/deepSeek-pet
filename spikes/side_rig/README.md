@@ -109,6 +109,14 @@ present must be scored down when you are not.
 - The side view's `headwear` layer from See-through was an inpainted skull blob that painted over her forehead and
   eye; it is re-cut from the source art (the original is kept at `assets/orig/headwear.png`) and now draws above
   her hair, where a headdress belongs.
+- Closed eyes are placed, not just swapped. The shipped `closed` and `happy` cells are drawn ~120 cell px higher
+  in their frame than every other state, so they landed above her eye with bare skin below. `rematte_atlases.py`
+  seats any short cell at `LID_REST` (0.65) down the open eye's ink and records the shift in `atlas_matted.json`
+  under `regions[...].state_offsets_px`; `facekit.js` moves the quad when it applies the UV, and
+  `preview_front.py` does the same so the offline check stays honest. The side view has no cells: it fades the
+  white and iris out with `closed` and drops the lash by `0.42 * EYE_H` instead of squashing everything to 6 %.
+  `lab.eyes(0..1)` holds the lids for testing.
+- The sheet builders read `report.json` as UTF-8: her log is Chinese, and the Windows default codepage cannot.
 - The kit draws no nose, so her `nose` layer stays visible under it. The kit's eye cells are verbatim pixels
   from the canonical (an 'open' cell composited over its own source window differs by 0.0), and the kit-to-canvas
   map is confirmed by cross-correlating the kit face against the decomposed head (scale 0.1585 fitted vs 0.1589
