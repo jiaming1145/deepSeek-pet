@@ -34,6 +34,11 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   shutdown), written by the main process to `<userData>/whalechan-memory.json`. `node voice.test.mjs` runs 27
   tests over both. The speech bubble is a plain DOM element in `index.html`, positioned above her silhouette each
   frame and never able to take a click.
+- `brain.js` - the optional language-model brain, required by `main.js` and run ONLY in the main process so the
+  key at `~/.ds/deepseek.key` never reaches the renderer. It returns a suggestion or null; `pet.js` fires it in
+  the background and never awaits it on the frame path. Rate limited to one call per 45 s and 60 per hour; a 401
+  or 402 disables it for the session rather than retrying. `node brain.test.cjs` for 23 offline tests,
+  `--live` for one real call.
 - `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
   the runtime uses `atlas_matted.json`.
 - `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:

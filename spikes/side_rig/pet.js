@@ -2,7 +2,7 @@
 // (wander, look, sit, stretch, nap). In the pet window a preload bridge (window.petBridge) tells the main process when
 // the cursor is over her so the window stops being click-through; in the lab the same code runs without the bridge.
 import './rig.js';
-import { createMind, observe, tick as mindTick, decide as mindDecide, shouldChange, summarise } from './mind.js';
+import { createMind, observe, tick as mindTick, decide as mindDecide, shouldChange, summarise, suggest, ACTIVITIES } from './mind.js';
 import { createVoice, react as vReact, idleLine, speak, readTime } from './voice.js';
 import { blank as blankMemory, load as loadMemory, resume as resumeMemory, record as recordMemory, snapshot as snapshotMemory, describe as describeMemory } from './memory.js';
 const lab = window.lab, bridge = window.petBridge || null;
@@ -13,7 +13,7 @@ const bubble = document.getElementById('say');
 let bubbleUntil = 0;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, lastSave: 0, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, log: [] };
 const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
@@ -89,6 +89,23 @@ function placeBubble() {
 }
 const ctxNow = () => ({ ...mindCtx(), hourOfDay: new Date().getHours() });
 
+// --- her optional brain ----------------------------------------------------------------------------------
+// We ask, and carry on. Whatever comes back arrives later and only ever becomes a SUGGESTION for her next
+// decision, so a slow, broken, unpaid or absent model can never stall her or take her over.
+let thinking = false;
+async function consult() {
+  if (thinking || !bridge || !bridge.think) return;
+  thinking = true;
+  try {
+    const out = await bridge.think(summarise(M, ctxNow()), describeMemory(MEM, Date.now()), Object.keys(ACTIVITIES));
+    if (out && out.activity) {
+      suggest(M, out.activity, 'she thought about it');
+      note('thought', { activity: out.activity, line: out.line || '' });
+      if (out.line) say(speak(V, P.t, out.line));
+    }
+  } catch (e) { /* she simply carries on */ } finally { thinking = false; }
+}
+
 function endDrag() { P.drag = null; setOver(false); document.body.style.cursor = 'default'; }
 function setOver(v) { if (v === P.over) return; P.over = v; if (bridge) bridge.setHit(v); document.body.style.cursor = v ? (P.drag ? 'grabbing' : 'grab') : 'default'; }
 function onTick(dt) {
@@ -130,6 +147,7 @@ function onTick(dt) {
   }
   if (P.t > P.nextIdleLine) { P.nextIdleLine = P.t + 25 + Math.random() * 50; const l = idleLine(V, P.t, M, ctxNow()); if (l) say(l); }
   if (P.t - P.lastSave > 30) { P.lastSave = P.t; saveMemory(); }
+  if (P.t > P.nextThought) { P.nextThought = P.t + 50; consult(); }
   if (shouldChange(M, mindCtx()) || P.t >= P.until) decide();
 }
 lab.onTick(onTick);
@@ -208,6 +226,8 @@ const pet = window.pet = {
   history: () => describeMemory(MEM, Date.now()),
   memory: () => ({ ...MEM }),
   saveNow: () => saveMemory(),
+  think: () => consult(),
+  brain: () => (bridge && bridge.brainInfo ? bridge.brainInfo() : { enabled: false }),
 };
 if (P.auto) { P.lastTouch = 0; enter('idle', { dur: 2 }); }
 wakeUp();

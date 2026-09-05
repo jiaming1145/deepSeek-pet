@@ -9,6 +9,7 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, powerMonitor } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { createBrain, think } = require('./brain.js');
 
 app.commandLine.appendSwitch('allow-file-access-from-files');
 const has = (f) => process.argv.includes(f);
@@ -22,6 +23,13 @@ app.whenReady().then(async () => {
   // her memory: one small JSON file beside the app's settings, so she is not a blank slate every launch.
   // Registered for every mode, not just --pet, so the lab and the probes can read it too.
   const memFile = path.join(app.getPath('userData'), 'whalechan-memory.json');
+  // Her optional language-model brain. The key is read here and never reaches the page. Everything she does
+  // works without it, so a missing key, an empty account or a dead network changes nothing on screen.
+  const brain = createBrain({});
+  ipcMain.handle('pet:think', async (_e, state, history, activities) => {
+    try { return await think(brain, state, history, activities); } catch (e) { return null; }
+  });
+  ipcMain.handle('pet:brain', () => ({ enabled: brain.enabled, calls: brain.calls, ok: brain.ok, failed: brain.failed, lastError: brain.lastError }));
   ipcMain.handle('pet:memory:load', () => { try { return JSON.parse(fs.readFileSync(memFile, 'utf8')); } catch (e) { return null; } });
   ipcMain.on('pet:memory:save', (_e, data) => { try { fs.writeFileSync(memFile, JSON.stringify(data)); } catch (e) { console.error('could not save her memory:', e.message); } });
   const query = {};
@@ -73,6 +81,7 @@ app.whenReady().then(async () => {
     const idleTimer = setInterval(pushIdle, 2000);
     win.on('closed', () => clearInterval(idleTimer));
     console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds), 'memory', memFile);
+    console.log('brain', brain.enabled ? 'on (DeepSeek)' : 'off - she runs on her own mind alone');
   }
 
   if (TOUR) {
@@ -122,6 +131,9 @@ app.whenReady().then(async () => {
     await js('lab.step(0.5)'); await snap('falling');
     await js('lab.step(2.5)'); await snap('landed'); await check('land');
     await js('lab.step(4)'); await snap('after');
+    await js('pet.think()');            // one real consultation, so the brain path is exercised end to end
+    await wait(8000);
+    report.brain = await js('pet.brain()');
     await js('pet.saveNow()');
     report.memory = await js('pet.memory()');
     report.log = await js('pet.log()');
