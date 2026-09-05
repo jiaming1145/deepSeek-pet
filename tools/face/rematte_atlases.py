@@ -93,6 +93,48 @@ def harmonise_mouth_cavity(cell, cavity_rgb):
     return out
 
 
+# A shut eyelid does not rest at the top of the eye, it rests low - roughly two thirds of the way down the
+# opening. Anything lower than that reads as a squint; anything higher, as here, leaves bare skin under the lash
+# line and looks like the eye is missing rather than closed.
+LID_REST = 0.65
+
+
+def state_offsets(arr, at, rows):
+    """The shipped `closed` and `happy` cells are drawn near the top of their frame while every other state fills
+    it, so a blink put her lash line above her eye with a gap of bare skin below. Measure each short cell and
+    record the shift that seats it at LID_REST down the open eye, for the runtime to apply on the swap."""
+    cw, ch = at["cell_px"]
+    states = at["states"] if isinstance(at["states"], list) else list(at["states"])
+    if "open" not in states:
+        return {}
+    out = {}
+    for r, region in enumerate(rows):
+        def span(state):
+            i = states.index(state)
+            a = arr[r * ch:(r + 1) * ch, i * cw:(i + 1) * cw, 3] > 25
+            if not a.any():
+                return None
+            ys = np.nonzero(a.any(axis=1))[0]
+            return int(ys.min()), int(ys.max())
+        base = span("open")
+        if base is None:
+            continue
+        rest = base[0] + LID_REST * (base[1] - base[0])
+        off = {}
+        for st in states:
+            b = span(st)
+            if b is None:
+                continue
+            if (b[1] - b[0]) > 0.55 * (base[1] - base[0]):
+                continue                     # a full-height eye, not a closed lid
+            dy = round(rest - (b[0] + b[1]) / 2)
+            if dy > 20:                      # only lift cells that are genuinely floating
+                off[st] = [0, dy]
+        if off:
+            out[region] = off
+    return out
+
+
 def cells_of(atlas_name, at, size):
     """Yield (x0, y0, x1, y1) for every cell of a gridded atlas; fx has explicit cells instead."""
     if at.get("cell_px"):
@@ -154,6 +196,11 @@ def main():
             dark = np.array([118, 44, 58], np.uint8)
             for (x0, y0, x1, y1) in cells_of(name, at, sheet.size):
                 arr[y0:y1, x0:x1] = harmonise_mouth_cavity(arr[y0:y1, x0:x1], dark)
+        if at.get("rows"):
+            offs = state_offsets(arr, at, at["rows"])
+            for region, off in offs.items():
+                manifest["regions"].setdefault(region, {})["state_offsets_px"] = off
+                print(f"  {region}: seated the closed lid - {', '.join(f'{k} +{v[1]}px' for k, v in off.items())}")
         fn = at["file"].replace(".png", "_matted.png")
         if not a.dry_run:
             Image.fromarray(arr).save(os.path.join(out_dir, fn))

@@ -76,6 +76,14 @@ export class FaceKit {
     return { u0, v0, w: cw / W, h: ch / H };
   }
   applyUV(mesh, region, stateName) {
+    // some cells are drawn higher in their frame than the rest of the set; the re-matte tool measures that and
+    // records the correction, so a blink lands where her eye actually shuts instead of floating above it
+    const off = (this.atlas.regions[region].state_offsets_px || {})[stateName];
+    const base = mesh.userData.base;
+    if (base) {
+      if (off) mesh.position.set(base.x + off[0] * this.pxScale, base.y - off[1] * this.pxScale, base.z);
+      else mesh.position.copy(base);
+    }
     const { u0, v0, w, h } = this.cellUV(region, stateName);
     const uv = mesh.geometry.attributes.uv;
     if (!mesh.geometry.userData.baseUV) mesh.geometry.userData.baseUV = Float32Array.from(uv.array);   // pristine corners (0/1)
