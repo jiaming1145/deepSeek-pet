@@ -38,6 +38,11 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   Open it by double-clicking her, pressing C, or the tray's Chat item. `brain.chat()` is a separate call from
   `brain.think()`: no activity to pick, a 700-token budget, its own 30 s timeout, and the last 8 turns for
   context. Both key handlers ignore events whose target is an input, or typing drives her animations.
+- `perform.js` - what is said in the chat box drives the animation. `readPerformance(asked, said)` reads your
+  instruction first and her bracketed stage directions second, and returns `{action, emotion, target}`; pet.js
+  maps that onto her states, her mood, or a walk to a fraction of the stage width (or to your cursor). Only the
+  bracketed parts of her reply are read, so speech cannot trigger movement by accident. `node perform.test.mjs`.
+  The persona tells her the body follows the brackets, which is what makes the model write them reliably.
 - `brain.js` - the optional language-model brain, required by `main.js` and run ONLY in the main process so the
   key at `~/.ds/deepseek.key` never reaches the renderer. It returns a suggestion or null; `pet.js` fires it in
   the background and never awaits it on the frame path. Rate limited to one call per 45 s and 60 per hour; a 401

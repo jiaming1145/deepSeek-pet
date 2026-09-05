@@ -4,6 +4,7 @@
 import './rig.js';
 import { createMind, observe, tick as mindTick, decide as mindDecide, shouldChange, summarise, suggest, ACTIVITIES } from './mind.js';
 import { createVoice, react as vReact, idleLine, speak, readTime } from './voice.js';
+import { readPerformance } from './perform.js';
 import { blank as blankMemory, load as loadMemory, resume as resumeMemory, record as recordMemory, snapshot as snapshotMemory, describe as describeMemory } from './memory.js';
 const lab = window.lab, bridge = window.petBridge || null;
 const M = createMind();          // what she wants; see mind.js. The dice are gone.
@@ -19,7 +20,7 @@ const turns = [];              // the conversation so far, newest last
 let chatBusy = false;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, hintShown: false, log: [] };
 const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
@@ -44,7 +45,8 @@ function enter(state, opts = {}) {
     case 'wander': {
       const st = lab.stage(), p = lab.pos();
       let tx = p.x, tries = 0;
-      while (Math.abs(tx - p.x) < Math.min(1.2, st.w * 0.3) && tries++ < 20) tx = rnd(0.9, Math.max(0.9, st.w - 0.9));
+      if (opts.target != null) tx = Math.max(0.6, Math.min(st.w - 0.6, opts.target));
+      else while (Math.abs(tx - p.x) < Math.min(1.2, st.w * 0.3) && tries++ < 20) tx = rnd(0.9, Math.max(0.9, st.w - 0.9));
       P.target = tx; P.gait = opts.gait || (Math.abs(tx - p.x) > st.w * 0.45 || Math.random() < 0.2 ? 'run' : 'walk');
       lab.turnTo(tx > p.x ? 1 : -1); lab.start(P.gait); if (P.gait === 'run') lab.emotion('cheerful'); else feel();
       P.until = P.t + 40; note('wander', { target: +tx.toFixed(2), gait: P.gait });
@@ -54,6 +56,7 @@ function enter(state, opts = {}) {
     case 'sit': lab.start('sit'); feel('relaxed'); break;
     case 'stretch': lab.start('stretch'); lab.emotion('sleepy'); break;
     case 'tail': lab.start('tail_react'); feel('happy'); break;
+    case 'dance': lab.start('dance'); if (opts.emotion) lab.emotion(opts.emotion); else feel('cheerful'); break;
     case 'talk': lab.start('talk'); feel('happy'); say(idleLine(V, P.t, M, ctxNow(), true)); break;
     case 'sleep': lab.start('sleep'); lab.emotion('sleepy'); break;
     case 'wake': lab.start('wake'); lab.emotion('neutral'); break;
@@ -95,6 +98,31 @@ function placeBubble() {
 }
 const ctxNow = () => ({ ...mindCtx(), hourOfDay: new Date().getHours() });
 
+// --- doing what was said ------------------------------------------------------------------------------------
+// Ask her to dance, or to go and stand on the left, and she should actually do it. perform.js reads both your
+// instruction and the bracketed stage directions in her reply; this turns that into movement.
+const AS_STATE = { sit: 'sit', sleep: 'sleep', stretch: 'stretch', look: 'look', talk: 'talk', tail_react: 'tail', dance: 'dance' };
+const AS_REACTION = { wave: 'wave', celebrate: 'celebrate', hop: 'hop', stumble: 'stumble' };
+function performFrom(asked, said) {
+  const plan = readPerformance(asked, said);
+  if (!plan) return null;
+  const st = lab.stage();
+  if (plan.target != null) {
+    const x = plan.target === 'cursor'
+      ? (P.cursor ? P.cursor[0] / st.k : lab.pos().x)
+      : plan.target * st.w;
+    enter('wander', { target: x, gait: 'walk', dur: 40, emotion: plan.emotion || undefined });
+  } else if (AS_STATE[plan.action]) {
+    enter(AS_STATE[plan.action], { dur: plan.action === 'dance' ? 9 : 6, emotion: plan.emotion || undefined });
+  } else if (AS_REACTION[plan.action]) {
+    enter('react', { dur: 3, action: AS_REACTION[plan.action], emotion: plan.emotion || undefined });
+  } else if (plan.emotion) {
+    try { lab.emotion(plan.emotion); } catch (e) { /* unknown mood, leave her face alone */ }
+  }
+  note('perform', plan);
+  return plan;
+}
+
 // --- the chat box ------------------------------------------------------------------------------------------
 // Her bubble is a line over her head; this is a real conversation, so it gets a panel with history and an input.
 // The window is click-through everywhere except her pixels, so while the panel is open its rectangle has to
@@ -110,7 +138,7 @@ function showChat(on) {
   if (!chatBox) return;
   chatBox.classList.toggle('on', on);
   if (on) {
-    if (!turns.length) addLine('sys', '和她说说话吧。她会用鲸鱼娘的语气回答。');
+    if (!P.hintShown) { P.hintShown = true; addLine('sys', '和她说说话吧。她会用鲸鱼娘的语气回答。'); }
     setOver(true);
     setTimeout(() => chatIn && chatIn.focus(), 30);
     if (P.auto && P.state === 'wander') enter('idle', { dur: 6 });
@@ -160,6 +188,7 @@ async function sendChat() {
     renderHer(res.text, waiting);
     turns.push({ role: 'her', text: res.text });
     note('chat', { line: res.text.slice(0, 60) });
+    performFrom(text, res.text);        // her body does what the two of you just said
   } else {
     waiting.className = 'msg sys';
     waiting.textContent = `她没能回答：${(res && res.error) || 'unknown'}`;
@@ -318,6 +347,7 @@ const pet = window.pet = {
   chat: (on) => showChat(on !== false),
   ask: async (text) => { showChat(true); chatIn.value = text; await sendChat(); return turns[turns.length - 1]; },
   turns: () => turns.slice(),
+  perform: (asked, said) => performFrom(asked, said),
   say: (line) => say(speak(V, P.t, line)),
   history: () => describeMemory(MEM, Date.now()),
   memory: () => ({ ...MEM }),

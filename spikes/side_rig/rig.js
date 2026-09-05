@@ -365,6 +365,23 @@ A.stretch = (tau) => {
   S_.eyesClosed = 0.8 * u; S_.mouthOpen = 0.6 * u;
 };
 A.celebrate = (tau) => { A.hop(tau); const raise = isFront() ? 2.1 : 2.8; bones.upper_arm_near.userData.pose = raise; bones.upper_arm_far.userData.pose = raise * farSign(); bones.forearm_near.userData.pose = 0.4 * Math.sin(tau * 12); bones.forearm_far.userData.pose = -0.4 * Math.sin(tau * 12); };
+A.dance = (tau) => {
+  // front view: weight shifts side to side, arms alternate overhead, tail keeps the beat. Arm raises stay under
+  // ~2 rad for the same reason wave and stretch do - higher and the hair layer swallows them.
+  poseReset();
+  const f = 1.5, ph = 2 * Math.PI * f * tau, sway = Math.sin(ph);
+  S_.rootY = 0.05 * Math.abs(Math.sin(2 * ph));
+  S_.rootX = 0.055 * sway;
+  bones.hips.userData.pose = 0.13 * sway;
+  bones.chest.userData.pose = -0.10 * sway;
+  bones.head.userData.pose = 0.09 * sway;
+  bones.upper_arm_near.userData.pose = 1.5 + 0.45 * Math.sin(ph);
+  bones.upper_arm_far.userData.pose = (1.5 + 0.45 * Math.sin(ph + Math.PI)) * farSign();
+  bones.forearm_near.userData.pose = 0.3 * Math.sin(2 * ph);
+  bones.forearm_far.userData.pose = -0.3 * Math.sin(2 * ph);
+  tailSway(tau * 2.2, 0.22);
+  S_.mouthOpen = 0.25 + 0.2 * Math.abs(sway);
+};
 A.tail_react = (tau) => { A.idle(tau); const k = Math.exp(-tau * 1.2) * Math.sin(tau * 9); for (const [i, n] of ['tail_1', 'tail_2', 'tail_3', 'tail_4', 'tail_5', 'tail_6'].entries()) bones[n].userData.pose = 0.35 * k * (0.4 + i * 0.15); };
 A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI), m = BODY; bones.hips.userData.pose = m * 0.35 * u; bones.chest.userData.pose = m * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; if (tau > 0.9) S_.next = 'idle'; };
 A.dangle = (tau) => {
@@ -401,7 +418,7 @@ A.land = (tau) => {
 };
 const ACTIONS = Object.keys(A);
 const VIEW_FOR = { walk: 'side', run: 'side', hop: 'side', sleep: 'side', wake: 'side', turn: 'side', stumble: 'side', dangle: 'side', fall: 'side', land: 'side',
-  idle: 'front', look: 'front', talk: 'front', wave: 'front', sit: 'front', stretch: 'front', celebrate: 'front', tail_react: 'front' };
+  idle: 'front', look: 'front', talk: 'front', wave: 'front', sit: 'front', stretch: 'front', celebrate: 'front', tail_react: 'front', dance: 'front' };
 function wantView(action) { const w = VIEW_FOR[action] || VIEW_NAME; return VIEWS[w] ? w : (VIEWS.side ? 'side' : Object.keys(VIEWS)[0]); }
 function switchView(name) {
   if (S_.viewSwap && S_.viewSwap.to !== name) S_.viewSwap = null;   // an action that wants the view we are leaving cancels the swap
