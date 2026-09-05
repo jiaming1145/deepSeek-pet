@@ -22,18 +22,24 @@ def cell_box(atlas, region_row, col, cell_px):
 
 
 def render(rig_path, mood="neutral", kit=True, zoom=4, crop="face", atlas_json="atlas_matted.json"):
+    """Composite the front rig exactly as the runtime does: the kit's eyes, mouth and brows sit just above her
+    face skin and UNDER her hair, and the effect decals sit above everything. Getting that order wrong here once
+    hid two real bugs, so the draw order below mirrors rig.js mountKit rather than pasting the kit on top."""
     rig = json.load(open(rig_path))
     assets = os.path.join(HERE, rig.get("assets", "assets"))
     W, H = rig["canvas"]
     canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    for name in rig["order"]:
-        if kit and name in HIDDEN_WHEN_KIT:
-            continue
+    order = [n for n in rig["order"] if not (kit and n in HIDDEN_WHEN_KIT)]
+    face_at = rig["order"].index("face") if "face" in rig["order"] else 0
+    pieces = []                                     # (draw order, paste function)
+    for name in order:
         lay = rig["layers"][name]
-        im = Image.open(os.path.join(assets, lay["file"])).convert("RGBA")
-        canvas.alpha_composite(im, (int(lay["bbox"][0]), int(lay["bbox"][1])))
+        pieces.append((rig["order"].index(name), lambda c, lay=lay: c.alpha_composite(
+            Image.open(os.path.join(assets, lay["file"])).convert("RGBA"), (int(lay["bbox"][0]), int(lay["bbox"][1])))))
     if kit:
-        paste_kit(canvas, rig, mood, atlas_json)
+        pieces += kit_pieces(rig, mood, atlas_json, face_at, len(rig["order"]))
+    for _, paste in sorted(pieces, key=lambda p: p[0]):
+        paste(canvas)
     if crop == "face":
         fb = rig["layers"]["face"]["bbox"]
         pad = int((fb[2] - fb[0]) * 0.35)
@@ -42,34 +48,45 @@ def render(rig_path, mood="neutral", kit=True, zoom=4, crop="face", atlas_json="
     return canvas.resize((canvas.width * zoom, canvas.height * zoom), Image.LANCZOS)
 
 
-def paste_kit(canvas, rig, mood, atlas_json="atlas_matted.json"):
-    """Place the atlas cells exactly where rig.js mountKit puts them: canvas_px = (kit_px + crop) * scale + offset."""
+def kit_pieces(rig, mood, atlas_json, face_at, layer_count):
+    """The kit's cells placed where rig.js mountKit puts them: canvas_px = (kit_px + crop) * scale + offset."""
     atlas = json.load(open(os.path.join(FACE, atlas_json)))
     states = json.load(open(os.path.join(FACE, "face_atlas_states.json")))
     rec = states["recipes"].get(mood) or states["recipes"]["neutral"]
     m = rig["canonical_to_canvas"]
     sc, (ox, oy) = m["scale"], m["offset"]
     cx0, cy0 = atlas["face"]["canonical_crop_box"][:2]
-    alias = {"verbatim": "neutral_verbatim"}
-    order = ["eye_l", "eye_r", "mouth", "brow_l", "brow_r"]
-    for region in order:
+    alias = {"verbatim": "neutral"}
+    place = lambda kx, ky: (round((kx + cx0) * sc + ox), round((ky + cy0) * sc + oy))
+    out = []
+    for region, depth in (("eye_l", 1), ("eye_r", 1), ("mouth", 2), ("brow_l", 3), ("brow_r", 3)):
         reg = atlas["regions"][region]
         at_name = {"eye_l": "eyes", "eye_r": "eyes", "brow_l": "brows", "brow_r": "brows", "mouth": "mouth"}[region]
         at = atlas["atlases"][at_name]
-        state = rec.get(region) or {"eye_l": "open", "eye_r": "open", "mouth": "closed"}.get(region, "neutral_verbatim")
+        state = rec.get(region) or {"eye_l": "open", "eye_r": "open", "mouth": "closed"}.get(region, "neutral")
         state = alias.get(state, state)
         names = at["states"] if isinstance(at["states"], list) else list(at["states"])
         col = names.index(state) if state in names else 0
         row = at["rows"].index(region) if at.get("rows") else 0
-        sheet = Image.open(os.path.join(FACE, at["file"])).convert("RGBA")
         cw, ch = at["cell_px"]
-        cell = sheet.crop(cell_box(at, row, col, (cw, ch)))
+        cell = Image.open(os.path.join(FACE, at["file"])).convert("RGBA").crop(cell_box(at, row, col, (cw, ch)))
         kx, ky = reg["cell_origin_on_face_px"]
-        x = (kx + cx0) * sc + ox
-        y = (ky + cy0) * sc + oy
-        w = max(1, round(cw * sc))
-        h = max(1, round(ch * sc))
-        canvas.alpha_composite(cell.resize((w, h), Image.LANCZOS), (round(x), round(y)))
+        xy = place(kx, ky)
+        size = (max(1, round(cw * sc)), max(1, round(ch * sc)))
+        out.append((face_at + 0.5 + depth / 10.0, lambda c, cell=cell, size=size, xy=xy: c.alpha_composite(cell.resize(size, Image.LANCZOS), xy)))
+    fxa = atlas["atlases"]["fx"]
+    for name in (rec.get("fx") or []):
+        name = name if isinstance(name, str) else name.get("name")
+        cell_meta = (fxa.get("cells") or {}).get(name)
+        if not cell_meta:
+            continue
+        x, y, w, h = cell_meta["px"]
+        fb = cell_meta["face_bbox_px"]
+        cell = Image.open(os.path.join(FACE, fxa["file"])).convert("RGBA").crop((x, y, x + w, y + h))
+        xy = place(fb[0], fb[1])
+        size = (max(1, round((fb[2] - fb[0]) * sc)), max(1, round((fb[3] - fb[1]) * sc)))
+        out.append((layer_count + 2, lambda c, cell=cell, size=size, xy=xy: c.alpha_composite(cell.resize(size, Image.LANCZOS), xy)))
+    return out
 
 
 def main():

@@ -34,6 +34,8 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
 - `tools/see_through/psd_layers.py` exports a See-through PSD into an assets folder (`--map-json` records the
   canonical-to-canvas map for a tight-crop input so the face kit lands on the layers).
 
+Plain-language guide to every file, for reading the code cold: `docs/PET_GUIDE.md`.
+
 ## Conventions
 
 - Stage: world units, `STAGE.k` px per unit, x from the window's left edge, y up from the floor.
@@ -48,8 +50,29 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   closed-eye cell ~88 %, lifted from a differently shaded copy of her face, so each eye pasted a disc of wrong
   skin over the decomposed head. `tools/face/rematte_atlases.py` rebuilds every cell's alpha from the ink it
   contains (plus what the ink encloses, plus a short feather) and writes `spikes/model/face/matted/` +
-  `atlas_matted.json`; the mouth and brow cells were already tight and come through unchanged. Evidence:
-  `evidence/face_matte_before_after.png`.
+  `atlas_matted.json`; the mouth and brow cells were already tight and come through unchanged. The matte is
+  colour-aware, not distance-based: it grows out from the ink through everything that is not skin. A distance
+  feather cannot tell a wide-eyed cell (whose disc reaches onto the cheek) from a narrow one, which is how the
+  `surprised` state - and `shocked`, which reuses it - kept its disc through the first version of the tool.
+  Evidence: `evidence/face_matte_before_after.png` and `evidence/face_matte_states.png` (every state, so the next
+  gap cannot hide behind a three-state sample).
+- **Poses are body-relative.** They are authored inside a group that is already mirrored by `M()`, so a pose angle
+  must NOT be multiplied by `M()` as well or it inverts when she turns around; use the fixed sign `BODY`. Only
+  quantities written to world space carry `M()`: the sleep slide (`rootX`) and the drag pendulum. Getting this wrong
+  is invisible in captures, because `lab.begin()` always resets facing to +1 - the nap rotated the wrong way and put
+  her 166 px below the window at the other facing for a long time before anyone saw it.
+- Hit testing is per-pixel: `lab.pick(x, y)` renders a 15x15 window around the cursor into an offscreen target and
+  reads the alpha, so it follows her real silhouette (a single box was only 46 % her, and bone-shaped zones only
+  66 %). `lab.zone(x, y)` names the nearest part so her reaction can depend on where you touched her.
+- Effect decals (blush, tears, sweat drop, hearts, sparkles) draw ABOVE the hair - they are floating symbols, not
+  skin paint. `facekit.js` takes `fxRenderOrder` separately from `renderOrder`; with them under the hair the sweat
+  drop was 100 % hidden, which made `panic` and `shocked` render pixel-identical to each other.
+- The atlas's `neutral_verbatim` brow cell is erased-hair strands, not a brow; the default brow is `neutral`. The
+  brow cells were also anchored ~95 face px too low, re-anchored onto her drawn brows in `atlas_matted.json`.
+- Visemes step at 5.5 Hz against the kit's 0.12 s crossfade; faster and the mouth is permanently half-faded.
+- The side view's `headwear` layer from See-through was an inpainted skull blob that painted over her forehead and
+  eye; it is re-cut from the source art (the original is kept at `assets/orig/headwear.png`) and now draws above
+  her hair, where a headdress belongs.
 - The kit draws no nose, so her `nose` layer stays visible under it. The kit's eye cells are verbatim pixels
   from the canonical (an 'open' cell composited over its own source window differs by 0.0), and the kit-to-canvas
   map is confirmed by cross-correlating the kit face against the decomposed head (scale 0.1585 fitted vs 0.1589

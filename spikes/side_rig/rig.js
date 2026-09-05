@@ -178,7 +178,7 @@ async function buildView(name, file) {
     m.geometry.translate(-(c.x - headH.x), -(c.y - headH.y), 0); m.position.set(c.x - headH.x, c.y - headH.y, 0);
     m.userData.base = m.position.clone();
   }
-  if (name === 'front' && rigJ.canonical_to_canvas) await mountKit(view, drawOrder.indexOf('face'));
+  if (name === 'front' && rigJ.canonical_to_canvas) await mountKit(view, drawOrder.indexOf('face'), drawOrder.length);
   grp.position.set(S_.x, groundFor(view), 0);
   view.groundY = grp.position.y;
   grp.scale.x = mirrorFor(view);
@@ -186,11 +186,11 @@ async function buildView(name, file) {
   activate(prev || view);
   return view;
 }
-async function mountKit(view, faceOrder) {
+async function mountKit(view, faceOrder, layerCount) {
   // the face kit's pieces live in neutral.png px; neutral.png is a crop of the 4096x8192 canonical, and the front
   // layers were decomposed from a crop of the same canonical (rig.canonical_to_canvas) - so kit px -> canvas px is affine
   const map = view.rig.canonical_to_canvas, hh = view.bones.head.userData.head;
-  const k = new FaceKit({ base: '../model/face', atlasJson: 'atlas_matted.json', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5,
+  const k = new FaceKit({ base: '../model/face', atlasJson: 'atlas_matted.json', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5, fxRenderOrder: layerCount + 2,
     place: (u, v) => { const [cx, cy] = k.atlas.face.canonical_crop_box; const w = toW([(u + cx) * map.scale + map.offset[0], (v + cy) * map.scale + map.offset[1]]); return new THREE.Vector3(w.x - hh.x, w.y - hh.y, 0); } });
   try { await k.load(); } catch (e) { console.warn('face kit not mounted: ' + (e.message || e)); return; }
   kit = k; view.kit = k;
@@ -232,6 +232,11 @@ function stepSprings(dt) {
 
 // ------------------------------------------------------------------ actions (poses are in the group's local frame; M() = its mirror)
 const A = {};
+// Poses are authored in the group's local frame, and that frame is ALREADY mirrored by M(). So a body-relative
+// angle - tuck the knees, curl forward, lie down - must not be multiplied by M() as well, or it inverts when she
+// turns around: the tuned value simply becomes its own mirror image. BODY is this frame's fixed forward sign; use
+// it for poses, and M() only for quantities written to world space (root slides, drag velocity).
+const BODY = -1;
 const poseReset = () => { for (const b of boneList) { b.userData.pose = 0; b.userData.sy = 1; } S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.rootScale = 1; S_.squash = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; };
 const legLen = () => (bones.thigh_near.userData.len || 0.4) + (bones.shin_near.userData.len || 0.2);
 const strideSpeed = (f, amp) => 4 * f * legLen() * Math.sin(amp) * 0.7;   // feet plant without sliding (0.7: the knee shortens the swing)
@@ -239,7 +244,7 @@ const lookIris = () => { S_.irisOff = [(isFront() ? S_.look.yaw : S_.look.yaw * 
 const tailSway = (tau, amp) => { for (let i = 1; i <= 6; i++) if (bones['tail_' + i].userData.head) bones['tail_' + i].userData.pose = amp * Math.sin(tau * 1.3 + i * 0.35); };
 const walkCycle = (tau, f, amp, knee, armAmp) => {
   const ph = 2 * Math.PI * f * tau;
-  const fwd = M();
+  const fwd = BODY;
   bones.thigh_near.userData.pose = fwd * amp * Math.sin(ph);
   bones.thigh_far.userData.pose = fwd * amp * Math.sin(ph + Math.PI);
   bones.shin_near.userData.pose = -fwd * knee * Math.max(0, Math.sin(ph + 0.9));
@@ -268,12 +273,12 @@ A.idle = (tau) => {
   lookIris();
 };
 A.walk = (tau) => { poseReset(); walkCycle(tau, 1.1, 0.38, 0.75, 0.3); S_.speed = strideSpeed(1.1, 0.38); };
-A.run = (tau) => { poseReset(); walkCycle(tau, 2.0, 0.55, 1.2, 0.7); S_.speed = strideSpeed(2.0, 0.55); bones.hips.userData.pose = -M() * 0.12; S_.rootY += 0.02 * Math.abs(Math.sin(2 * Math.PI * 2.0 * tau)); };
+A.run = (tau) => { poseReset(); walkCycle(tau, 2.0, 0.55, 1.2, 0.7); S_.speed = strideSpeed(2.0, 0.55); bones.hips.userData.pose = -BODY * 0.12; S_.rootY += 0.02 * Math.abs(Math.sin(2 * Math.PI * 2.0 * tau)); };
 A.hop = (tau) => {
   poseReset();
   const T = 0.7, t = tau % T, u = t / T;
   S_.rootY = 0.42 * 4 * u * (1 - u);
-  const tuck = Math.sin(Math.PI * u), m = M();
+  const tuck = Math.sin(Math.PI * u), m = BODY;
   if (isFront()) for (const s of ['near', 'far']) { bones['thigh_' + s].userData.sy = 1 - 0.35 * tuck; bones['shin_' + s].userData.sy = 1 / (1 - 0.35 * tuck); }
   else for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * 0.7 * tuck; bones['shin_' + s].userData.pose = -m * 1.1 * tuck; }
   const up = isFront() ? 1 : -m;
@@ -306,7 +311,7 @@ A.talk = (tau) => {
 };
 A.sit = (tau) => {
   poseReset();
-  const u = smooth(clamp(tau / 0.6, 0, 1)), m = M();
+  const u = smooth(clamp(tau / 0.6, 0, 1)), m = BODY;
   const L = bones.thigh_near.userData.len;
   if (isFront()) {
     // facing the viewer: thighs foreshorten (knees come toward the camera), shins splay a little, hands on the lap
@@ -331,10 +336,10 @@ A.sit = (tau) => {
 };
 A.sleep = (tau) => {
   poseReset();
-  const u = smooth(clamp(tau / 1.0, 0, 1)), m = M();
+  const u = smooth(clamp(tau / 1.0, 0, 1)), m = BODY;
   S_.rootRot = -m * (Math.PI / 2) * u;                 // lie down with the head toward her front
   S_.rootY = 0.0 + 0.16 * u;
-  S_.rootX = m * 0.82 * u;                              // pivot is at the feet: slide so the lying body stays where she stood
+  S_.rootX = M() * 0.82 * u;                            // world slide: the pivot is at her feet, so keep the lying body where she stood
   S_.rootScale = 1 - 0.08 * u;
   S_.eyesClosed = u;
   bones.chest.userData.pose = 0.03 * Math.sin(tau * 0.9);
@@ -347,7 +352,7 @@ A.wake = (tau) => { const u = 1 - smooth(clamp(tau / 1.0, 0, 1)); A.sleep(1.0); 
 A.turn = (tau) => { A.idle(tau); if (!S_.turn) S_.turn = { t0: S_.t, from: S_.facing }; };
 A.stretch = (tau) => {
   poseReset();
-  const u = smooth(clamp(tau / 0.6, 0, 1)) * (1 - smooth(clamp((tau - 1.8) / 0.5, 0, 1))), m = M();
+  const u = smooth(clamp(tau / 0.6, 0, 1)) * (1 - smooth(clamp((tau - 1.8) / 0.5, 0, 1))), m = BODY;
   const raise = isFront() ? 2.05 : 2.9;
   bones.upper_arm_near.userData.pose = raise * u; bones.upper_arm_far.userData.pose = raise * u * farSign();
   if (isFront()) { bones.chest.userData.sy = 1 + 0.04 * u; bones.head.userData.pose = 0.05 * u; }
@@ -357,24 +362,24 @@ A.stretch = (tau) => {
 };
 A.celebrate = (tau) => { A.hop(tau); const raise = isFront() ? 2.1 : 2.8; bones.upper_arm_near.userData.pose = raise; bones.upper_arm_far.userData.pose = raise * farSign(); bones.forearm_near.userData.pose = 0.4 * Math.sin(tau * 12); bones.forearm_far.userData.pose = -0.4 * Math.sin(tau * 12); };
 A.tail_react = (tau) => { A.idle(tau); const k = Math.exp(-tau * 1.2) * Math.sin(tau * 9); for (const [i, n] of ['tail_1', 'tail_2', 'tail_3', 'tail_4', 'tail_5', 'tail_6'].entries()) bones[n].userData.pose = 0.35 * k * (0.4 + i * 0.15); };
-A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI), m = M(); bones.hips.userData.pose = m * 0.35 * u; bones.chest.userData.pose = m * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; if (tau > 0.9) S_.next = 'idle'; };
+A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI), m = BODY; bones.hips.userData.pose = m * 0.35 * u; bones.chest.userData.pose = m * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; if (tau > 0.9) S_.next = 'idle'; };
 A.dangle = (tau) => {
   // held by the pointer: hangs from the grab point, limbs dangle, sways against the drag
   poseReset();
-  const sw = Math.sin(tau * 2.4), m = M(), h = S_.held;
+  const sw = Math.sin(tau * 2.4), m = BODY, h = S_.held;
   for (const s of ['near', 'far']) { const k = s === 'near' ? 1 : -1; bones['thigh_' + s].userData.pose = m * (0.22 + 0.1 * sw * k); bones['shin_' + s].userData.pose = -m * 0.3; }
   bones.upper_arm_near.userData.pose = m * -0.25 + 0.06 * sw; bones.upper_arm_far.userData.pose = m * -0.2 - 0.06 * sw;
   bones.head.userData.pose = m * 0.1 * sw * 0.5;
   S_.mouthOpen = 0.4;
   if (h) {
     // pendulum: tilt against the drag velocity about the grab point (the root pivot is at the feet, so compensate)
-    const tilt = clamp(-h.vx * 0.05, -0.35, 0.35) * m, Hg = Math.max(0.2, -h.dy);
-    S_.rootRot = tilt; S_.rootX = m * Hg * Math.sin(tilt); S_.rootY = Hg * (1 - Math.cos(tilt));
+    const tilt = clamp(-h.vx * 0.05, -0.35, 0.35) * M(), Hg = Math.max(0.2, -h.dy);
+    S_.rootRot = tilt; S_.rootX = M() * Hg * Math.sin(tilt); S_.rootY = Hg * (1 - Math.cos(tilt));
   }
 };
 A.fall = (tau) => {
   poseReset();
-  const u = smooth(clamp(tau / 0.25, 0, 1)), m = M();
+  const u = smooth(clamp(tau / 0.25, 0, 1)), m = BODY;
   bones.upper_arm_near.userData.pose = -m * 2.2 * u; bones.upper_arm_far.userData.pose = -m * 2.0 * u;
   for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * 0.45 * u; bones['shin_' + s].userData.pose = -m * 0.8 * u; }
   bones.chest.userData.pose = -m * 0.08 * u; bones.head.userData.pose = -m * 0.1 * u;
@@ -383,7 +388,7 @@ A.fall = (tau) => {
 };
 A.land = (tau) => {
   poseReset();
-  const u = Math.sin(Math.PI * clamp(tau / 0.32, 0, 1)), m = M();
+  const u = Math.sin(Math.PI * clamp(tau / 0.32, 0, 1)), m = BODY;
   S_.squash = 0.18 * u; S_.rootY = -0.04 * u;
   for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * 0.3 * u; bones['shin_' + s].userData.pose = -m * 0.55 * u; }
   bones.chest.userData.pose = m * 0.12 * u;
@@ -394,7 +399,11 @@ const ACTIONS = Object.keys(A);
 const VIEW_FOR = { walk: 'side', run: 'side', hop: 'side', sleep: 'side', wake: 'side', turn: 'side', stumble: 'side', dangle: 'side', fall: 'side', land: 'side',
   idle: 'front', look: 'front', talk: 'front', wave: 'front', sit: 'front', stretch: 'front', celebrate: 'front', tail_react: 'front' };
 function wantView(action) { const w = VIEW_FOR[action] || VIEW_NAME; return VIEWS[w] ? w : (VIEWS.side ? 'side' : Object.keys(VIEWS)[0]); }
-function switchView(name) { if (name === VIEW_NAME || !VIEWS[name]) return; S_.viewSwap = { t0: S_.t, from: VIEW_NAME, to: name }; }
+function switchView(name) {
+  if (S_.viewSwap && S_.viewSwap.to !== name) S_.viewSwap = null;   // an action that wants the view we are leaving cancels the swap
+  if (name === VIEW_NAME || !VIEWS[name]) return;
+  S_.viewSwap = { t0: S_.t, from: VIEW_NAME, to: name };
+}
 
 // ------------------------------------------------------------------ face
 // side view: procedural expression on the decomposed pieces; front view: the face kit recipes (kit moods are emotions too)
@@ -428,7 +437,7 @@ function applyFace(dt) {
   if (isFront() && kit) {
     kit.setMood(kitMood(S_.emotion));
     kit.eyesClosed = S_.eyesClosed || 0;
-    kit.setViseme(S_.action === 'talk' ? VISEMES[Math.floor(S_.tau * 9) % VISEMES.length] : null);
+    kit.setViseme(S_.action === 'talk' ? VISEMES[Math.floor(S_.tau * 5.5) % VISEMES.length] : null);   // slower than the 0.12 s crossfade, or the mouth is always half-faded
     const { yaw, pitch } = S_.look;
     const thr = S_.action === 'look' ? 0.4 : 0.45;
     kit.setLook(Math.abs(yaw) > thr ? (yaw > 0 ? 'left' : 'right') : pitch > thr ? 'up' : pitch < -thr ? 'down' : null);
@@ -443,6 +452,49 @@ function applyFace(dt) {
   if (facePieces.eyelash) facePieces.eyelash.position.y -= (1 - eyeY) * 6 * px;
   if (facePieces.eyebrow) { const m = facePieces.eyebrow; m.rotation.z = emoCur.browRot * M(); m.position.copy(m.userData.base); m.position.y += emoCur.browY * px; }
   if (facePieces.mouth) { const m = facePieces.mouth; m.scale.set(emoCur.mouthW, emoCur.mouthH * (1 + 2.2 * (S_.mouthOpen || 0)), 1); }
+}
+
+// ------------------------------------------------------------------ picking
+// Hit testing against her actual pixels rather than a box: render the few pixels around the cursor into a
+// tiny target and read the alpha back. One small render, exact silhouette, works while paused, and the
+// window size doubles as the grab tolerance. Nearest bone names the part, for reactions.
+const PICK = { size: 15, target: null, cam: null, buf: null };
+function pickAt(px, py) {
+  if (!PICK.target) {
+    PICK.target = new THREE.WebGLRenderTarget(PICK.size, PICK.size);
+    PICK.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
+    PICK.cam.position.z = 5;
+    PICK.buf = new Uint8Array(PICK.size * PICK.size * 4);
+  }
+  const [ux, uy] = toUnits(px, py);
+  const r = PICK.size / 2 / STAGE.k;
+  PICK.cam.left = ux - r; PICK.cam.right = ux + r; PICK.cam.top = uy + r; PICK.cam.bottom = uy - r;
+  PICK.cam.updateProjectionMatrix();
+  const prev = renderer.getRenderTarget();
+  renderer.setRenderTarget(PICK.target);
+  renderer.render(scene, PICK.cam);
+  renderer.readRenderTargetPixels(PICK.target, 0, 0, PICK.size, PICK.size, PICK.buf);
+  renderer.setRenderTarget(prev);
+  for (let i = 3; i < PICK.buf.length; i += 4) if (PICK.buf[i] > 8) return true;
+  return false;
+}
+const ZONE_OF = (n) => (n === 'head' || n === 'neck' ? 'head'
+  : n.startsWith('tail') ? 'tail'
+    : n.startsWith('hair') || n.startsWith('ahoge') ? 'hair'
+      : n.startsWith('skirt') ? 'skirt'
+        : /thigh|shin|foot/.test(n) ? 'legs'
+          : /arm|hand/.test(n) ? 'arms' : 'body');
+function zoneAt(px, py) {
+  const [ux, uy] = toUnits(px, py);
+  const target = new THREE.Vector3(ux, uy, 0), at = new THREE.Vector3();
+  let best = null, bd = Infinity;
+  for (const b of boneList) {
+    if (!b.userData.head) continue;
+    b.getWorldPosition(at);
+    const d = at.distanceToSquared(target);
+    if (d < bd) { bd = d; best = b.name; }
+  }
+  return best ? ZONE_OF(best) : null;
 }
 
 // ------------------------------------------------------------------ frame
@@ -500,7 +552,7 @@ function tick(dt) {
     const front = S_.facing > 0 ? STAGE.w - ahead : ahead;
     const back = S_.facing > 0 ? behind : STAGE.w - behind;
     if (S_.facing > 0 ? S_.x > front : S_.x < front) { S_.x = front; S_.turn = { t0: S_.t, from: S_.facing }; }
-    if (S_.facing > 0 ? S_.x < back : S_.x > back) S_.x = back;
+    if (S_.facing > 0 ? S_.x < back : S_.x > back) S_.x += Math.sign(back - S_.x) * Math.min(Math.abs(back - S_.x), S_.speed * dt * 2);   // ease in, never teleport
   }
   let sx = M();
   if (S_.turn) {
@@ -528,7 +580,8 @@ function tick(dt) {
 function frame() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - S_.lastFrame) / 1000); S_.lastFrame = now;
-  if (!S_.paused) tick(dt);
+  // a throw inside tick must not take the render loop with it: the pet is always on top, a frozen one is unusable
+  try { if (!S_.paused) tick(dt); } catch (err) { window.__error = String(err.stack || err); console.error(err); S_.action = 'idle'; S_.blend = null; }
   renderer.render(scene, camera);
   S_.fps.push(dt); if (S_.fps.length > 120) S_.fps.shift();
   if (S_.hudOn) hud.textContent = `rig [${VIEW_NAME}]  ${(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(0)} fps  action ${S_.action} ${S_.tau.toFixed(1)}s  facing ${S_.facing > 0 ? '+x' : '-x'}  x ${S_.x.toFixed(2)} y ${S_.y.toFixed(2)}  emotion ${S_.emotion}${S_.held ? '  HELD' : ''}\n` +
@@ -592,9 +645,10 @@ const lab = window.lab = {
     if (S_.y > 0.01 || S_.vy > 0) lab.start('fall'); else { S_.vx = 0; lab.start('land'); }
   },
   onTick(fn) { tickHooks.push(fn); },
-  dump(match) { const out = []; scene.traverse((o) => { if (o.isMesh && (!match || o.name.includes(match))) { const v = new THREE.Vector3(); o.getWorldPosition(v); out.push({ name: o.name, type: o.type, visible: o.visible, parent: o.parent && (o.parent.name || o.parent.type), pos: [+v.x.toFixed(2), +v.y.toFixed(2)], ro: o.renderOrder, skel: o.skeleton ? o.skeleton.bones.length : null, b0: o.skeleton ? o.skeleton.bones[o.geometry.attributes.skinIndex.getX(0)].name : null, groupVisible: (function f(n) { return n ? (n.visible && f(n.parent)) : true; })(o.parent) }); } }); return out; },
+  // exact hit test on her pixels (window px); zone names the part for reactions
+  pick(px, py) { return pickAt(px, py); },
+  zone(px, py) { return zoneAt(px, py); },
   showLayer(name, v) { const m = layerMeshes[name]; if (m) m.visible = !!v; return !!m; },
-  layer(name) { const m = layerMeshes[name]; if (!m) return null; const g = m.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight; const idx = si ? Array.from(si.array.slice(0, 8)) : null; return { skinned: !!m.isSkinnedMesh, visible: m.visible, sameSkeleton: m.skeleton === skeleton, skelBones: m.skeleton ? m.skeleton.bones.length : null, boneNamesAtIdx: idx ? idx.map((i) => m.skeleton.bones[i] && m.skeleton.bones[i].name) : null, w: sw ? Array.from(sw.array.slice(0, 8)).map((v) => +v.toFixed(2)) : null, renderOrder: m.renderOrder, parent: m.parent && m.parent.type, boneTexture: !!(m.skeleton && m.skeleton.boneTexture), scene: m.parent === scene }; },
   bone(name) { const b = bones[name]; if (!b) return null; const v = new THREE.Vector3(); b.getWorldPosition(v); return { pose: +b.userData.pose.toFixed(3), spring: +b.userData.spring.toFixed(3), rot: +b.rotation.z.toFixed(3), sy: b.userData.sy, px: toPx(v.x, v.y).map((n) => Math.round(n)), visible: b.parent ? b.parent.visible : null }; },
   snapshot: () => ({ view: VIEW_NAME, native: NATIVE, mirror: M(), scaleX: +group.scale.x.toFixed(3), action: S_.action, tau: +S_.tau.toFixed(2), x: +S_.x.toFixed(3), y: +S_.y.toFixed(3), facing: S_.facing, rootY: +(S_.rootY || 0).toFixed(3), springs: Object.fromEntries(springs.flatMap((s) => s.bones).map((n) => [n, +bones[n].userData.spring.toFixed(3)])) }),
   fps: () => +(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(1),

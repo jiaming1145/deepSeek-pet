@@ -177,22 +177,23 @@
    "name": "headwear",
    "z": 8,
    "bbox": [
-    136,
-    101,
-    256,
-    313
+    208,
+    40,
+    317,
+    223
    ],
    "size": [
-    120,
-    212
+    109,
+    183
    ],
    "alpha_bbox": [
     0,
     0,
-    120,
-    212
+    109,
+    183
    ],
-   "file": "headwear.png"
+   "file": "headwear.png",
+   "note": "re-cut from the source art: See-through returned an inpainted skull blob that covered her face"
   },
   {
    "name": "neck",

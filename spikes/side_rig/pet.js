@@ -5,9 +5,19 @@ import './rig.js';
 const lab = window.lab, bridge = window.petBridge || null;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, log: [] };
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
-const inBox = (b, x, y) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+// what she does when you touch each part of her
+const REACT = {
+  head: { action: 'wave', emotion: 'affection' },
+  hair: { action: 'tail_react', emotion: 'shy' },
+  body: { action: 'talk', emotion: 'happy' },
+  skirt: { action: 'tail_react', emotion: 'shy' },
+  legs: { action: 'tail_react', emotion: 'surprised' },
+  arms: { action: 'wave', emotion: 'cheerful' },
+  tail: { action: 'tail_react', emotion: 'panic' },
+};
+const onHer = (x, y) => lab.pick(x, y);
 
 function note(state, extra) { P.log.push({ t: +P.t.toFixed(1), state, ...(extra || {}) }); if (P.log.length > 300) P.log.shift(); }
 function enter(state, opts = {}) {
@@ -53,12 +63,14 @@ function decide() {
 }
 function touched() { P.lastTouch = P.t; }
 
+function endDrag() { P.drag = null; setOver(false); document.body.style.cursor = 'default'; }
 function setOver(v) { if (v === P.over) return; P.over = v; if (bridge) bridge.setHit(v); document.body.style.cursor = v ? (P.drag ? 'grabbing' : 'grab') : 'default'; }
 function onTick(dt) {
   P.t += dt;
   const p = lab.pos();
   // hit state follows her even when the mouse is still (she walks out from under the cursor)
-  if (P.cursor && !P.drag) setOver(inBox(lab.bbox(8), P.cursor[0], P.cursor[1]));
+  P.pickT += dt;
+  if (P.cursor && !P.drag && P.pickT >= 0.05) { P.pickT = 0; setOver(onHer(P.cursor[0], P.cursor[1])); }
   // attention: look at a nearby cursor, turn around if it stays behind her
   if (P.cursor && !P.drag && !p.held && !p.airborne) {
     const [hx, hy] = lab.headPx(), st = lab.stage();
@@ -74,6 +86,9 @@ function onTick(dt) {
     if (P.behindT > 0.8 && !p.turning && !p.speed) { lab.turnTo(-p.facing); P.behindT = 0; }
   }
   if (P.drag && P.drag.moved) lab.holdAt(P.cursor[0], P.cursor[1]);
+  // watchdog: if a mouseup was ever lost we would hold the pointer - and, being click-through only while she is
+  // NOT under the cursor, we would swallow every click on the desktop. Recover as soon as the rig says she is free.
+  if ((P.drag || P.state === 'held') && !p.held && p.action !== 'dangle') { endDrag(); if (P.auto && P.state === 'held') enter('idle', { dur: 1 }); }
   if (!P.auto) return;
   if (P.state === 'held' || P.state === 'fall') {
     if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' });
@@ -91,7 +106,7 @@ lab.onTick(onTick);
 // ------------------------------------------------------------------ pointer
 function pointerDown(x, y) {
   P.cursor = [x, y];
-  if (!inBox(lab.bbox(8), x, y)) return false;
+  if (!onHer(x, y)) return false;
   P.drag = { x0: x, y0: y, moved: false }; setOver(true); document.body.style.cursor = 'grabbing';
   return true;
 }
@@ -106,18 +121,22 @@ function pointerMove(x, y) {
 }
 function pointerUp(x, y) {
   P.cursor = [x, y];
-  const d = P.drag; P.drag = null;
+  const d = P.drag; endDrag();
   if (!d) return;
   touched();
   if (d.moved) { lab.release(); if (P.auto) enter('fall', { dur: 999 }); }
-  else if (P.auto) { if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6 }); }
+  else if (P.auto) { if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[lab.zone(x, y)] || {}) }); }
   else lab.start(pick(['wave', 'celebrate', 'tail_react']));
-  document.body.style.cursor = P.over ? 'grab' : 'default';
 }
 window.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown(e.clientX, e.clientY); });
 window.addEventListener('mousemove', (e) => pointerMove(e.clientX, e.clientY));
 window.addEventListener('mouseup', (e) => { if (e.button === 0) pointerUp(e.clientX, e.clientY); });
 window.addEventListener('mouseleave', () => { if (!P.drag) { P.cursor = null; setOver(false); lab.lookAt(null); } });
+// losing focus or pointer capture mid-drag must end the drag, or the click-through window stays off for good
+const bail = () => { if (!P.drag) return; const c = P.cursor || [0, 0]; pointerUp(c[0], c[1]); };
+window.addEventListener('blur', bail);
+window.addEventListener('pointercancel', bail);
+document.addEventListener('visibilitychange', () => { if (document.hidden) bail(); });
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && bridge) bridge.quit();
   if (e.key.toLowerCase() === 'p') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); }
