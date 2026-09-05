@@ -6,6 +6,12 @@ import * as THREE from 'three';
 
 const BROW_ALIAS = { verbatim: 'neutral' };   // the atlas's 'neutral_verbatim' cell is erased-hair strands, not a brow
 const REGION_ATLAS = { eye_l: 'eyes', eye_r: 'eyes', brow_l: 'brows', brow_r: 'brows', mouth: 'mouth' };
+// paint on her skin, so it belongs under her hair; everything else is a floating symbol and goes on top
+const SKIN_FX = new Set(['blush_l', 'blush_r', 'face_shadow', 'panic_shadow']);
+// a shut eye is not a binary. These are the rungs, and which cell shows at each.
+const LID_CELL = (lid) => (lid > 0.72 ? 'closed' : lid > 0.34 ? 'half_lid' : null);
+// gaze survives any eye state that still has an eye in it
+const GAZE_OK = new Set(['open', 'half', 'half_lid']);
 
 export class FaceKit {
   constructor(opts) {
@@ -15,9 +21,13 @@ export class FaceKit {
     this.pxScale = opts.pxScale;                 // world units per face px
     this.renderOrder = opts.renderOrder || 100;
     this.fxRenderOrder = opts.fxRenderOrder ?? (this.renderOrder + 4);   // effect decals are floating symbols: above the hair, not under it
+    // ...except the ones that are paint ON her skin. Blush drawn above the hair put a purple lozenge over the
+    // strands lying on her cheeks, in six of the moods she wears most often.
+    this.skinFxRenderOrder = opts.skinFxRenderOrder ?? (this.renderOrder + 0.5);
     this.atlasJson = opts.atlasJson || 'atlas.json';   // 'atlas_matted.json': cells re-matted to the drawn feature only
     this.mood = 'neutral'; this.pending = null; this.fade = 0; this.FADE = 0.12;
-    this.blink = { next: 2.5, phase: 0 }; this.viseme = null; this.look = null; this.eyesClosed = 0;
+    this.blink = { next: 2.5, phase: 0, t: [0.055, 0.035, 0.125], slow: false, double: false };
+    this.viseme = null; this.look = null; this.eyesClosed = 0; this.sleepy = 0; this.wink = null;
     this.regions = {}; this.fx = {}; this.state = {};
   }
 
@@ -59,7 +69,7 @@ export class FaceKit {
       for (let i = 0; i < uv.count; i++) { const u = uv.getX(i), v = uv.getY(i); uv.setXY(i, (x + u * w) / W, 1 - (y + (1 - v) * h) / H); }
       const mat = new THREE.MeshBasicMaterial({ map: this.tex.fx, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, opacity: 0 });
       const m = new THREE.Mesh(geo, mat);
-      m.position.copy(this.place((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2)); m.renderOrder = this.fxRenderOrder; m.frustumCulled = false; m.visible = false;
+      m.position.copy(this.place((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2)); m.renderOrder = SKIN_FX.has(name) ? this.skinFxRenderOrder : this.fxRenderOrder; m.frustumCulled = false; m.visible = false;
       this.parent.add(m); this.fx[name] = { mesh: m, target: 0 };
     }
     return this;
@@ -111,14 +121,34 @@ export class FaceKit {
 
   update(dt) {
     const rec = this.recipe(this.mood);
-    // blink schedule
-    this.blink.next -= dt;
-    if (this.blink.next <= 0 && this.blink.phase === 0) { this.blink.phase = 0.001; this.blink.next = 2 + Math.random() * 3; }
-    if (this.blink.phase > 0) { this.blink.phase += dt; if (this.blink.phase > 0.16) this.blink.phase = 0; }
-    const blinking = this.blink.phase > 0.02 && this.blink.phase < 0.13;
+    // A blink is a lid travelling down and back up, not a light switch. Closing is fast, opening is slower, and
+    // there is a drawn half-closed cell for the middle of the journey. Sleepy blinks are long, and about one in
+    // seven is a double.
+    const B = this.blink;
+    B.next -= dt;
+    if (B.next <= 0 && B.phase === 0) {
+      B.phase = 1e-4;
+      B.slow = this.sleepy > 0.5;
+      B.t = B.slow ? [0.20, 0.10, 0.28] : [0.055, 0.035, 0.125];
+      B.double = !B.slow && Math.random() < 0.15;
+      B.next = (B.slow ? 1.4 : 2) + Math.random() * 3;
+    }
+    let lid = 0;
+    if (B.phase > 0) {
+      B.phase += dt;
+      const [tc, th, to] = B.t, total = tc + th + to;
+      if (B.phase < tc) lid = B.phase / tc;
+      else if (B.phase < tc + th) lid = 1;
+      else if (B.phase < total) lid = 1 - (B.phase - tc - th) / to;
+      else { B.phase = 0; if (B.double) { B.double = false; B.next = 0.16; } }
+    }
+    lid = Math.max(lid, this.eyesClosed || 0);
+    const lidCell = LID_CELL(lid);
     let eyeL = rec.eye_l, eyeR = rec.eye_r;
-    if (this.look && rec.eye_l === 'open' && rec.eye_r === 'open') { eyeL = eyeR = 'look_' + this.look; }
-    if (blinking || this.eyesClosed > 0.5) { eyeL = eyeR = 'closed'; }
+    if (this.look && GAZE_OK.has(rec.eye_l) && GAZE_OK.has(rec.eye_r)) { eyeL = eyeR = 'look_' + this.look; }
+    if (this.wink && !lidCell) { if (this.wink === 'l') eyeL = 'closed'; else eyeR = 'closed'; }
+    if (lidCell) { eyeL = eyeR = lidCell; }
+    const blinking = lid > 0.34;
     let mouth = this.viseme || rec.mouth;
     const want = { eye_l: eyeL, eye_r: eyeR, brow_l: rec.brow_l, brow_r: rec.brow_r, mouth };
     for (const [region, st] of Object.entries(want)) {

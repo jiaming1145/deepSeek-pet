@@ -72,6 +72,20 @@ split. Two tuning traps already caught, both of which made her pace or chatter e
 its need FASTER than the need drains, or she chases it forever; and an activity that only pays off when you are
 present must be scored down when you are not.
 
+Dragging her is the fragile path and it broke once already. The window is click-through except over her, so a
+gesture spans three systems: the OS hit region, the renderer's pointer handlers, and the rig's hold state. Rules
+learned the hard way:
+- A press is NOT a hold. `lab.hold()` only fires once the pointer has moved 5 px, so anything that asks "is she
+  held?" on the frame after mousedown will be wrong. The lost-mouseup watchdog did exactly that and cancelled
+  every drag, every click and every double-click; the self-test could not see it because it presses and moves in
+  one JS turn, before a frame runs. Any regression test for this MUST let a real frame pass between them.
+- The gesture owns the hit state: `setOver` forces true while `P.drag` is set, and `endDrag` never forces false.
+  Slamming the window back to click-through mid-press leaks the whole drag onto the app behind her.
+- Pointer capture on pointerdown is what guarantees the release arrives. Do not use `e.buttons` as a guard: an
+  Electron-forwarded mousemove reports 0 even with the button physically down.
+- A generous box (`GRAB_PAD`) around her counts as interactive, because the hover-to-interactive round trip
+  measures 15-64 ms and a fast swipe-and-grab lands inside it.
+
 ## Conventions
 
 - Stage: world units, `STAGE.k` px per unit, x from the window's left edge, y up from the floor.
@@ -117,6 +131,11 @@ present must be scored down when you are not.
   white and iris out with `closed` and drops the lash by `0.42 * EYE_H` instead of squashing everything to 6 %.
   `lab.eyes(0..1)` holds the lids for testing.
 - The sheet builders read `report.json` as UTF-8: her log is Chinese, and the Windows default codepage cannot.
+- Being carried runs in the FRONT view (`VIEW_FOR.startle/dangle/fall/land`), because the face kit is only
+  mounted there - in the side view the whole pick-up sequence had no expression at all. Lift is measured against
+  reachable height, not a constant, or every lift reads as maximum and the tail skips its hang.
+- Effect decals split by kind: blush and the face shadows are paint on her skin and draw UNDER her hair
+  (`skinFxRenderOrder`); tears, sweat, hearts and marks are floating symbols and draw above everything.
 - The kit draws no nose, so her `nose` layer stays visible under it. The kit's eye cells are verbatim pixels
   from the canonical (an 'open' cell composited over its own source window differs by 0.0), and the kit-to-canvas
   map is confirmed by cross-correlating the kit face against the decomposed head (scale 0.1585 fitted vs 0.1589

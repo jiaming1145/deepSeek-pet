@@ -154,9 +154,18 @@ italic grey so they read as actions rather than speech. For example:
 Talking to her counts as attention, so her need for company fills while you chat and her face changes to match.
 
 **She does what you ask.** Tell her to dance, to go and stand on the left, to sit down or go to sleep, and she
-actually does it. The mechanism is her own words: she already writes what she is physically doing in brackets,
-so `perform.js` reads those brackets and turns them into movement. Two sources are read, and an instruction from
-you beats a description from her:
+actually does it. There are two mechanisms, and the first is the reliable one:
+
+1. **She states the action herself.** Her reply begins with a single machine-only line, `【动作】{"do":…}`, that
+   is stripped before anything reaches the screen. Because the model writes it deliberately rather than being
+   guessed at from prose, it handles things a keyword list cannot: "别睡了" comes back as `wake`, not `sleep`.
+2. **The keyword reader**, `perform.js`, is the fallback when there is no language model or the line is missing.
+   It reads your message and the bracketed stage directions in her reply. It understands negation ("别睡了",
+   "don't sleep") and an explicit stop ("停下", "别动"), and a place and an action can now be asked for together
+   ("去左边跳舞" walks her left AND makes her dance).
+
+Once told, she stays told: her own mind is held off for the duration of the order, which is most of why she used
+to look like she was ignoring you. Examples:
 
 | You say | She does |
 |---|---|
@@ -229,6 +238,17 @@ knock her off script.
 which point it drops the act. The token stays in her marker line. Asking a model to police its own persona switch is unverifiable and fails quietly,
 so this is a switch in our own code instead: the tray menu has *Out of character (TIMEOUT_SIGNAL)*, which picks
 a plain system prompt and stops her speaking at all. Tick it off and she is herself again.
+
+**Picking her up.** Grabbing her plays a startle: a hard extreme held for a beat, both arms up, mouth open, and
+no blink, because you do not blink when something grabs you. Then she hangs. Her tail droops as she leaves the
+floor and curls back up toward her when she is held high, her arms and legs dangle and trail, and she swings on a
+real pendulum, so she overshoots and rings down instead of tracking your hand rigidly. Her hair and tail springs
+soften while she is off the ground so they read as heavy.
+
+How you handle her decides how she feels. Height, how hard you are shaking her, how far she is swinging and
+where you grabbed her all feed one distress number: hold her gently round the middle and she is fond of it, hold
+her high and she is uneasy, shake her and she panics. Grabbing her by the tail is worse than grabbing her by the
+body. Screenshot: `evidence/carry_sequence.png`.
 
 **Closed eyes.** Worth knowing because it bit us. Her shut eyes are drawn cells, and in the shipped artwork the
 `closed` and `happy` cells sit near the top of their frame while every other state fills it. Dropped onto her
@@ -341,6 +361,8 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
+- Her face has a blink with a proper middle rung, double and sleepy blinks, and a jolt through her head and hair
+  when a feeling arrives, but there are still no idle eye movements between blinks.
 - The words that move her are a fixed keyword list. She understands 跳舞 and 去左边, not an arbitrary instruction.
 - The language model only picks from the eight things she already knows how to do. It cannot invent a new
   behaviour, and it has no memory of its own between calls beyond the summary she sends it.

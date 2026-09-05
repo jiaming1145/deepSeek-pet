@@ -136,6 +136,31 @@ async function think(brain, state, history, activities, now = Date.now()) {
   return out;
 }
 
+// The model states what she should DO on its own first line, which the owner must never see. Pull it off, keep
+// what survives as her reply, and hand the parsed intent back separately. A missing or malformed line is not an
+// error: the keyword reader in perform.js is still there as the fallback.
+// Match the whole marker line, not only a well-formed one: whatever follows 【动作】 is for us, and the owner
+// must never see it even when the model writes nonsense there.
+const ACT_LINE = /^[^\S\n]*【动作】[^\n]*$/m;
+function splitAction(raw) {
+  const m = raw.match(ACT_LINE);
+  if (!m) return { text: raw.trim(), act: null };
+  const text = raw.replace(m[0], '').replace(/^\s*\n/, '').trim();
+  const json = m[0].match(/\{[\s\S]*\}/);
+  let act = null;
+  try {
+    const o = JSON.parse(json[0]);
+    act = {
+      do: typeof o.do === 'string' ? o.do.trim().toLowerCase() : null,
+      to: typeof o.to === 'string' ? o.to.trim().toLowerCase() : null,
+      mood: typeof o.mood === 'string' ? o.mood.trim().toLowerCase() : null,
+      for: typeof o.for === 'number' && isFinite(o.for) ? Math.max(0, Math.min(60, o.for)) : null,
+    };
+    if (act.to === 'null' || act.to === 'none') act.to = null;
+  } catch (e) { act = null; }
+  return { text, act };   // the machine line never reaches the screen, even when its JSON is malformed
+}
+
 // A real conversation. Separate from think(): no activity to choose, a much longer answer, its own rate limit
 // (the owner is waiting for this one, so it may not be silently dropped), and the last few turns for context.
 async function chat(brain, turns, state, history) {
@@ -156,14 +181,14 @@ async function chat(brain, turns, state, history) {
     return { error: brain.lastError };
   }
   try {
-    const text = JSON.parse(res.data).choices[0].message.content.trim();
-    if (!text) { brain.failed++; return { error: 'empty reply' }; }
+    const raw = JSON.parse(res.data).choices[0].message.content.trim();
+    if (!raw) { brain.failed++; return { error: 'empty reply' }; }
     brain.ok++;
-    return { text };
+    return { ...splitAction(raw) };
   } catch (e) {
     brain.failed++;
     return { error: 'unreadable reply' };
   }
 }
 
-module.exports = { createBrain, think, chat, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, personaFor, MODEL, KEY_FILE };
+module.exports = { createBrain, think, chat, splitAction, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, personaFor, MODEL, KEY_FILE };

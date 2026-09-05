@@ -20,7 +20,7 @@ const turns = [];              // the conversation so far, newest last
 let chatBusy = false;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, hintShown: false, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, capture: null, obeyUntil: 0, carryMood: null, carryAt: 0, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, hintShown: false, log: [] };
 const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
@@ -33,6 +33,7 @@ const REACT = {
   arms: { action: 'wave', emotion: 'cheerful' },
   tail: { action: 'tail_react', emotion: 'panic' },
 };
+const GRAB_PAD = 14;          // px of slack around her silhouette that still counts as grabbable
 const onHer = (x, y) => lab.pick(x, y);
 
 function note(state, extra) { P.log.push({ t: +P.t.toFixed(1), state, mood: M.mood, ...(extra || {}) }); if (P.log.length > 300) P.log.shift(); }
@@ -103,21 +104,39 @@ const ctxNow = () => ({ ...mindCtx(), hourOfDay: new Date().getHours() });
 // instruction and the bracketed stage directions in her reply; this turns that into movement.
 const AS_STATE = { sit: 'sit', sleep: 'sleep', stretch: 'stretch', look: 'look', talk: 'talk', tail_react: 'tail', dance: 'dance' };
 const AS_REACTION = { wave: 'wave', celebrate: 'celebrate', hop: 'hop', stumble: 'stumble' };
-function performFrom(asked, said) {
-  const plan = readPerformance(asked, said);
+// The model's own statement of intent wins; the keyword reader is the fallback when there is no brain, or when
+// the model did not emit the line.
+const DO_MAP = { walk: 'wander', run: 'wander', follow: 'wander', stop: 'idle', idle: 'idle', sit: 'sit', sleep: 'sleep',
+  wake: 'wake', stretch: 'stretch', tail: 'tail_react', look: 'look', talk: 'talk', dance: 'dance',
+  wave: 'wave', hop: 'hop', celebrate: 'celebrate', stumble: 'stumble' };
+const PLACE_MAP = { left: 0.12, right: 0.88, middle: 0.5, cursor: 'cursor' };
+function planFromAct(act) {
+  if (!act || !act.do || act.do === 'none') return act && act.mood ? { action: null, emotion: act.mood, target: null, from: 'model' } : null;
+  const action = DO_MAP[act.do] === 'wander' ? null : DO_MAP[act.do] || null;
+  const target = act.to && PLACE_MAP[act.to] !== undefined ? PLACE_MAP[act.to]
+    : (act.do === 'walk' || act.do === 'run' || act.do === 'follow') ? 'cursor' : null;
+  return { action, emotion: act.mood || null, target, from: 'model', dur: act.for || null, gait: act.do === 'run' ? 'run' : 'walk' };
+}
+function performFrom(asked, said, act) {
+  const plan = planFromAct(act) || readPerformance(asked, said);
   if (!plan) return null;
   const st = lab.stage();
+  if (plan.emotion) { try { lab.emotion(plan.emotion); } catch (e) { /* unknown mood, leave her face alone */ } }
   if (plan.target != null) {
     const x = plan.target === 'cursor'
       ? (P.cursor ? P.cursor[0] / st.k : lab.pos().x)
       : plan.target * st.w;
-    enter('wander', { target: x, gait: 'walk', dur: 40, emotion: plan.emotion || undefined });
+    enter('wander', { target: x, gait: plan.gait || 'walk', dur: 40, emotion: plan.emotion || undefined });
   } else if (AS_STATE[plan.action]) {
-    enter(AS_STATE[plan.action], { dur: plan.action === 'dance' ? 9 : 6, emotion: plan.emotion || undefined });
+    enter(AS_STATE[plan.action], { dur: plan.dur || (plan.action === 'dance' ? 9 : 6), emotion: plan.emotion || undefined });
   } else if (AS_REACTION[plan.action]) {
-    enter('react', { dur: 3, action: AS_REACTION[plan.action], emotion: plan.emotion || undefined });
-  } else if (plan.emotion) {
-    try { lab.emotion(plan.emotion); } catch (e) { /* unknown mood, leave her face alone */ }
+    enter('react', { dur: plan.dur || 3, action: AS_REACTION[plan.action], emotion: plan.emotion || undefined });
+  }
+  // Told to do something, she should stay doing it. Without this her own mind reconsiders within a second or
+  // two and the order looks ignored - which is most of why she seemed not to listen.
+  if (plan.action || plan.target != null) {
+    P.obeyUntil = P.t + Math.max(3, plan.dur || 6);
+    if (plan.action && ACTIVITIES[AS_STATE[plan.action]]) suggest(M, AS_STATE[plan.action], 'because you asked');
   }
   note('perform', plan);
   return plan;
@@ -188,7 +207,7 @@ async function sendChat() {
     renderHer(res.text, waiting);
     turns.push({ role: 'her', text: res.text });
     note('chat', { line: res.text.slice(0, 60) });
-    performFrom(text, res.text);        // her body does what the two of you just said
+    performFrom(text, res.text, res.act);   // her body does what the two of you just said
   } else {
     waiting.className = 'msg sys';
     waiting.textContent = `她没能回答：${(res && res.error) || 'unknown'}`;
@@ -220,15 +239,37 @@ async function consult() {
   } catch (e) { /* she simply carries on */ } finally { thinking = false; }
 }
 
-function endDrag() { P.drag = null; setOver(false); document.body.style.cursor = 'default'; }
-function setOver(v) { if (v === P.over) return; P.over = v; if (bridge) bridge.setHit(v); document.body.style.cursor = v ? (P.drag ? 'grabbing' : 'grab') : 'default'; }
+// Ending a drag must not slam the window back to click-through while the button may still be down - that is how
+// a failed grab leaked the whole gesture onto the app behind her. Re-pick from the cursor on the next tick.
+function endDrag() { P.drag = null; document.body.style.cursor = P.over ? 'grab' : 'default'; P.pickT = 999; }
+function setOver(v) {
+  if (P.drag) v = true;                    // never go click-through mid-gesture
+  if (v === P.over) return;
+  P.over = v; if (bridge) bridge.setHit(v);
+  document.body.style.cursor = v ? (P.drag ? 'grabbing' : 'grab') : 'default';
+}
 function onTick(dt) {
   P.t += dt;
   const p = lab.pos();
   mindTick(M, dt, mindCtx());
   // hit state follows her even when the mouse is still (she walks out from under the cursor)
   P.pickT += dt;
-  if (P.cursor && !P.drag && P.pickT >= 0.05) { P.pickT = 0; setOver(overChat(P.cursor[0], P.cursor[1]) || onHer(P.cursor[0], P.cursor[1])); }
+  // The window is click-through until we say otherwise, so a fast "swipe over and grab" can lose the press
+  // through it (measured 15-64 ms of hover before it flips). Test every frame while the cursor is anywhere near
+  // her, and treat a generous box around her as interactive so the press always lands somewhere we own.
+  if (P.cursor && !P.drag) {
+    const b = lab.bbox(GRAB_PAD);
+    const nearBox = P.cursor[0] >= b.x0 && P.cursor[0] <= b.x1 && P.cursor[1] >= b.y0 && P.cursor[1] <= b.y1;
+    P.pickT += 0;
+    if (nearBox || P.pickT >= 0.05) {
+      P.pickT = 0;
+      setOver(overChat(P.cursor[0], P.cursor[1]) || nearBox || onHer(P.cursor[0], P.cursor[1]));
+    }
+  }
+  // the window has no reliable mouseleave, so notice for ourselves when the cursor has left it entirely
+  if (P.cursor && !P.drag && (P.cursor[0] < 0 || P.cursor[1] < 0 || P.cursor[0] > window.innerWidth || P.cursor[1] > window.innerHeight)) {
+    P.cursor = null; setOver(false); lab.lookAt(null);
+  }
   // attention: look at a nearby cursor, turn around if it stays behind her
   if (P.cursor && !P.drag && !p.held && !p.airborne) {
     const [hx, hy] = lab.headPx(), st = lab.stage();
@@ -248,8 +289,23 @@ function onTick(dt) {
   placeBubble();   // the bubble follows her head in every mode, not only when the autopilot is running
   // watchdog: if a mouseup was ever lost we would hold the pointer - and, being click-through only while she is
   // NOT under the cursor, we would swallow every click on the desktop. Recover as soon as the rig says she is free.
-  if ((P.drag || P.state === 'held') && !p.held && p.action !== 'dangle') { endDrag(); if (P.auto && P.state === 'held') enter('idle', { dur: 1 }); }
+  // Only a drag that has actually TAKEN HOLD can be dropped by the rig. A press that has not yet moved 5 px is
+  // deliberately not holding her, so the old condition fired one frame after every mousedown and cancelled it -
+  // which is why she could not be picked up, patted, or double-clicked with a real mouse. The self-test never
+  // saw it because it presses and moves inside one JS turn, before any frame runs.
+  if (((P.drag && P.drag.moved) || P.state === 'held') && !p.held && p.action !== 'dangle') { endDrag(); if (P.auto && P.state === 'held') enter('idle', { dur: 1 }); }
+  // a press that never became a drag and never released is the other way to get stuck; give it its own timeout
+  if (P.drag && !P.drag.moved && P.t - P.drag.t0 > 3) endDrag();
   if (!P.auto) return;
+  // While she is in your hand her face should follow how she is being handled, not sit on one fixed mood.
+  if (P.state === 'held') {
+    const c = lab.carry();
+    if (c) {
+      const want = c.distress > 0.62 ? 'panic' : c.distress > 0.34 ? 'surprised'
+        : c.zone === 'head' || c.zone === 'body' ? 'affection' : 'awkward';
+      if (want !== P.carryMood && P.t - (P.carryAt || 0) > 0.6) { P.carryMood = want; P.carryAt = P.t; lab.emotion(want); }
+    }
+  }
   if (P.state === 'held' || P.state === 'fall') {
     if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') { observe(M, 'drop', { impact: p.landed || 0 }); recordMemory(MEM, 'drop', { impact: p.landed || 0 }); saveSoon(); say(vReact(V, P.t, 'drop', { impact: p.landed || 0 })); enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' }); }
     return;
@@ -262,6 +318,7 @@ function onTick(dt) {
   if (P.t > P.nextIdleLine) { P.nextIdleLine = P.t + 25 + Math.random() * 50; const l = idleLine(V, P.t, M, ctxNow()); if (l) say(l); }
   if (P.t - P.lastSave > 30) { P.lastSave = P.t; saveMemory(); }
   if (P.t > P.nextThought) { P.nextThought = P.t + 50; consult(); }
+  if (P.t < P.obeyUntil) return;                 // she was told to do this; let her finish
   if (shouldChange(M, mindCtx()) || P.t >= P.until) decide();
 }
 lab.onTick(onTick);
@@ -271,14 +328,15 @@ function pointerDown(x, y) {
   P.cursor = [x, y];
   if (overChat(x, y)) return false;      // clicks inside the panel belong to the panel, not to picking her up
   if (!onHer(x, y)) return false;
-  P.drag = { x0: x, y0: y, moved: false }; setOver(true); document.body.style.cursor = 'grabbing';
+  P.drag = { x0: x, y0: y, moved: false, t0: P.t, zone: lab.zone(x, y) };   // zone decides how she hangs
+  setOver(true); document.body.style.cursor = 'grabbing';
   return true;
 }
 function pointerMove(x, y) {
   P.cursor = [x, y];
   if (P.drag) {
     if (!P.drag.moved && Math.hypot(x - P.drag.x0, y - P.drag.y0) > 5) {
-      P.drag.moved = true; touched(); observe(M, 'grab'); say(vReact(V, P.t, 'grab')); lab.hold(P.drag.x0, P.drag.y0); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
+      P.drag.moved = true; touched(); observe(M, 'grab'); say(vReact(V, P.t, 'grab')); lab.hold(P.drag.x0, P.drag.y0, P.drag.zone); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
     }
     if (P.drag.moved) lab.holdAt(x, y);
   }
@@ -296,9 +354,23 @@ function pointerUp(x, y) {
   if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); recordMemory(MEM, 'pet'); saveSoon(); say(vReact(V, P.t, 'pet', { zone })); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
   else lab.start(pick(['wave', 'celebrate', 'tail_react']));
 }
-window.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown(e.clientX, e.clientY); });
-window.addEventListener('mousemove', (e) => pointerMove(e.clientX, e.clientY));
-window.addEventListener('mouseup', (e) => { if (e.button === 0) pointerUp(e.clientX, e.clientY); });
+// Pointer events with capture, so a release outside her - or outside the window - still reaches us. Capture is
+// taken only once a grab has actually started, or the chat box would stop receiving its own clicks.
+const root = document.documentElement;
+window.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || e.pointerType === 'touch') return;
+  if (pointerDown(e.clientX, e.clientY)) {
+    try { root.setPointerCapture(e.pointerId); P.capture = e.pointerId; } catch (err) { /* capture is a bonus */ }
+  }
+});
+window.addEventListener('pointermove', (e) => pointerMove(e.clientX, e.clientY));
+const release = (e) => {
+  if (P.capture != null) { try { root.releasePointerCapture(P.capture); } catch (err) { /* already gone */ } P.capture = null; }
+  pointerUp(e.clientX, e.clientY);
+};
+window.addEventListener('pointerup', (e) => { if (e.button === 0) release(e); });
+window.addEventListener('pointercancel', release);
+window.addEventListener('lostpointercapture', () => { if (P.drag) { P.capture = null; pointerUp(...(P.cursor || [0, 0])); } });
 window.addEventListener('mouseleave', () => { if (!P.drag) { P.cursor = null; setOver(false); lab.lookAt(null); } });
 // losing focus or pointer capture mid-drag must end the drag, or the click-through window stays off for good
 const bail = () => { if (!P.drag) return; const c = P.cursor || [0, 0]; pointerUp(c[0], c[1]); };
@@ -347,7 +419,7 @@ const pet = window.pet = {
   chat: (on) => showChat(on !== false),
   ask: async (text) => { showChat(true); chatIn.value = text; await sendChat(); return turns[turns.length - 1]; },
   turns: () => turns.slice(),
-  perform: (asked, said) => performFrom(asked, said),
+  perform: (asked, said, act) => performFrom(asked, said, act),
   say: (line) => say(speak(V, P.t, line)),
   history: () => describeMemory(MEM, Date.now()),
   memory: () => ({ ...MEM }),

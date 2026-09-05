@@ -562,7 +562,8 @@
    "mouth": "pout",
    "fx": [
     "blush_l",
-    "blush_r"
+    "blush_r",
+    "anger_mark"
    ],
    "fx_skipped_outside_face": []
   },
@@ -585,7 +586,9 @@
    "mouth": "frown",
    "fx": [
     "tear_l",
-    "tear_r"
+    "tear_r",
+    "tear_drop_l",
+    "tear_drop_r"
    ],
    "fx_skipped_outside_face": []
   },
