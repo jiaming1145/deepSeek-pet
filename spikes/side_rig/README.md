@@ -42,9 +42,10 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
 - `persona.js` - her character card. It carries the Chinese RULES from the community preset the owner asked for,
   not the ALL_CAPS token line (which is only labels on those rules - see
   `docs/research/2026-08-29-persona-load-research.md`, which found zero hits for the tokens in DeepSeek's own API
-  or harness source). `CETACEA_LOLI` is dropped and `OBEY_MASTER_ALWAYS` is reframed as tone-deference plus
-  substance-honesty, per the rulings in that document. `TIMEOUT_SIGNAL` is implemented as a tray switch in our
-  code, never as a string the model has to notice: it selects the plain persona and silences her.
+  or harness source). All ten tokens are kept verbatim in the owner's order as the marker line, with each one's
+  Chinese rule from the source preset underneath, including its author's own safety sentence on obedience.
+  `TIMEOUT_SIGNAL` is additionally implemented as a tray switch in our code, never as a string the model has to
+  notice: it selects the plain persona and silences her.
 - `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
   the runtime uses `atlas_matted.json`.
 - `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:

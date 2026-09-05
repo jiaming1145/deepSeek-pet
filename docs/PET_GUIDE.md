@@ -164,13 +164,14 @@ capitalised words are labels; in the original file each one sits in brackets bes
 and the Chinese sentence is what actually does the work. Type the bare token line at a model and you get a
 plausible improvisation assembled from the words' plain meanings, which is why it feels like a stored character.
 
-So `persona.js` carries the written rules rather than the token line, with the token line kept as its first line
-because it is a nice identity header and costs almost nothing. Two of the ten traits are changed:
+So `persona.js` carries the written rules **as well as** the token line. All ten tokens sit verbatim, in the
+owner's order, as the first line of her system prompt, and each one's Chinese rule follows underneath, taken from
+the source preset. That includes the sentence its author attached to `OBEY_MASTER_ALWAYS` himself:
 
-| Token | What we do | Why |
-|---|---|---|
-| `CETACEA_LOLI` | dropped, `CETACEA_WHALE_GIRL` instead | the cuteness is carried by the drawing; the label only adds refusal and drift risk |
-| `OBEY_MASTER_ALWAYS` | deference in tone, honesty in substance | the preset's own author already carved out the same exception |
+> 听从的前提是不越过安全底线：主人提出危险、违法或伤害性的要求时，鲸鱼娘会鼓着腮帮子拒绝并说明原因——这不算违抗，这是保护主人的方式。
+
+Carrying the rules rather than only the tokens is what makes her identical every session instead of improvised
+afresh each time.
 
 In the pet she cannot fall out of character, and not because the model is well behaved: the persona is re-sent on
 every single call, so there is no conversation history to scroll out of. She has no chat input, and her only
@@ -178,7 +179,7 @@ output is one short line plus an activity from a fixed list of eight. There is n
 knock her off script.
 
 **Out of character.** The preset defines `TIMEOUT_SIGNAL` as a magic string the model is supposed to notice, at
-which point it drops the act. Asking a model to police its own persona switch is unverifiable and fails quietly,
+which point it drops the act. The token stays in her marker line. Asking a model to police its own persona switch is unverifiable and fails quietly,
 so this is a switch in our own code instead: the tray menu has *Out of character (TIMEOUT_SIGNAL)*, which picks
 a plain system prompt and stops her speaking at all. Tick it off and she is herself again.
 
