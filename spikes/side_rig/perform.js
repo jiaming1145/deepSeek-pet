@@ -61,15 +61,34 @@ function findIn(haystack, table, key = 'words') {
 // What should she do, given what you said and what she said back?
 // `said` is her full reply; only its bracketed parts are read, so the spoken text cannot trigger anything by
 // accident - her saying "主人要不要去睡觉" should not put HER to sleep.
+// "别睡了" is an instruction NOT to sleep. Without this the keyword reader saw 睡 and put her to bed, which is
+// worse than doing nothing at all.
+const NEGATORS = ['不要', '别', '不用', '停下', '停', '住手', '醒醒', '别再', "don't", 'do not', 'stop', 'no more'];
+const STOPPERS = ['停', '别动', '站住', '不要动', '停下', 'stop', 'stay', 'freeze', 'hold on'];
+
+export function isNegated(text, word) {
+  if (typeof text !== 'string') return false;
+  const at = text.indexOf(word);
+  if (at < 0) return false;
+  const before = text.slice(Math.max(0, at - 6), at);
+  return NEGATORS.some((n) => before.includes(n));
+}
+
 export function readPerformance(asked, said) {
   const request = typeof asked === 'string' ? asked : '';
   const directions = stageDirections(said);
   const out = { action: null, emotion: null, target: null, from: null };
 
   const place = findIn(request, PLACES) || findIn(directions, PLACES);
-  if (place) { out.target = place.at; out.from = findIn(request, PLACES) ? 'you' : 'her'; }
+  if (place && !PLACES.some((p) => p === place && p.words.some((w) => isNegated(request, w)))) {
+    out.target = place.at; out.from = findIn(request, PLACES) ? 'you' : 'her';
+  }
 
-  const rule = findIn(request, RULES) || findIn(directions, RULES);
+  // an explicit "stop" outranks everything else
+  if (STOPPERS.some((w) => request.includes(w))) return { action: 'idle', emotion: null, target: null, from: 'you' };
+  let rule = findIn(request, RULES);
+  if (rule && rule.words.some((w) => request.includes(w) && isNegated(request, w))) rule = null;   // "别睡了"
+  if (!rule) rule = findIn(directions, RULES);
   if (rule) {
     out.action = rule.action;
     out.emotion = rule.emotion;

@@ -159,7 +159,7 @@ async function buildView(name, file) {
   for (const l of Object.values(rigJ.layers)) { const a = toW([l.bbox[0], l.bbox[1]]), b = toW([l.bbox[2], l.bbox[3]]); xs.push(a.x, b.x); ys.push(a.y, b.y); }
   const restBox = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
   const view = { name, rig: rigJ, group: grp, bones: B, boneList: list, restHead: rest, skeleton: skel, boneIndex: Object.fromEntries(list.map((b, i) => [b.name, i])),
-    layerMeshes: {}, facePieces: {}, floorY, assets: rigJ.assets || 'assets', springs: Object.values(rigJ.springs || {}), meshes: [], restBox,
+    layerMeshes: {}, facePieces: {}, floorY, assets: rigJ.assets || 'assets', springs: Object.entries(rigJ.springs || {}).map(([name, v]) => ({ ...v, name })), meshes: [], restBox,
     heightUnits: restBox.maxY - floorY, native: rigJ.facing === '-x' ? -1 : rigJ.facing === '+x' ? 1 : 0 };
   const prev = current();
   activate(view);
@@ -192,7 +192,7 @@ async function mountKit(view, faceOrder, layerCount) {
   // the face kit's pieces live in neutral.png px; neutral.png is a crop of the 4096x8192 canonical, and the front
   // layers were decomposed from a crop of the same canonical (rig.canonical_to_canvas) - so kit px -> canvas px is affine
   const map = view.rig.canonical_to_canvas, hh = view.bones.head.userData.head;
-  const k = new FaceKit({ base: '../model/face', atlasJson: 'atlas_matted.json', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5, fxRenderOrder: layerCount + 2,
+  const k = new FaceKit({ base: '../model/face', atlasJson: 'atlas_matted.json', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5, fxRenderOrder: layerCount + 2, skinFxRenderOrder: faceOrder + 0.4,
     place: (u, v) => { const [cx, cy] = k.atlas.face.canonical_crop_box; const w = toW([(u + cx) * map.scale + map.offset[0], (v + cy) * map.scale + map.offset[1]]); return new THREE.Vector3(w.x - hh.x, w.y - hh.y, 0); } });
   try { await k.load(); } catch (e) { console.warn('face kit not mounted: ' + (e.message || e)); return; }
   kit = k; view.kit = k;
@@ -212,10 +212,25 @@ function placeViews() { for (const v of Object.values(VIEWS)) { v.groundY = grou
 window.addEventListener('resize', () => { fitCamera(); placeViews(); });
 
 // ------------------------------------------------------------------ springs
+// While she is off the ground the tail should read as one heavy limb, the hair should settle faster than the
+// tail or it looks like seaweed, and the skirt should barely move.
+const HELD_SPRING = {
+  tail:   { stiffness: 26, damping: 2.4, inertia: 1.7, limit: 1.25 },
+  hair:   { stiffness: 58, damping: 5.2, inertia: 1.5, limit: 1.0 },
+  hair_l: { stiffness: 58, damping: 5.2, inertia: 1.5, limit: 1.0 },
+  hair_r: { stiffness: 58, damping: 5.2, inertia: 1.5, limit: 1.0 },
+  skirt:  { stiffness: 95, damping: 7.6, inertia: 0.9, limit: 0.6 },
+  ahoge:  { stiffness: 100, damping: 6.0, inertia: 1.8, limit: 0.8 },
+};
 function stepSprings(dt) {
   group.updateMatrixWorld(true);
   const v = new THREE.Vector3(), m = M();
-  for (const sp of springs) {
+  // Carried, her chains should hang heavier and swing longer than they do while she walks. Softer and less
+  // damped, with more room to travel; the walk stays exactly as tuned.
+  const carried = !!S_.held || S_.y > 0.02;
+  for (const sp0 of springs) {
+    const o = carried && HELD_SPRING[sp0.name];
+    const sp = o ? { ...sp0, ...o } : sp0;
     for (const name of sp.bones) {
       const b = bones[name], u = b.userData;
       b.getWorldPosition(v);
@@ -386,18 +401,73 @@ A.dance = (tau) => {
 };
 A.tail_react = (tau) => { A.idle(tau); const k = Math.exp(-tau * 1.2) * Math.sin(tau * 9); for (const [i, n] of ['tail_1', 'tail_2', 'tail_3', 'tail_4', 'tail_5', 'tail_6'].entries()) bones[n].userData.pose = 0.35 * k * (0.4 + i * 0.15); };
 A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI), m = BODY; bones.hips.userData.pose = m * 0.35 * u; bones.chest.userData.pose = m * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; if (tau > 0.9) S_.next = 'idle'; };
+// How the tail sits when she is off the ground. Most of the curve is at the base so it reads as one heavy limb
+// hanging rather than a straight rod; above head height it curls back up toward her, the way a startled animal
+// tucks. Sign is negative because the tail leaves her body toward +x and drooping is clockwise.
+const TAIL_HANG = [-0.62, -0.44, -0.28, -0.16, -0.09, -0.05];
+const TAIL_CURL = [0.06, 0.14, 0.22, 0.27, 0.30, 0.28];
+// how high she is, as a fraction of how high she CAN be held - a constant here made every lift read as maximum
+const liftFrac = () => clamp(S_.y / Math.max(0.6, STAGE.h - 2.0), 0, 1);
+function tailCarry(lift) {
+  // lift is 0 at the floor, 1 at the top of her reach
+  const droop = smooth(clamp((lift - 0.02) / 0.18, 0, 1));
+  const curl = smooth(clamp((lift - 0.62) / 0.30, 0, 1));
+  for (let i = 0; i < 6; i++) {
+    const b = bones['tail_' + (i + 1)];
+    if (b && b.userData.head) b.userData.pose = lerp(0, lerp(TAIL_HANG[i], TAIL_CURL[i], curl), droop);
+  }
+}
+
+// She is snatched off the floor: a hard extreme held for a beat, then it settles into the hang. Startles read as
+// startles because the pose arrives instantly and then does NOT move for a moment.
+A.startle = (tau) => {
+  poseReset();
+  const hold = 0.14, u = tau < hold ? 1 : 1 - smooth(clamp((tau - hold) / 0.22, 0, 1));
+  S_.squash = -0.09 * u;                     // taller and narrower: caught mid-gasp
+  S_.rootY = 0.045 * u;
+  bones.upper_arm_near.userData.pose = 1.85 * u;
+  bones.upper_arm_far.userData.pose = 1.85 * u * farSign();
+  bones.forearm_near.userData.pose = 0.5 * u; bones.forearm_far.userData.pose = -0.5 * u;
+  bones.thigh_near.userData.pose = 0.5 * u; bones.thigh_far.userData.pose = -0.15 * u;
+  bones.shin_near.userData.pose = -0.7 * u; bones.shin_far.userData.pose = -0.35 * u;
+  bones.head.userData.pose = -0.16 * u;
+  S_.mouthOpen = 0.9 * u;
+  S_.eyesClosed = 0;
+  tailCarry(Math.max(liftFrac(), 0.10));
+  if (tau > 0.36) S_.next = 'dangle';
+};
 A.dangle = (tau) => {
   // held by the pointer: hangs from the grab point, limbs dangle, sways against the drag
   poseReset();
-  const sw = Math.sin(tau * 2.4), m = BODY, h = S_.held;
-  for (const s of ['near', 'far']) { const k = s === 'near' ? 1 : -1; bones['thigh_' + s].userData.pose = m * (0.22 + 0.1 * sw * k); bones['shin_' + s].userData.pose = -m * 0.3; }
-  bones.upper_arm_near.userData.pose = m * -0.25 + 0.06 * sw; bones.upper_arm_far.userData.pose = m * -0.2 - 0.06 * sw;
-  bones.head.userData.pose = m * 0.1 * sw * 0.5;
-  S_.mouthOpen = 0.4;
+  const h = S_.held;
+  const lift = liftFrac();
+  const sw = Math.sin(tau * 2.1), sw2 = Math.sin(tau * 1.6 + 0.7);
+  // limbs hang and trail; the higher she is, the less she kicks and the more she just dangles
+  const kick = 1 - 0.5 * lift;
+  bones.thigh_near.userData.pose = (-0.30 + 0.16 * sw) * kick;
+  bones.thigh_far.userData.pose = (-0.22 - 0.16 * sw) * kick;
+  bones.shin_near.userData.pose = (0.34 + 0.10 * sw2) * kick;
+  bones.shin_far.userData.pose = (0.28 - 0.10 * sw2) * kick;
+  bones.upper_arm_near.userData.pose = -0.30 + 0.12 * sw2;
+  bones.upper_arm_far.userData.pose = (-0.26 - 0.12 * sw2) * farSign();
+  bones.forearm_near.userData.pose = 0.22 + 0.08 * sw;
+  bones.forearm_far.userData.pose = -0.20 - 0.08 * sw;
+  bones.head.userData.pose = 0.07 * sw2;
+  bones.chest.userData.pose = 0.05 * sw;
+  S_.mouthOpen = 0.25 + 0.25 * (h ? h.distress || 0 : 0);
+  tailCarry(lift);
   if (h) {
-    // pendulum: tilt against the drag velocity about the grab point (the root pivot is at the feet, so compensate)
-    const tilt = clamp(-h.vx * 0.05, -0.35, 0.35) * M(), Hg = Math.max(0.2, -h.dy);
-    S_.rootRot = tilt; S_.rootX = M() * Hg * Math.sin(tilt); S_.rootY = Hg * (1 - Math.cos(tilt));
+    // A real pendulum, integrated, rather than a read-out of pointer velocity: she swings, overshoots and rings
+    // down. Horizontal acceleration of the hand drives it, which is why shaking her reads so differently from
+    // carrying her smoothly.
+    const L = Math.max(0.18, Math.abs(h.dy) + 0.25);
+    const w0 = Math.sqrt(G / L), damp = 2 * 0.12 * w0;
+    const acc = -(G / L) * Math.sin(h.th) - damp * h.w - (h.ax / L) * Math.cos(h.th);
+    h.w = clamp(h.w + acc * S_.dt, -12, 12);
+    h.th = clamp(h.th + h.w * S_.dt, -1.1, 1.1);
+    S_.rootRot = h.th;
+    S_.rootX = M() * L * Math.sin(h.th);          // the pivot is at her feet, so slide to keep the grab point still
+    S_.rootY = L * (1 - Math.cos(h.th));
   }
 };
 A.fall = (tau) => {
@@ -419,7 +489,11 @@ A.land = (tau) => {
   if (tau > 0.34) S_.next = 'idle';
 };
 const ACTIONS = Object.keys(A);
-const VIEW_FOR = { walk: 'side', run: 'side', hop: 'side', sleep: 'side', wake: 'side', turn: 'side', stumble: 'side', dangle: 'side', fall: 'side', land: 'side',
+// Being carried happens in the FRONT view: the face kit is only mounted there, so in the side view the whole
+// pick-up sequence had no access to her drawn eyes or her effect decals. It is also right dramatically -
+// she is looking at the hand that has hold of her.
+const VIEW_FOR = { walk: 'side', run: 'side', hop: 'side', sleep: 'side', wake: 'side', turn: 'side', stumble: 'side',
+  startle: 'front', dangle: 'front', fall: 'front', land: 'front',
   idle: 'front', look: 'front', talk: 'front', wave: 'front', sit: 'front', stretch: 'front', celebrate: 'front', tail_react: 'front', dance: 'front' };
 function wantView(action) { const w = VIEW_FOR[action] || VIEW_NAME; return VIEWS[w] ? w : (VIEWS.side ? 'side' : Object.keys(VIEWS)[0]); }
 function switchView(name) {
@@ -439,13 +513,16 @@ const EMO = {
   think: { browRot: 0.15, browY: 3, eyeScale: 0.95, mouthW: 0.9, mouthH: 0.8, closed: 0, kit: 'focused' },
   awkward: { browRot: 0.25, browY: 0, eyeScale: 0.9, mouthW: 1.3, mouthH: 0.5, closed: 0, kit: 'shy' },
   question: { browRot: 0.2, browY: 4, eyeScale: 1.05, mouthW: 0.9, mouthH: 1.2, closed: 0, kit: 'confused' },
-  curious: { browRot: 0.05, browY: 3, eyeScale: 1.1, mouthW: 1.0, mouthH: 1.1, closed: 0, kit: 'surprised' },
+  curious: { browRot: 0.05, browY: 3, eyeScale: 1.1, mouthW: 1.0, mouthH: 1.1, closed: 0, kit: 'gentle' },   // she wears this the whole time you hover her; 'surprised' pinned her wide-eyed and killed her gaze
 };
 const KIT_TO_EMO = { relaxed: 'neutral', sleepy: 'neutral', affection: 'happy', panic: 'surprised', shy: 'awkward', smug: 'happy', pouty: 'angry', focused: 'think', hurt: 'sad', confused: 'question', shocked: 'surprised', gentle: 'happy', cheerful: 'happy' };
 const KIT_NOT_MOODS = /^(blink|aa|ih|ou|ee|oh|look)/;
 const emoOf = (name) => EMO[name] || EMO[KIT_TO_EMO[name]] || EMO.neutral;
 const kitMood = (name) => (kit && kit.recipe(name) && !KIT_NOT_MOODS.test(name) ? name : (EMO[name] && kit && kit.recipe(EMO[name].kit) ? EMO[name].kit : 'neutral'));
 const VISEMES = ['aa', 'ih', 'ou', 'ee', 'oh'];
+// how hard each feeling lands
+const EMO_KICK = { panic: 1, shocked: 1, surprised: 0.9, hurt: 0.8, cheerful: 0.7, affection: 0.7, angry: 0.7,
+  happy: 0.5, pouty: 0.4, smug: 0.4, confused: 0.4, curious: 0.3, sad: 0.25, gentle: 0, relaxed: 0, sleepy: 0, neutral: 0 };
 const emoCur = { ...EMO.neutral };
 function applyFace(dt) {
   const target = emoOf(S_.emotion);
@@ -460,6 +537,7 @@ function applyFace(dt) {
   if (isFront() && kit) {
     kit.setMood(kitMood(S_.emotion));
     kit.eyesClosed = S_.eyesClosed || 0;
+    kit.sleepy = S_.emotion === 'sleepy' || S_.action === 'sleep' ? 1 : 0;
     kit.setViseme(S_.action === 'talk' ? VISEMES[Math.floor(S_.tau * 5.5) % VISEMES.length] : null);   // slower than the 0.12 s crossfade, or the mouth is always half-faded
     const { yaw, pitch } = S_.look;
     const thr = S_.action === 'look' ? 0.4 : 0.45;
@@ -560,6 +638,13 @@ function followHold(dt) {
   const vx = (nx - S_.x) / Math.max(dt, 1e-3), vy = (ny - S_.y) / Math.max(dt, 1e-3);
   const k = 1 - Math.exp(-dt * 10);
   h.vx = lerp(h.vx, vx, k); h.vy = lerp(h.vy, vy, k);
+  h.ax = (h.vx - (h.pvx || 0)) / Math.max(dt, 1e-3);
+  h.pvx = h.vx;
+  // how alarming is this? height, shaking (which means reversals, so large |ax|) and how far she is swinging.
+  // Where she was grabbed biases it: by the tail is worse than round the middle.
+  const lift = liftFrac();
+  h.shake = lerp(h.shake || 0, clamp(Math.abs(h.ax) / 34, 0, 1), 1 - Math.exp(-dt * 3));
+  h.distress = clamp(0.45 * lift + 0.85 * h.shake + 0.35 * clamp(Math.abs(h.th) / 0.9, 0, 1) + (h.zoneBias || 0), 0, 1);
   S_.x = nx; S_.y = ny;
 }
 function stepPhysics(dt) {
@@ -605,6 +690,21 @@ function tick(dt) {
   group.scale.set(sx * sc * (1 + sq), sc * (1 - sq) * stretch, 1);
   group.position.x = S_.x + (S_.rootX || 0); group.position.y = GROUND_Y + S_.y;
   applyPose();
+  // the impulse of a feeling arriving, decaying over about half a second
+  if (S_.emoKick) {
+    const age = S_.t - S_.emoKick.t0;
+    if (age > 0.7) S_.emoKick = null;
+    else {
+      const k = S_.emoKick.mag * Math.exp(-6 * age);
+      bones.head.userData.pose += 0.07 * k * Math.sin(age * 34);
+      if (!S_.emoKick.fired) {
+        S_.emoKick.fired = true;
+        for (const n of ['ahoge_1', 'ahoge_2', 'hair_1', 'hair_l_1', 'hair_r_1']) {
+          const b = bones[n]; if (b) b.userData.springVel += 5 * S_.emoKick.mag;
+        }
+      }
+    }
+  }
   stepSprings(dt);
   applyPose();
   applyFace(dt);
@@ -631,7 +731,7 @@ const lab = window.lab = {
   start(name) {
     if (!A[name]) throw new Error('unknown action ' + name);
     const want = wantView(name);
-    S_.blend = want === VIEW_NAME ? { from: snapshotPose(), t0: S_.t, dur: name === 'land' || name === 'stumble' ? 0.08 : 0.22 } : null;
+    S_.blend = want === VIEW_NAME ? { from: snapshotPose(), t0: S_.t, dur: name === 'land' || name === 'stumble' || name === 'startle' ? 0.05 : 0.22 } : null;
     S_.action = name; S_.tau = 0; if (name === 'turn') S_.turn = null;
     switchView(want);
     return { name, view: want };
@@ -646,7 +746,13 @@ const lab = window.lab = {
   stop() { lab.start('idle'); },
   pause(v) { S_.paused = !!v; },
   hud(v) { S_.hudOn = !!v; hud.style.display = v ? 'block' : 'none'; },
-  emotion(name) { if (!EMO[name] && !KIT_TO_EMO[name] && !(kit && kit.recipe(name))) throw new Error('unknown emotion ' + name); S_.emotion = name; },
+  emotion(name) {
+    if (!EMO[name] && !KIT_TO_EMO[name] && !(kit && kit.recipe(name))) throw new Error('unknown emotion ' + name);
+    // A feeling arriving should move her, not just her face: a small head snap and a kick through the hair and
+    // ahoge springs. Without it a mood change is a silent texture swap.
+    if (name !== S_.emotion) S_.emoKick = { t0: S_.t, mag: EMO_KICK[name] ?? 0.35 };
+    S_.emotion = name;
+  },
   eyes(closed) { S_.eyesHold = closed == null ? null : clamp(closed, 0, 1); },   // testing hook: hold the lids
   look(yaw, pitch) { S_.look.yaw = clamp(yaw || 0, -1, 1); S_.look.pitch = clamp(pitch || 0, -1, 1); },
   lookAt(px, py) { if (px == null) { lab.look(0, 0); return; } const [hx, hy] = lab.headPx(); lab.look((px - hx) / (STAGE.k * 1.2), (hy - py) / (STAGE.k * 0.9)); },
@@ -654,6 +760,7 @@ const lab = window.lab = {
   // stage + position (units) and her hit box (window px, top-left origin)
   stage: () => ({ k: STAGE.k, w: STAGE.w, h: STAGE.h, margin: STAGE.margin, wPx: window.innerWidth, hPx: window.innerHeight }),
   pos: () => ({ x: S_.x, y: S_.y, vx: S_.vx, vy: S_.vy, facing: S_.facing, action: S_.action, tau: S_.tau, view: VIEW_NAME, speed: S_.speed || 0, held: !!S_.held, airborne: S_.y > 0.001, turning: !!S_.turn, landed: S_.landed }),
+  carry: () => (S_.held ? { lift: +liftFrac().toFixed(3), shake: +(S_.held.shake || 0).toFixed(3), swing: +Math.abs(S_.held.th || 0).toFixed(3), distress: +(S_.held.distress || 0).toFixed(3), zone: S_.held.zone } : null),
   setPos(x, y) { S_.x = clamp(x, 0, STAGE.w); S_.y = Math.max(0, y || 0); },
   turnTo(dir) { dir = dir > 0 ? 1 : -1; if (dir !== S_.facing && !S_.turn) S_.turn = { t0: S_.t, from: S_.facing }; return dir === S_.facing; },
   bbox(pad = 0) {
@@ -668,15 +775,17 @@ const lab = window.lab = {
     return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
   },
   // pick up / carry / drop (window px)
-  hold(px, py) {
+  hold(px, py, zone) {
     const [ux, uy] = toUnits(px, py);
-    S_.held = { dx: S_.x - ux, dy: S_.y - uy, tx: S_.x, ty: S_.y, vx: 0, vy: 0 };
+    const BIAS = { tail: 0.25, hair: 0.2, legs: 0.15, skirt: 0.1, arms: 0.05, head: -0.1, body: -0.15 };
+    S_.held = { dx: S_.x - ux, dy: S_.y - uy, tx: S_.x, ty: S_.y, vx: 0, vy: 0, ax: 0, pvx: 0,
+      th: 0, w: 0, shake: 0, distress: 0, zone: zone || null, zoneBias: BIAS[zone] ?? 0 };
     S_.vx = 0; S_.vy = 0; S_.speed = 0; S_.turn = null;
-    lab.start('dangle');
+    lab.start('startle');
   },
   holdAt(px, py) { if (!S_.held) return; const [ux, uy] = toUnits(px, py); S_.held.tx = clamp(ux + S_.held.dx, 0.3, STAGE.w - 0.3); S_.held.ty = clamp(uy + S_.held.dy, 0, Math.max(0, STAGE.h - 2.0)); },
   release() {
-    if (!S_.held) return; const h = S_.held; S_.held = null;
+    if (!S_.held) return; const h = S_.held; S_.held = null; S_.rootRot = 0; S_.rootX = 0;
     S_.vx = clamp(h.vx, -12, 12); S_.vy = clamp(h.vy, -6, 8); S_.rootRot = 0; S_.rootX = 0;
     if (S_.y > 0.01 || S_.vy > 0) lab.start('fall'); else { S_.vx = 0; lab.start('land'); }
   },
