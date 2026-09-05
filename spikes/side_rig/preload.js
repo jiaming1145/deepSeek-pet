@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('petBridge', {
   saveMemory: (data) => ipcRenderer.send('pet:memory:save', data),
   think: (state, history, activities) => ipcRenderer.invoke('pet:think', state, history, activities),
   brainInfo: () => ipcRenderer.invoke('pet:brain'),
+  chat: (turns, state, history) => ipcRenderer.invoke('pet:chat', turns, state, history),
 });

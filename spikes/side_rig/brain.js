@@ -116,7 +116,7 @@ async function think(brain, state, history, activities, now = Date.now()) {
   brain.calls++;
   const body = {
     model: MODEL,
-    messages: [{ role: 'system', content: personaFor(brain.mode) }, { role: 'user', content: buildPrompt(state, history, activities) }],
+    messages: [{ role: 'system', content: personaFor(brain.mode, 'bubble') }, { role: 'user', content: buildPrompt(state, history, activities) }],
     max_tokens: 60,
     temperature: 1.0,
     thinking: { type: 'disabled' },
@@ -136,4 +136,34 @@ async function think(brain, state, history, activities, now = Date.now()) {
   return out;
 }
 
-module.exports = { createBrain, think, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, personaFor, MODEL, KEY_FILE };
+// A real conversation. Separate from think(): no activity to choose, a much longer answer, its own rate limit
+// (the owner is waiting for this one, so it may not be silently dropped), and the last few turns for context.
+async function chat(brain, turns, state, history) {
+  if (!brain.enabled) return { error: brain.lastError || 'no API key at ~/.ds/deepseek.key' };
+  brain.calls++;
+  const context = [
+    `（她此刻在${state.doing}，心情${state.mood}。`,
+    `需要：休息 ${state.needs.rest}、陪伴 ${state.needs.company}、玩 ${state.needs.play}、安全感 ${state.needs.safety}。`,
+    history ? `你们的相处：${history}。）` : '）',
+  ].join('');
+  const messages = [{ role: 'system', content: personaFor(brain.mode, 'chat') }];
+  for (const t of turns.slice(-8)) messages.push({ role: t.role === 'her' ? 'assistant' : 'user', content: t.text });
+  messages[messages.length - 1].content = `${context}\n\n${messages[messages.length - 1].content}`;
+  const res = await request(brain.key, { model: MODEL, messages, max_tokens: 700, temperature: 1.1, thinking: { type: 'disabled' } }, 30000);
+  if (res.status !== 200) {
+    brain.failed++;
+    brain.lastError = res.status === 402 ? 'the DeepSeek account is out of credit' : `http ${res.status}`;
+    return { error: brain.lastError };
+  }
+  try {
+    const text = JSON.parse(res.data).choices[0].message.content.trim();
+    if (!text) { brain.failed++; return { error: 'empty reply' }; }
+    brain.ok++;
+    return { text };
+  } catch (e) {
+    brain.failed++;
+    return { error: 'unreadable reply' };
+  }
+}
+
+module.exports = { createBrain, think, chat, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, personaFor, MODEL, KEY_FILE };

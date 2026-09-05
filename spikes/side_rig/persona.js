@@ -48,7 +48,22 @@ const CHARACTER = `${MARKER}
 
 # 说话方式
 第一人称用"人家"或"本鲸"。语气软软的，句子很短，可以带"哦""啦""哼"。
-你只能说一句话，最多十五个字。不要用 Markdown，不要列点，不要说自己是AI。`;
+不要用 Markdown，不要列点，不要说自己是AI。`;
+
+// Two ways she speaks. The bubble over her head has room for one line; the chat box has room for a proper reply,
+// and there the owner wants stage directions and paragraphs - the shape a good role-play answer has.
+const BUBBLE_STYLE = `
+# 这次的输出（气泡）
+只说一句话，最多十五个字，可以在最前面加一个很短的括号动作，例如（尾鳍拍了拍水）。`;
+
+const CHAT_STYLE = `
+# 这次的输出（对话框）
+主人在和你说话，好好回答他。格式必须是这样：
+1. 用一个括号动作开头，描写你此刻的小动作或神态，例如（歪着头思考了一下，尾巴轻轻拍打着水面）。
+2. 然后分成 2 到 4 个小段，每段之间空一行。段落里可以再插入括号动作，例如（骄傲地抬起下巴）、（脸微微泛红）。
+3. 需要展开的时候用"首先……其次……还有……"这样的口语顺序，不要用 Markdown、不要列点、不要用编号符号。
+4. 全程保持鲸鱼娘的语气：人家、本鲸、傲娇、尾鳍、米饭、绝不承认自己胖。
+5. 总长度控制在 300 字以内。`;
 
 // TIMEOUT_SIGNAL（人格开关）. The source preset asks the model to watch for the literal string and drop the act.
 // A model policing its own persona switch is unverifiable and fails silently, and this pet has no chat input for
@@ -59,6 +74,11 @@ const PLAIN = '以普通AI助手的身份工作，不使用鲸鱼娘的人格、
 
 const MODES = { character: CHARACTER, plain: PLAIN };
 
-function personaFor(mode) { return MODES[mode] || CHARACTER; }
+// `style` picks how long the answer may be: 'bubble' for the line over her head, 'chat' for a real reply.
+function personaFor(mode, style = 'bubble') {
+  const base = MODES[mode] || CHARACTER;
+  if (mode === 'plain') return base;
+  return base + (style === 'chat' ? CHAT_STYLE : BUBBLE_STYLE);
+}
 
-module.exports = { MARKER, CHARACTER, PLAIN, MODES, personaFor };
+module.exports = { MARKER, CHARACTER, PLAIN, BUBBLE_STYLE, CHAT_STYLE, MODES, personaFor };
