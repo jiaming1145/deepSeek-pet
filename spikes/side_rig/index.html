@@ -11,10 +11,20 @@
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
   canvas { display: block; }
   #hud { position: fixed; left: 8px; top: 8px; font: 11px/1.35 Consolas, monospace; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: pre; pointer-events: none; }
+  /* her speech bubble. It floats over the desktop, so it must read on any wallpaper and never eat a click. */
+  #say { position: fixed; left: 0; top: 0; max-width: 260px; padding: 9px 13px; border-radius: 15px;
+    background: rgba(255, 255, 255, 0.96); color: #16233a; border: 1.5px solid rgba(40, 70, 120, 0.30);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); font: 14px/1.35 "Segoe UI", system-ui, sans-serif;
+    pointer-events: none; opacity: 0; transform: translate(-50%, -100%) scale(0.92);
+    transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.2, 1.5, 0.4, 1); white-space: pre-wrap; }
+  #say.on { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+  #say::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px;
+    border: 8px solid transparent; border-top-color: rgba(255, 255, 255, 0.96); border-bottom: 0; }
 </style>
 </head>
 <body>
 <div id="hud"></div>
+<div id="say"></div>
 <script type="module" src="./pet.js"></script>
 </body>
 </html>

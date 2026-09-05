@@ -65,6 +65,9 @@ Two extras make her feel alive rather than mechanical:
 | `spikes/side_rig/mind.js` | What she wants. Four needs, a score for every activity, and the choice that follows. Pure arithmetic: no graphics, no network, no Electron, so it can be tested on its own. |
 | `spikes/side_rig/mind.test.mjs` | Nineteen tests of her behaviour, run with `node spikes/side_rig/mind.test.mjs`. They assert things a person would expect: left alone she gets lonely, petted regularly she stays awake, a hard drop frightens her and she recovers, she never repeats herself twice running. |
 | `spikes/side_rig/mind_trace.mjs` | Runs her mind for a simulated hour against a scripted day and writes the timeline, which becomes `evidence/mind_hour.png`. |
+| `spikes/side_rig/voice.js` | What she says and when. A table of short lines grouped by situation, and the rule for choosing one: prefer the most specific situation, never repeat something recent, and stay quiet unless there is a reason to speak. |
+| `spikes/side_rig/memory.js` | What she remembers between runs: when you first met, how long you were away, how many times you have petted her, how many times you have thrown her. |
+| `spikes/side_rig/voice.test.mjs` | Twenty-seven tests of her voice and her memory: a tail grab gets a protest, four rapid pats get a comment on it, a day away gets an earful, a corrupt memory file is not an error. |
 | `spikes/side_rig/facekit.js` | Her face. Swaps her eyes, eyebrows and mouth for different drawn versions to make expressions, blinks on a timer, moves her mouth while talking, and fades smoothly between moods. |
 | `spikes/side_rig/rig.json` | The side-on skeleton and the list of pieces. Generated, not hand-written. |
 | `spikes/side_rig/rig_front.json` | The same for the front-on view. |
@@ -126,6 +129,30 @@ than perform to nobody.
 You can see all of this: `evidence/mind_hour.png` charts a simulated hour, and the file `mind.js` writes a
 plain-English reason for every choice, which is kept in her log. Ask her `pet.mind()` in the console and she will
 tell you what she is doing, why, how she feels and what she needs.
+
+## What she says
+
+She talks in a small speech bubble above her head (`evidence/speech_bubble.png`). The lines are short and chosen
+by situation, not at random: a head pat gets "more please", a tail grab gets "not the tail!", being picked up gets
+"wh- hey!", a hard landing gets "OW". Left alone she eventually says "are you there?"; late at night she suggests
+you go to bed.
+
+Two rules keep it from becoming annoying. She will not repeat a line she has used recently, and she stays silent
+unless there is a reason to speak, with a minimum gap between unprompted remarks. A pet that chatters constantly
+is worse than one that never speaks at all.
+
+## What she remembers
+
+Close her and open her tomorrow and she is not a blank slate. A small file next to the app's settings holds when
+you first met, how long she has spent with you, how many times you have petted her, how many times you have
+thrown her across the screen, and how she felt when you closed her.
+
+Being switched off is not the same as being ignored: she comes back rested, because she was not awake, but
+lonelier, because you were not there. How long you were away decides how she greets you. A minute gets "back
+already?". An hour gets "welcome back". A day gets "I thought you had forgotten about me".
+
+Ask her `pet.history()` and she will summarise it: *"you have known her 3 days, 11 times together, about 2 hours
+in her company, 47 pats, 3 thrown across the screen"*.
 
 Measured over that simulated hour, her behaviour genuinely changes with the situation:
 
@@ -191,11 +218,12 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
-- She has wants, but no understanding. She cannot be told anything, and she does not know what is on your screen.
+- She has wants and a voice, but no understanding. Her lines are chosen from a written list, not composed. She
+  cannot be told anything, and she does not know what is on your screen.
   A language model would slot in at the seam that already exists: `mind.js` exposes `summarise()`, which packs her
   state into a few lines suitable for a prompt, and `suggest()`, which lets an outside brain propose her next
   activity. A suggestion is honoured once, only if it names something she can actually do, and only at her next
   decision point, so a slow or broken model can never freeze or hijack her.
-- She cannot speak or hear.
+- She cannot hear you, and there is no way to talk back to her.
 - Three of the drawn eye shapes are weak: the dizzy spiral reads as a dark blob, and the half-closed lid reads as a
   hard bar. They come from the expression artwork, not from the code, so fixing them means redrawing those cells.

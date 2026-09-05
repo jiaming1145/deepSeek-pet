@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('petBridge', {
   quit: () => ipcRenderer.send('pet:quit'),
   onCommand: (cb) => ipcRenderer.on('pet:command', (_e, cmd) => cb(cmd)),
   onIdle: (cb) => ipcRenderer.on('pet:idle', (_e, seconds) => cb(seconds)),
+  loadMemory: () => ipcRenderer.invoke('pet:memory:load'),
+  saveMemory: (data) => ipcRenderer.send('pet:memory:save', data),
 });
