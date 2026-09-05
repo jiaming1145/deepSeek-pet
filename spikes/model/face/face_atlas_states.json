@@ -415,7 +415,9 @@
    "brow_l": "down_inner",
    "brow_r": "down_inner",
    "mouth": "frown",
-   "fx": [],
+   "fx": [
+    "anger_mark"
+   ],
    "fx_skipped_outside_face": []
   },
   "sad": {
@@ -495,7 +497,9 @@
    "brow_l": "verbatim",
    "brow_r": "verbatim",
    "mouth": "ou",
-   "fx": [],
+   "fx": [
+    "sleepy_marks"
+   ],
    "fx_skipped_outside_face": []
   },
   "affection": {
@@ -507,7 +511,8 @@
    "mouth": "smile",
    "fx": [
     "blush_l",
-    "blush_r"
+    "blush_r",
+    "heart_fx"
    ],
    "fx_skipped_outside_face": []
   },
@@ -543,7 +548,9 @@
    "brow_l": "down",
    "brow_r": "down",
    "mouth": "smile",
-   "fx": [],
+   "fx": [
+    "sparkle_r"
+   ],
    "fx_skipped_outside_face": []
   },
   "pouty": {
@@ -589,7 +596,9 @@
    "brow_l": "tilted",
    "brow_r": "neutral",
    "mouth": "flat",
-   "fx": [],
+   "fx": [
+    "question_mark"
+   ],
    "fx_skipped_outside_face": []
   },
   "shocked": {
@@ -600,7 +609,8 @@
    "brow_r": "up",
    "mouth": "oh",
    "fx": [
-    "sweat_drop"
+    "sweat_drop",
+    "sparkle_l"
    ],
    "fx_skipped_outside_face": []
   },
@@ -626,7 +636,9 @@
    "mouth": "open_wide",
    "fx": [
     "blush_l",
-    "blush_r"
+    "blush_r",
+    "sparkle_l",
+    "sparkle_r"
    ],
    "fx_skipped_outside_face": []
   }

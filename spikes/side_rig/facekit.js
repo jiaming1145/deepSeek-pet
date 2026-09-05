@@ -4,7 +4,7 @@
 // giving a `place(px, py)` function and a parent Object3D (the head bone).
 import * as THREE from 'three';
 
-const BROW_ALIAS = { verbatim: 'neutral_verbatim' };
+const BROW_ALIAS = { verbatim: 'neutral' };   // the atlas's 'neutral_verbatim' cell is erased-hair strands, not a brow
 const REGION_ATLAS = { eye_l: 'eyes', eye_r: 'eyes', brow_l: 'brows', brow_r: 'brows', mouth: 'mouth' };
 
 export class FaceKit {
@@ -14,6 +14,7 @@ export class FaceKit {
     this.place = opts.place;                     // (px, py) face px -> THREE.Vector3 in parent space
     this.pxScale = opts.pxScale;                 // world units per face px
     this.renderOrder = opts.renderOrder || 100;
+    this.fxRenderOrder = opts.fxRenderOrder ?? (this.renderOrder + 4);   // effect decals are floating symbols: above the hair, not under it
     this.atlasJson = opts.atlasJson || 'atlas.json';   // 'atlas_matted.json': cells re-matted to the drawn feature only
     this.mood = 'neutral'; this.pending = null; this.fade = 0; this.FADE = 0.12;
     this.blink = { next: 2.5, phase: 0 }; this.viseme = null; this.look = null; this.eyesClosed = 0;
@@ -45,7 +46,7 @@ export class FaceKit {
       });
       this.regions[region] = { quads, atlas: at, row: at.rows ? at.rows.indexOf(region) : 0, state: null };
     }
-    this.setRegion('eye_l', 'open'); this.setRegion('eye_r', 'open'); this.setRegion('brow_l', 'neutral_verbatim'); this.setRegion('brow_r', 'neutral_verbatim'); this.setRegion('mouth', 'closed');
+    this.setRegion('eye_l', 'open'); this.setRegion('eye_r', 'open'); this.setRegion('brow_l', 'neutral'); this.setRegion('brow_r', 'neutral'); this.setRegion('mouth', 'closed');
     for (const q of Object.values(this.regions)) { q.quads[0].material.opacity = 1; q.quads[1].material.opacity = 0; }
     // fx decals (blush etc.), one quad each, toggled by mood recipes
     const fxa = this.atlas.atlases.fx;
@@ -58,7 +59,7 @@ export class FaceKit {
       for (let i = 0; i < uv.count; i++) { const u = uv.getX(i), v = uv.getY(i); uv.setXY(i, (x + u * w) / W, 1 - (y + (1 - v) * h) / H); }
       const mat = new THREE.MeshBasicMaterial({ map: this.tex.fx, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, opacity: 0 });
       const m = new THREE.Mesh(geo, mat);
-      m.position.copy(this.place((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2)); m.renderOrder = this.renderOrder + 4; m.frustumCulled = false; m.visible = false;
+      m.position.copy(this.place((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2)); m.renderOrder = this.fxRenderOrder; m.frustumCulled = false; m.visible = false;
       this.parent.add(m); this.fx[name] = { mesh: m, target: 0 };
     }
     return this;
@@ -93,7 +94,7 @@ export class FaceKit {
     const rec = (this.states.recipes || {})[mood];
     if (!rec) return null;
     const brow = (v) => BROW_ALIAS[v] || v;
-    return { eye_l: rec.eye_l || 'open', eye_r: rec.eye_r || 'open', brow_l: brow(rec.brow_l || 'neutral_verbatim'), brow_r: brow(rec.brow_r || 'neutral_verbatim'), mouth: rec.mouth || 'closed', fx: (rec.fx || []).map((f) => (typeof f === 'string' ? f : f.name)) };
+    return { eye_l: rec.eye_l || 'open', eye_r: rec.eye_r || 'open', brow_l: brow(rec.brow_l || 'neutral'), brow_r: brow(rec.brow_r || 'neutral'), mouth: rec.mouth || 'closed', fx: (rec.fx || []).map((f) => (typeof f === 'string' ? f : f.name)) };
   }
   moods() { return Object.keys(this.states.recipes || {}); }
   setMood(mood) { if (!this.recipe(mood)) throw new Error('unknown mood ' + mood); this.mood = mood; }

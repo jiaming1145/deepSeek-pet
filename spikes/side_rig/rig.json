@@ -551,7 +551,6 @@
   "topwear",
   "ears",
   "face",
-  "headwear",
   "neck",
   "mouth",
   "eyewhite",
@@ -559,6 +558,7 @@
   "eyelash",
   "eyebrow",
   "front_hair",
+  "headwear",
   "handwear"
  ],
  "layers": {
@@ -637,10 +637,10 @@
   "headwear": {
    "file": "headwear.png",
    "bbox": [
-    136,
-    101,
-    256,
-    313
+    208,
+    40,
+    317,
+    223
    ]
   },
   "neck": {

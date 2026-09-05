@@ -94,6 +94,11 @@ app.whenReady().then(async () => {
     let [cx, cy] = await centre();
     await js(`pet.simulate({type:'move', x:${cx - 300}, y:${cy}}); lab.step(0.5)`); await snap('hover_far');
     await js(`pet.simulate({type:'move', x:${cx}, y:${cy}}); lab.step(0.8)`); await snap('hover_on');
+    // the hit test is per-pixel now: on her -> true, the same distance away in empty space -> false
+    report.pick = { onHer: await js(`lab.pick(${cx}, ${cy})`), offHer: await js(`lab.pick(${cx - 400}, ${cy - 300})`), zone: await js(`lab.zone(${cx}, ${cy})`) };
+    const b0 = await js('lab.bbox()');
+    report.pick.aboveHead = await js(`lab.pick(${cx}, ${Math.round(b0.y0 - 40)})`);
+    console.log('pick check', JSON.stringify(report.pick));
     await js(`pet.simulate({type:'down', x:${cx}, y:${cy}}); pet.simulate({type:'up', x:${cx}, y:${cy}}); lab.step(0.7)`); await snap('click'); await check('click');
     await js("lab.step(3); pet.go('idle', {dur: 30}); lab.step(1)");
     [cx, cy] = await centre();
