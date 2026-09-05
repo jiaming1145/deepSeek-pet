@@ -19,6 +19,11 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let tray = null;
 
 app.whenReady().then(async () => {
+  // her memory: one small JSON file beside the app's settings, so she is not a blank slate every launch.
+  // Registered for every mode, not just --pet, so the lab and the probes can read it too.
+  const memFile = path.join(app.getPath('userData'), 'whalechan-memory.json');
+  ipcMain.handle('pet:memory:load', () => { try { return JSON.parse(fs.readFileSync(memFile, 'utf8')); } catch (e) { return null; } });
+  ipcMain.on('pet:memory:save', (_e, data) => { try { fs.writeFileSync(memFile, JSON.stringify(data)); } catch (e) { console.error('could not save her memory:', e.message); } });
   const query = {};
   if (argOf('--rig')) query.rig = argOf('--rig');
   if (argOf('--front')) query.front = argOf('--front');
@@ -67,7 +72,7 @@ app.whenReady().then(async () => {
     pushIdle();
     const idleTimer = setInterval(pushIdle, 2000);
     win.on('closed', () => clearInterval(idleTimer));
-    console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds));
+    console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds), 'memory', memFile);
   }
 
   if (TOUR) {
@@ -117,6 +122,8 @@ app.whenReady().then(async () => {
     await js('lab.step(0.5)'); await snap('falling');
     await js('lab.step(2.5)'); await snap('landed'); await check('land');
     await js('lab.step(4)'); await snap('after');
+    await js('pet.saveNow()');
+    report.memory = await js('pet.memory()');
     report.log = await js('pet.log()');
     await js('lab.pause(false)'); await wait(600); report.fps = await js('lab.fps()');
     await check('end');

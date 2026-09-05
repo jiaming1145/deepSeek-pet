@@ -3,11 +3,17 @@
 // the cursor is over her so the window stops being click-through; in the lab the same code runs without the bridge.
 import './rig.js';
 import { createMind, observe, tick as mindTick, decide as mindDecide, shouldChange, summarise } from './mind.js';
+import { createVoice, react as vReact, idleLine, speak, readTime } from './voice.js';
+import { blank as blankMemory, load as loadMemory, resume as resumeMemory, record as recordMemory, snapshot as snapshotMemory, describe as describeMemory } from './memory.js';
 const lab = window.lab, bridge = window.petBridge || null;
 const M = createMind();          // what she wants; see mind.js. The dice are gone.
+const V = createVoice();         // what she says; see voice.js
+let MEM = blankMemory();         // what she remembers about you; see memory.js
+const bubble = document.getElementById('say');
+let bubbleUntil = 0;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, lastSave: 0, log: [] };
 const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
@@ -42,7 +48,7 @@ function enter(state, opts = {}) {
     case 'sit': lab.start('sit'); feel('relaxed'); break;
     case 'stretch': lab.start('stretch'); lab.emotion('sleepy'); break;
     case 'tail': lab.start('tail_react'); feel('happy'); break;
-    case 'talk': lab.start('talk'); feel('happy'); break;
+    case 'talk': lab.start('talk'); feel('happy'); say(idleLine(V, P.t, M, ctxNow(), true)); break;
     case 'sleep': lab.start('sleep'); lab.emotion('sleepy'); break;
     case 'wake': lab.start('wake'); lab.emotion('neutral'); break;
     case 'react': lab.start(opts.action || pick(['wave', 'celebrate', 'tail_react', 'talk'])); lab.emotion(opts.emotion || pick(['happy', 'cheerful', 'affection', 'surprised'])); break;
@@ -60,6 +66,28 @@ function decide() {
   return enter(c.activity, { dur: Math.max(1.2, c.until - M.t), note: c.reason });
 }
 function touched() { P.lastTouch = P.t; }
+
+// --- her voice -------------------------------------------------------------------------------------------
+// The bubble follows her head, so it reads as her speaking rather than as a notification.
+function say(line) {
+  if (!line || !bubble) return;
+  bubble.textContent = line;
+  bubble.classList.add('on');
+  bubbleUntil = P.t + readTime(line);
+  note('say', { line });
+}
+function placeBubble() {
+  if (!bubble) return;
+  if (P.t > bubbleUntil) { bubble.classList.remove('on'); return; }
+  // horizontally on her head, vertically clear of her silhouette: the head BONE sits at the base of her skull,
+  // so anchoring to it alone put the bubble on her forehead.
+  const [hx] = lab.headPx();
+  const b = lab.bbox();
+  const w = bubble.offsetWidth || 160, h = bubble.offsetHeight || 40;
+  bubble.style.left = `${Math.max(w / 2 + 6, Math.min(window.innerWidth - w / 2 - 6, hx))}px`;
+  bubble.style.top = `${Math.max(h + 10, b.y0 - 10)}px`;
+}
+const ctxNow = () => ({ ...mindCtx(), hourOfDay: new Date().getHours() });
 
 function endDrag() { P.drag = null; setOver(false); document.body.style.cursor = 'default'; }
 function setOver(v) { if (v === P.over) return; P.over = v; if (bridge) bridge.setHit(v); document.body.style.cursor = v ? (P.drag ? 'grabbing' : 'grab') : 'default'; }
@@ -86,12 +114,13 @@ function onTick(dt) {
     if (P.behindT > 0.8 && !p.turning && !p.speed) { lab.turnTo(-p.facing); P.behindT = 0; }
   }
   if (P.drag && P.drag.moved) lab.holdAt(P.cursor[0], P.cursor[1]);
+  placeBubble();   // the bubble follows her head in every mode, not only when the autopilot is running
   // watchdog: if a mouseup was ever lost we would hold the pointer - and, being click-through only while she is
   // NOT under the cursor, we would swallow every click on the desktop. Recover as soon as the rig says she is free.
   if ((P.drag || P.state === 'held') && !p.held && p.action !== 'dangle') { endDrag(); if (P.auto && P.state === 'held') enter('idle', { dur: 1 }); }
   if (!P.auto) return;
   if (P.state === 'held' || P.state === 'fall') {
-    if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') { observe(M, 'drop', { impact: p.landed || 0 }); enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' }); }
+    if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') { observe(M, 'drop', { impact: p.landed || 0 }); recordMemory(MEM, 'drop', { impact: p.landed || 0 }); saveSoon(); say(vReact(V, P.t, 'drop', { impact: p.landed || 0 })); enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' }); }
     return;
   }
   if (P.state === 'wander') {
@@ -99,6 +128,8 @@ function onTick(dt) {
     if ((arrived && !p.turning) || P.t >= P.until) enter('idle', { dur: rnd(1.5, 4) });
     return;
   }
+  if (P.t > P.nextIdleLine) { P.nextIdleLine = P.t + 25 + Math.random() * 50; const l = idleLine(V, P.t, M, ctxNow()); if (l) say(l); }
+  if (P.t - P.lastSave > 30) { P.lastSave = P.t; saveMemory(); }
   if (shouldChange(M, mindCtx()) || P.t >= P.until) decide();
 }
 lab.onTick(onTick);
@@ -114,7 +145,7 @@ function pointerMove(x, y) {
   P.cursor = [x, y];
   if (P.drag) {
     if (!P.drag.moved && Math.hypot(x - P.drag.x0, y - P.drag.y0) > 5) {
-      P.drag.moved = true; touched(); observe(M, 'grab'); lab.hold(P.drag.x0, P.drag.y0); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
+      P.drag.moved = true; touched(); observe(M, 'grab'); say(vReact(V, P.t, 'grab')); lab.hold(P.drag.x0, P.drag.y0); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
     }
     if (P.drag.moved) lab.holdAt(x, y);
   }
@@ -125,7 +156,7 @@ function pointerUp(x, y) {
   if (!d) return;
   touched();
   if (d.moved) { lab.release(); if (P.auto) enter('fall', { dur: 999 }); }
-  else if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
+  else if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); recordMemory(MEM, 'pet'); saveSoon(); say(vReact(V, P.t, 'pet', { zone })); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
   else lab.start(pick(['wave', 'celebrate', 'tail_react']));
 }
 window.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown(e.clientX, e.clientY); });
@@ -144,6 +175,24 @@ window.addEventListener('keydown', (e) => {
 if (bridge && bridge.onIdle) bridge.onIdle((sec) => { P.userIdle = sec; });
 if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
 
+// Things worth remembering are saved as they happen, not only on the 30 s timer: a pat that arrives seconds
+// before you close her should still be there tomorrow.
+function saveSoon() { if (P.t - P.lastSave > 5) { P.lastSave = P.t; saveMemory(); } }
+function saveMemory() {
+  if (!bridge || !bridge.saveMemory) return;
+  bridge.saveMemory(snapshotMemory(MEM, Date.now(), M, P.t - (P.savedAt || 0)));
+  P.savedAt = P.t;
+}
+// On startup: pick up where she left off, and greet you according to how long you were away.
+async function wakeUp() {
+  if (bridge && bridge.loadMemory) {
+    try { MEM = loadMemory(await bridge.loadMemory()); } catch (e) { MEM = blankMemory(); }
+  }
+  const r = resumeMemory(MEM, Date.now(), M);
+  note('woke', { away: Math.round(r.awaySeconds), history: describeMemory(MEM, Date.now()) });
+  if (P.auto) setTimeout(() => say(vReact(V, P.t, 'greet', { awaySeconds: r.awaySeconds })), 900);
+}
+
 const pet = window.pet = {
   info: () => ({ auto: P.auto, state: P.state, over: P.over, bridge: !!bridge, mind: summarise(M, mindCtx()) }),
   mind: () => summarise(M, mindCtx()),
@@ -155,5 +204,11 @@ const pet = window.pet = {
   go(state, opts) { enter(state, opts || {}); },
   simulate(ev) { if (ev.type === 'down') return pointerDown(ev.x, ev.y); if (ev.type === 'move') return pointerMove(ev.x, ev.y); if (ev.type === 'up') return pointerUp(ev.x, ev.y); throw new Error('unknown event ' + ev.type); },
   log: () => P.log.slice(),
+  say: (line) => say(speak(V, P.t, line)),
+  history: () => describeMemory(MEM, Date.now()),
+  memory: () => ({ ...MEM }),
+  saveNow: () => saveMemory(),
 };
 if (P.auto) { P.lastTouch = 0; enter('idle', { dur: 2 }); }
+wakeUp();
+window.addEventListener('beforeunload', saveMemory);

@@ -29,6 +29,11 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   plain-English reason for every choice. No DOM, no three.js, no network. `node mind.test.mjs` runs 19 behaviour
   tests; `node mind_trace.mjs` writes a simulated hour that becomes `evidence/mind_hour.png`.
   An outside brain may call `suggest()`; it is honoured once, validated, and never blocks her.
+- `voice.js` - her lines, grouped by situation, with repeat suppression and a minimum silence between unprompted
+  remarks. `memory.js` - what persists between runs (first met, time together, pats, throws, her needs at
+  shutdown), written by the main process to `<userData>/whalechan-memory.json`. `node voice.test.mjs` runs 27
+  tests over both. The speech bubble is a plain DOM element in `index.html`, positioned above her silhouette each
+  frame and never able to take a click.
 - `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
   the runtime uses `atlas_matted.json`.
 - `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:
