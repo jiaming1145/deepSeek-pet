@@ -86,7 +86,7 @@ def build_front(a):
     fx0, fy0, fx1, fy1 = bb("face")
     cx = (fx0 + fx1) / 2
     tx0, ty0, tx1, ty1 = bb("topwear")
-    bx0, by0, bx1, by1 = bb("bottomwear")
+    bx0, by0, bx1, by1 = bb("bottomwear") if "bottomwear" in L else (tx0, ty0 + (ty1 - ty0) * 0.45, tx1, ty1)   # one-piece dress: skirt = lower part
     nx0, ny0, nx1, ny1 = bb("neck") if "neck" in L else (cx - 20, fy1 - 10, cx + 20, ty0 + 10)
     torso_cx = (tx0 + tx1) / 2
     floor = max(bb(n)[3] for n in ("footwear", "legwear") if n in L)
@@ -246,7 +246,7 @@ def main():
 
     fx0, fy0, fx1, fy1 = bb("face")
     tx0, ty0, tx1, ty1 = bb("topwear")
-    bx0, by0, bx1, by1 = bb("bottomwear")
+    bx0, by0, bx1, by1 = bb("bottomwear") if "bottomwear" in L else (tx0, ty0 + (ty1 - ty0) * 0.45, tx1, ty1)   # one-piece dress: skirt = lower part
     lx0, ly0, lx1, ly1 = bb("legwear")
     sx0, sy0, sx1, sy1 = bb("footwear")
     hx0, hy0, hx1, hy1 = bb("handwear")
