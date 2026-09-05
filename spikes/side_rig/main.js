@@ -57,6 +57,10 @@ app.whenReady().then(async () => {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: 'Whale-chan', enabled: false }, { type: 'separator' },
       { label: 'Autopilot on/off', click: () => win.webContents.send('pet:command', 'auto') },
+      // The community preset asks the MODEL to notice the string TIMEOUT_SIGNAL and drop character. We do it
+      // here instead, deterministically: the switch picks which system prompt is sent, and quiets her lines.
+      { label: 'Out of character (TIMEOUT_SIGNAL)', type: 'checkbox', checked: false,
+        click: (item) => { brain.mode = item.checked ? 'plain' : 'character'; win.webContents.send('pet:command', item.checked ? 'plain' : 'character'); } },
       { label: 'Wave', click: () => win.webContents.send('pet:command', 'wave') },
       { label: 'Nap', click: () => win.webContents.send('pet:command', 'sleep') },
       { type: 'separator' }, { label: 'Quit', click: () => app.quit() },

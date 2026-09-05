@@ -18,14 +18,9 @@ const ENDPOINT = { host: 'api.deepseek.com', path: '/chat/completions' };
 const MODEL = 'deepseek-v4-flash';
 const KEY_FILE = path.join(os.homedir(), '.ds', 'deepseek.key');
 
-// Who she is. Kept short: a long persona costs tokens on every call and makes the model wordier, and her lines
-// have to fit in a small bubble above her head.
-const PERSONA = [
-  'You are Whale-chan, a small cheerful whale-girl who lives on the user\'s desktop as a pet.',
-  'You are playful, a little dramatic, and fond of the user without being sappy.',
-  'You speak in ONE short line, at most twelve words, lowercase, no emoji, no quotation marks.',
-  'You are a pet, not an assistant. Never offer help, never ask what they need, never mention being an AI.',
-].join(' ');
+// Who she is. See persona.js: the character card is the Chinese expansion from the community preset the owner
+// asked for, not the ALL_CAPS token line, because the tokens are only labels on those Chinese rules.
+const { personaFor } = require('./persona.js');
 
 function readKey(file = KEY_FILE) {
   try {
@@ -41,6 +36,7 @@ function readKey(file = KEY_FILE) {
 // What the model is told. `state` is mind.summarise(), `history` is memory.describe().
 function buildPrompt(state, history, activities) {
   const lines = [
+    '以下是她此刻的状态，请据此决定她接下来做什么，以及要不要说一句话。',
     `Right now she is ${state.doing} because ${state.because}. She feels ${state.mood}.`,
     `Her needs out of 100 - rest ${state.needs.rest}, company ${state.needs.company}, play ${state.needs.play}, safety ${state.needs.safety}.`,
     state.youHaveBeenIdleFor != null ? `The user has not touched their keyboard for ${state.youHaveBeenIdleFor} seconds.` : null,
@@ -49,7 +45,7 @@ function buildPrompt(state, history, activities) {
     '',
     `Choose what she does next from exactly this list: ${activities.join(', ')}.`,
     'Reply with only JSON, no prose, no code fence, in this shape:',
-    '{"activity":"<one from the list>","line":"<one short thing she says, or empty for silence>"}',
+    '{"activity":"<one from the list>","line":"<她说的一句中文，最多十五个字；没什么好说的就留空>"}',
     'Prefer silence (empty line) unless she has a real reason to speak.',
   ].filter(Boolean);
   return lines.join('\n');
@@ -109,6 +105,7 @@ function createBrain(opts = {}) {
     limiter: createLimiter(opts),
     timeoutMs: opts.timeoutMs || 6000,
     calls: 0, ok: 0, failed: 0, lastError: null,
+    mode: opts.mode || 'character',   // 'character' = 鲸鱼娘; 'plain' = the preset's TIMEOUT_SIGNAL, as a real switch
   };
 }
 
@@ -119,7 +116,7 @@ async function think(brain, state, history, activities, now = Date.now()) {
   brain.calls++;
   const body = {
     model: MODEL,
-    messages: [{ role: 'system', content: PERSONA }, { role: 'user', content: buildPrompt(state, history, activities) }],
+    messages: [{ role: 'system', content: personaFor(brain.mode) }, { role: 'user', content: buildPrompt(state, history, activities) }],
     max_tokens: 60,
     temperature: 1.0,
     thinking: { type: 'disabled' },
@@ -139,4 +136,4 @@ async function think(brain, state, history, activities, now = Date.now()) {
   return out;
 }
 
-module.exports = { createBrain, think, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, PERSONA, MODEL, KEY_FILE };
+module.exports = { createBrain, think, buildPrompt, parseReply, createLimiter, mayAsk, noteAsk, readKey, personaFor, MODEL, KEY_FILE };
