@@ -23,7 +23,12 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
 - `build_rig.py` - bones + attachments from `assets*/layers.json` (`--view side|front`); writes `rig*.json` + overlay.
 - `rig.js` - runtime: views, skinning, springs, actions, face (procedural pieces in side view, face kit in
   front view), physics (hold/throw/land), pose crossfade, stage in px, `window.lab` control surface.
-- `pet.js` - pointer interaction + autopilot (`window.pet`); `preload.js` - bridge for click-through toggling.
+- `pet.js` - pointer interaction and the bridge from mind to body (`window.pet`); `preload.js` - the click-through
+  and idle-time bridge.
+- `mind.js` - needs-driven behaviour: four needs, utility scoring over activities, mood derived from needs, and a
+  plain-English reason for every choice. No DOM, no three.js, no network. `node mind.test.mjs` runs 19 behaviour
+  tests; `node mind_trace.mjs` writes a simulated hour that becomes `evidence/mind_hour.png`.
+  An outside brain may call `suggest()`; it is honoured once, validated, and never blocks her.
 - `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
   the runtime uses `atlas_matted.json`.
 - `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:
@@ -35,6 +40,11 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   canonical-to-canvas map for a tight-crop input so the face kit lands on the layers).
 
 Plain-language guide to every file, for reading the code cold: `docs/PET_GUIDE.md`.
+
+Her behaviour is tuned against the trace, not by eye: `node mind_trace.mjs` then compare the per-situation time
+split. Two tuning traps already caught, both of which made her pace or chatter endlessly: an activity must fill
+its need FASTER than the need drains, or she chases it forever; and an activity that only pays off when you are
+present must be scored down when you are not.
 
 ## Conventions
 

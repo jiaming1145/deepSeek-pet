@@ -6,7 +6,7 @@
 //   ... --pet [--height 380] [--selftest]   the pet: click-through window over the whole work area, she walks the
 //                  taskbar edge, hover/click/drag her; tray icon has Quit. --selftest drives the autopilot + a
 //                  synthetic click and drag, shoots shots_pet/, then exits.
-const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, powerMonitor } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -60,7 +60,15 @@ app.whenReady().then(async () => {
   }
   if (!ready) { console.error('renderer never became ready'); app.exit(1); return; }
   console.log('ready', JSON.stringify(await js('lab.info()')));
-  if (PET) console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds));
+  if (PET) {
+    // she should know whether you are actually at your computer: that is the difference between "busy" and
+    // "gone away", and it is what lets her settle down for a nap instead of performing to an empty room
+    const pushIdle = () => { if (!win.isDestroyed()) win.webContents.send('pet:idle', powerMonitor.getSystemIdleTime()); };
+    pushIdle();
+    const idleTimer = setInterval(pushIdle, 2000);
+    win.on('closed', () => clearInterval(idleTimer));
+    console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds));
+  }
 
   if (TOUR) {
     const plan = [['idle', 3], ['walk', 4], ['run', 3], ['hop', 2], ['wave', 3], ['look', 3], ['talk', 3], ['sit', 3], ['sleep', 4], ['wake', 2], ['idle', 2]];
