@@ -15,7 +15,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
 
 const Q = new URLSearchParams(location.search);
 const RIG_FILE = Q.get('rig') || 'rig.json';
-const FRONT_FILE = Q.get('front') || null;
+const FRONT_FILE = Q.get('front') || 'rig_front.json';   // default so a bare page load still builds the front view + face kit (the error scanner opens it with no query)
 const HEIGHT_PX = +Q.get('height') || 0;                    // her standing height in px (pet mode); 0 = lab framing (window = 2.85 units)
 const FLOOR_PX = Q.has('floor') ? +Q.get('floor') : null;   // feet this many px above the window bottom (lab: 0.03 units)
 
@@ -141,7 +141,7 @@ async function buildView(name, file) {
     bone.name = b.name;
     const h = toW(b.head), t = toW(b.tail);
     rest[b.name] = h;
-    bone.userData = { head: h, tail: t, len: h.distanceTo(t), pose: 0, sy: 1, spring: 0, springVel: 0, dir: Math.atan2(t.y - h.y, t.x - h.x) };
+    bone.userData = { head: h, tail: t, len: h.distanceTo(t), pose: 0, sx: 1, sy: 1, spring: 0, springVel: 0, dir: Math.atan2(t.y - h.y, t.x - h.x) };
     if (b.parent) { const ph = rest[b.parent]; bone.position.set(h.x - ph.x, h.y - ph.y, 0); B[b.parent].add(bone); }
     else { bone.position.set(h.x, h.y, 0); grp.add(bone); }
     B[b.name] = bone; list.push(bone);
@@ -150,9 +150,9 @@ async function buildView(name, file) {
     if (!B[part + '_near'] && B[part + '_l']) { B[part + '_near'] = B[part + '_l']; B[part + '_far'] = B[part + '_r'] || B[part + '_l']; }
   }
   for (const n of ['thigh_near', 'thigh_far', 'shin_near', 'shin_far', 'foot_near', 'foot_far', 'upper_arm_near', 'upper_arm_far', 'forearm_near', 'forearm_far', 'hand_near', 'hand_far', 'chest', 'neck', 'head', 'hips']) {
-    if (!B[n]) { B[n] = new THREE.Bone(); B[n].userData = { head: new THREE.Vector2(), tail: new THREE.Vector2(), len: 0.3, pose: 0, sy: 1, spring: 0, springVel: 0 }; }
+    if (!B[n]) { B[n] = new THREE.Bone(); B[n].userData = { head: new THREE.Vector2(), tail: new THREE.Vector2(), len: 0.3, pose: 0, sx: 1, sy: 1, spring: 0, springVel: 0 }; }
   }
-  for (let i = 1; i <= 6; i++) if (!B['tail_' + i]) { B['tail_' + i] = new THREE.Bone(); B['tail_' + i].userData = { pose: 0, sy: 1, spring: 0, springVel: 0 }; }
+  for (let i = 1; i <= 6; i++) if (!B['tail_' + i]) { B['tail_' + i] = new THREE.Bone(); B['tail_' + i].userData = { pose: 0, sx: 1, sy: 1, spring: 0, springVel: 0 }; }
   grp.updateMatrixWorld(true);
   const skel = new THREE.Skeleton(list);
   const xs = [], ys = [];
@@ -237,7 +237,7 @@ const A = {};
 // turns around: the tuned value simply becomes its own mirror image. BODY is this frame's fixed forward sign; use
 // it for poses, and M() only for quantities written to world space (root slides, drag velocity).
 const BODY = -1;
-const poseReset = () => { for (const b of boneList) { b.userData.pose = 0; b.userData.sy = 1; } S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.rootScale = 1; S_.squash = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; };
+const poseReset = () => { for (const b of boneList) { b.userData.pose = 0; b.userData.sx = 1; b.userData.sy = 1; } S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.rootScale = 1; S_.squash = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; };
 const legLen = () => (bones.thigh_near.userData.len || 0.4) + (bones.shin_near.userData.len || 0.2);
 const strideSpeed = (f, amp) => 4 * f * legLen() * Math.sin(amp) * 0.7;   // feet plant without sliding (0.7: the knee shortens the swing)
 const lookIris = () => { S_.irisOff = [(isFront() ? S_.look.yaw : S_.look.yaw * M()) * 6, S_.look.pitch * 3]; };
@@ -314,14 +314,18 @@ A.sit = (tau) => {
   const u = smooth(clamp(tau / 0.6, 0, 1)), m = BODY;
   const L = bones.thigh_near.userData.len;
   if (isFront()) {
-    // facing the viewer: thighs foreshorten (knees come toward the camera), shins splay a little, hands on the lap
-    for (const s of ['near', 'far']) { bones['thigh_' + s].userData.sy = 1 - 0.55 * u; bones['shin_' + s].userData.sy = 1 / (1 - 0.55 * u); }
-    bones.shin_near.userData.pose = 0.22 * u; bones.shin_far.userData.pose = -0.22 * u;
-    bones.foot_near.userData.pose = 0.35 * u; bones.foot_far.userData.pose = -0.35 * u;
-    S_.rootY = -L * 0.55 * u;
-    bones.upper_arm_near.userData.pose = -0.3 * u; bones.forearm_near.userData.pose = -0.7 * u;
-    bones.upper_arm_far.userData.pose = 0.3 * u; bones.forearm_far.userData.pose = 0.7 * u;
-    bones.chest.userData.sy = 1 + 0.015 * Math.sin(tau * 1.6);
+    // sitting toward the viewer: both leg segments foreshorten (knees come at the camera), so she really drops -
+    // scaling one and inverse-scaling the other kept her full height and read as standing. Shins splay out to the
+    // sides with the feet turned outward, and the skirt spreads where it meets the floor.
+    const fold = 0.62 * u, SL = bones.shin_near.userData.len || L * 0.4;
+    for (const s of ['near', 'far']) { bones['thigh_' + s].userData.sy = 1 - fold; bones['shin_' + s].userData.sy = 1 - fold * 0.75; }
+    bones.shin_near.userData.pose = 0.62 * u; bones.shin_far.userData.pose = -0.62 * u;
+    bones.foot_near.userData.pose = 0.55 * u; bones.foot_far.userData.pose = -0.55 * u;
+    S_.rootY = -(L * fold + SL * fold * 0.75);
+    bones.skirt_1.userData.sx = 1 + 0.18 * u; bones.skirt_2.userData.sx = 1 + 0.34 * u; bones.skirt_2.userData.sy = 1 - 0.18 * u;
+    bones.upper_arm_near.userData.pose = -0.42 * u; bones.forearm_near.userData.pose = -0.85 * u;
+    bones.upper_arm_far.userData.pose = 0.42 * u; bones.forearm_far.userData.pose = 0.85 * u;
+    bones.chest.userData.sy = 1 - 0.03 * u + 0.015 * Math.sin(tau * 1.6);
     tailSway(tau, 0.05);
   } else {
     for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * -1.45 * u; bones['shin_' + s].userData.pose = m * 1.35 * u; }
@@ -499,7 +503,7 @@ function zoneAt(px, py) {
 
 // ------------------------------------------------------------------ frame
 function applyPose() {
-  for (const b of boneList) { b.rotation.z = b.userData.pose + b.userData.spring; b.scale.y = b.userData.sy || 1; }
+  for (const b of boneList) { b.rotation.z = b.userData.pose + b.userData.spring; b.scale.set(b.userData.sx || 1, b.userData.sy || 1, 1); }
   if (isFront()) for (const [layer, bone] of [['handwear_l', 'upper_arm_l'], ['handwear_r', 'upper_arm_r']]) {
     const m = layerMeshes[layer]; if (!m) continue;
     if (m.userData.baseOrder == null) m.userData.baseOrder = m.renderOrder;
@@ -508,14 +512,14 @@ function applyPose() {
   bones.root.position.set(restHead.root.x, restHead.root.y + (S_.rootY || 0), 0);
   bones.root.rotation.z = S_.rootRot || 0;
 }
-const snapshotPose = () => ({ pose: boneList.map((b) => b.userData.pose), sy: boneList.map((b) => b.userData.sy || 1), rootY: S_.rootY || 0, rootRot: S_.rootRot || 0, rootX: S_.rootX || 0, rootScale: S_.rootScale || 1, eyesClosed: S_.eyesClosed || 0, mouthOpen: S_.mouthOpen || 0, squash: S_.squash || 0 });
+const snapshotPose = () => ({ pose: boneList.map((b) => b.userData.pose), sx: boneList.map((b) => b.userData.sx || 1), sy: boneList.map((b) => b.userData.sy || 1), rootY: S_.rootY || 0, rootRot: S_.rootRot || 0, rootX: S_.rootX || 0, rootScale: S_.rootScale || 1, eyesClosed: S_.eyesClosed || 0, mouthOpen: S_.mouthOpen || 0, squash: S_.squash || 0 });
 function applyBlend() {
   // crossfade from the pose the previous action left, so action switches never pop
   const bl = S_.blend; if (!bl) return;
   const u = clamp((S_.t - bl.t0) / bl.dur, 0, 1), f = bl.from;
   if (u >= 1 || f.pose.length !== boneList.length) { S_.blend = null; return; }
   const k = smooth(u);
-  boneList.forEach((b, i) => { b.userData.pose = lerp(f.pose[i], b.userData.pose, k); b.userData.sy = lerp(f.sy[i], b.userData.sy || 1, k); });
+  boneList.forEach((b, i) => { b.userData.pose = lerp(f.pose[i], b.userData.pose, k); b.userData.sx = lerp(f.sx[i], b.userData.sx || 1, k); b.userData.sy = lerp(f.sy[i], b.userData.sy || 1, k); });
   for (const key of ['rootY', 'rootRot', 'rootX', 'eyesClosed', 'mouthOpen', 'squash']) S_[key] = lerp(f[key], S_[key] || 0, k);
   S_.rootScale = lerp(f.rootScale, S_.rootScale || 1, k);
 }
@@ -558,7 +562,7 @@ function tick(dt) {
   if (S_.turn) {
     const u = (S_.t - S_.turn.t0) / 0.28;
     if (u >= 1) { S_.facing = -S_.turn.from; S_.turn = null; if (S_.action === 'turn') S_.next = 'idle'; sx = M(); }
-    else { const fromM = NATIVE ? S_.turn.from * NATIVE : 1; sx = (NATIVE ? fromM * (u < 0.5 ? 1 : -1) : 1) * Math.max(0.05, Math.abs(Math.cos(Math.PI * u))); }
+    else { const fromM = NATIVE ? S_.turn.from * NATIVE : 1; S_.turnSquash = Math.max(0.14, Math.abs(Math.cos(Math.PI * u))); sx = (NATIVE ? fromM * (u < 0.5 ? 1 : -1) : 1) * S_.turnSquash; }
   }
   if (S_.viewSwap) {
     const u = (S_.t - S_.viewSwap.t0) / 0.24;
@@ -567,7 +571,8 @@ function tick(dt) {
     if (u >= 1) S_.viewSwap = null;
   }
   const sc = S_.rootScale || 1, sq = S_.squash || 0;
-  group.scale.set(sx * sc * (1 + sq), sc * (1 - sq), 1);
+  const stretch = S_.turn ? 1 + 0.12 * (1 - (S_.turnSquash ?? 1)) : 1;   // squash and stretch: she gets a touch taller as she narrows, so a turn reads as a turn
+  group.scale.set(sx * sc * (1 + sq), sc * (1 - sq) * stretch, 1);
   group.position.x = S_.x + (S_.rootX || 0); group.position.y = GROUND_Y + S_.y;
   applyPose();
   stepSprings(dt);
