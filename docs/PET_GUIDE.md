@@ -64,6 +64,8 @@ Two extras make her feel alive rather than mechanical:
 | `spikes/side_rig/pet.js` | Your interaction with her, and the bridge between her mind and her body. Notices your cursor, handles click, drag and throw, and turns her chosen activity into an animation. |
 | `spikes/side_rig/mind.js` | What she wants. Four needs, a score for every activity, and the choice that follows. Pure arithmetic: no graphics, no network, no Electron, so it can be tested on its own. |
 | `spikes/side_rig/mind.test.mjs` | Nineteen tests of her behaviour, run with `node spikes/side_rig/mind.test.mjs`. They assert things a person would expect: left alone she gets lonely, petted regularly she stays awake, a hard drop frightens her and she recovers, she never repeats herself twice running. |
+| `spikes/side_rig/perform.js` | Turns words into movement: reads what you asked for and the bracketed stage directions in her reply, and produces an action, a mood and somewhere to walk to. Pure text in, a small plan out. |
+| `spikes/side_rig/perform.test.mjs` | Twenty-four tests of that, including that words she merely *says* cannot move her. |
 | `spikes/side_rig/mind_trace.mjs` | Runs her mind for a simulated hour against a scripted day and writes the timeline, which becomes `evidence/mind_hour.png`. |
 | `spikes/side_rig/voice.js` | What she says and when. A table of short lines grouped by situation, and the rule for choosing one: prefer the most specific situation, never repeat something recent, and stay quiet unless there is a reason to speak. |
 | `spikes/side_rig/memory.js` | What she remembers between runs: when you first met, how long you were away, how many times you have petted her, how many times you have thrown her. |
@@ -150,6 +152,23 @@ italic grey so they read as actions rather than speech. For example:
 > （拍拍尾巴，语气软下来）既然认识了，以后就请主人多关照人家哦。
 
 Talking to her counts as attention, so her need for company fills while you chat and her face changes to match.
+
+**She does what you ask.** Tell her to dance, to go and stand on the left, to sit down or go to sleep, and she
+actually does it. The mechanism is her own words: she already writes what she is physically doing in brackets,
+so `perform.js` reads those brackets and turns them into movement. Two sources are read, and an instruction from
+you beats a description from her:
+
+| You say | She does |
+|---|---|
+| 给人家跳个舞吧 | dances, and says （笨拙地转了个圈，尾巴不小心打翻了水杯） |
+| 去左边站着 | walks to the left of your screen |
+| 过来 | walks to wherever your cursor is |
+| 坐下休息一下 | sits down |
+| 挥个手 / 去睡觉 | waves / lies down and sleeps |
+
+Only the bracketed parts of her reply are read, so her *saying* "主人要不要去睡觉呀" cannot put her to sleep by
+accident. Her stage directions also set her expression: （脸微微泛红）makes her shy, （骄傲地抬起下巴）makes her
+smug, （打了个哈欠）makes her sleepy. Screenshot: `evidence/chat_makes_her_dance.png`.
 
 ## What she says
 
@@ -313,6 +332,7 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
+- The words that move her are a fixed keyword list. She understands 跳舞 and 去左边, not an arbitrary instruction.
 - The language model only picks from the eight things she already knows how to do. It cannot invent a new
   behaviour, and it has no memory of its own between calls beyond the summary she sends it.
 - She does not know what is on your screen, only whether you have touched your keyboard recently.

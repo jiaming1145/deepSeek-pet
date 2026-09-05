@@ -39,6 +39,7 @@ export const ACTIVITIES = {
   sit:     { serves: { rest: 1.0 },                 caps: { rest: 0.85 }, dur: [10, 22], view: 'front', baseline: 0.16 },
   stretch: { serves: { rest: 0.9, play: 0.4 },      caps: { rest: 0.7 },  dur: [2.6, 2.6], view: 'front', baseline: 0.10 },
   tail:    { serves: { play: 1.6 },                 dur: [2.2, 4.5], view: 'front' },
+  dance:   { serves: { play: 2.2 },                 dur: [6, 12],  view: 'front' },
   talk:    { serves: { company: 1.6, play: 0.5 },   dur: [4, 9],   view: 'front', needsYou: true },
   sleep:   { serves: { rest: 3.0, company: -0.3 },  dur: [45, 130], view: 'side'  },
 };
@@ -199,6 +200,7 @@ function explain(m, name, ctx) {
   if (name === 'talk') return n.company < 0.4 ? 'wants your attention' : 'feeling chatty';
   if (name === 'look') return ctx.cursorNear ? 'watching your cursor' : 'looking around';
   if (name === 'tail') return 'playing with her tail';
+  if (name === 'dance') return 'felt like dancing';
   if (name === 'stretch') return 'stiff from standing';
   return 'nothing better to do';
 }
