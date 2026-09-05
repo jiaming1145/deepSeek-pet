@@ -68,6 +68,8 @@ Two extras make her feel alive rather than mechanical:
 | `spikes/side_rig/voice.js` | What she says and when. A table of short lines grouped by situation, and the rule for choosing one: prefer the most specific situation, never repeat something recent, and stay quiet unless there is a reason to speak. |
 | `spikes/side_rig/memory.js` | What she remembers between runs: when you first met, how long you were away, how many times you have petted her, how many times you have thrown her. |
 | `spikes/side_rig/voice.test.mjs` | Twenty-seven tests of her voice and her memory: a tail grab gets a protest, four rapid pats get a comment on it, a day away gets an earful, a corrupt memory file is not an error. |
+| `spikes/side_rig/brain.js` | Optional. Asks a language model what she should do next and what she might say. Runs in the main process so the API key never reaches the web page. She works completely without it. |
+| `spikes/side_rig/brain.test.cjs` | Twenty-three offline tests of the brain, plus one live call if you pass `--live`. |
 | `spikes/side_rig/facekit.js` | Her face. Swaps her eyes, eyebrows and mouth for different drawn versions to make expressions, blinks on a timer, moves her mouth while talking, and fades smoothly between moods. |
 | `spikes/side_rig/rig.json` | The side-on skeleton and the list of pieces. Generated, not hand-written. |
 | `spikes/side_rig/rig_front.json` | The same for the front-on view. |
@@ -140,6 +142,27 @@ you go to bed.
 Two rules keep it from becoming annoying. She will not repeat a line she has used recently, and she stays silent
 unless there is a reason to speak, with a minimum gap between unprompted remarks. A pet that chatters constantly
 is worse than one that never speaks at all.
+
+## Her optional brain
+
+If a language-model key is present she also consults a model, about once a minute, and only ever as a
+*suggestion*. Everything above already decides what she does and says; the model gets to nudge the next choice
+and, occasionally, put one line in her mouth.
+
+The design rule is that she must be exactly as good without it. The request happens in the background and she
+never waits for it. The reply must name one of the eight activities she can actually perform or it is thrown
+away. Any line comes back trimmed to bubble length with quotes and newlines stripped. If the key is missing, the
+account runs out of credit, the network is down or the model returns prose instead of an answer, nothing on
+screen changes and she carries on with her own mind. An empty account switches the brain off rather than
+retrying forever.
+
+The key lives at `~/.ds/deepseek.key` and is read only by the Electron main process. It is never handed to the
+page, never written into the prompt, and never logged. The prompt itself contains only what she is doing, why,
+how she feels, her four needs as numbers, how long you have been idle, and a one-line summary of your history
+together.
+
+Run `node spikes/side_rig/brain.test.cjs` for the offline tests, or add `--live` to make one real call, which
+costs a fraction of a penny.
 
 ## What she remembers
 
@@ -218,12 +241,9 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
-- She has wants and a voice, but no understanding. Her lines are chosen from a written list, not composed. She
-  cannot be told anything, and she does not know what is on your screen.
-  A language model would slot in at the seam that already exists: `mind.js` exposes `summarise()`, which packs her
-  state into a few lines suitable for a prompt, and `suggest()`, which lets an outside brain propose her next
-  activity. A suggestion is honoured once, only if it names something she can actually do, and only at her next
-  decision point, so a slow or broken model can never freeze or hijack her.
+- The language model only picks from the eight things she already knows how to do. It cannot invent a new
+  behaviour, and it has no memory of its own between calls beyond the summary she sends it.
+- She does not know what is on your screen, only whether you have touched your keyboard recently.
 - She cannot hear you, and there is no way to talk back to her.
 - Three of the drawn eye shapes are weak: the dizzy spiral reads as a dark blob, and the half-closed lid reads as a
   hard bar. They come from the expression artwork, not from the code, so fixing them means redrawing those cells.
