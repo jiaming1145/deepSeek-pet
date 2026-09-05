@@ -180,3 +180,33 @@ time; the chibi motion set (VRoid Hub VRMA pack and Mixamo retargets tuned for 2
 vertex comparison (0 of 48,244 vertices differ: the mesh was fine, the rig was not), the owner's
 ruling of 2026-09-02 after the live tour, `docs/3D_PIPELINE.md` "Repairing an auto-rig".
 
+
+---
+
+## D-2026-09-04-06 · The character is a layered 2D rig cut from her own drawings, superseding D-2026-09-01-04 and D-2026-09-02-05
+
+**Decision.** The visual layer is a two-view 2D cutout rig on our own three.js runtime (`spikes/side_rig/`).
+The side view (locomotion) and the front view (facing actions) are decomposed from the approved drawings by
+See-through (shitagaki-lab, Apache-2.0; hosted Space, runner `tools/see_through/run_space.py`, exporter
+`tools/see_through/psd_layers.py`) into inpainted layers; bones come from the layer alphas (`build_rig.py`);
+tail, hair, skirt and limbs are skinned grids with springs; the front face is the expression kit cut from the
+same canonical drawing (`spikes/model/face`, `facekit.js`) mounted on the head bone through the recorded
+canonical-to-canvas map. Not Spine, not Live2D Cubism, not a VRM.
+
+**Why.** Every 3D route (Meshy auto-rig, VRoid-base restyle, chibi VRoid) was rejected by the owner on
+likeness; a cutout of her own art keeps the exact drawing. The owner judged the side rig "pretty good"
+(2026-09-03) and asked for the front view with expressions as good as the generated pictures; both exist
+now and run at 60 fps with 18 actions, 18 kit moods (30 recipes), pick-up/throw physics, pose crossfades
+and an autopilot on a click-through desktop window (`main.js --pet`).
+
+**What it rules out.** A Spine Professional purchase for now (our runtime already does mesh skinning and
+springs); VRM/three-vrm as the character; hand-painted multi-view layer sets.
+
+**What it leaves open.** A back view only if an action needs it (mirrored side view covers walking, as in
+Ark-Pets); climbing and window-edge physics; a Spine export if a rigger is ever hired; the brain layer
+(LLM -> action names) on top of `window.lab` / `window.pet`.
+
+**Evidence.** `spikes/side_rig/evidence/sheet_actions_views.png`, `sheet_emotions_views.png`,
+`sheet_face.png`, `sheet_pet.png` (autopilot 100 s + hover/click/drag/throw, 0 errors, 60 fps),
+`rig_front_overlay.png` (bones and face-kit cells on the real front layers); commits c126b36, ddd66ae and
+the 2026-09-04 movement commit.

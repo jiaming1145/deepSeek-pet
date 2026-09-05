@@ -1,28 +1,54 @@
-// Electron harness for the side-view layered rig (same window as the pet: transparent, frameless, on top).
+// Electron harness for the layered rig.
 //   cd D:\ds\apps\desktop
-//   npx electron ../../spikes/side_rig/main.js             interactive (keys on the HUD)
-//   npx electron ../../spikes/side_rig/main.js --tour      cycles every action, loops until closed
-//   npx electron ../../spikes/side_rig/main.js --capture   every action at 20/50/80 % + expressions -> shots/, then exit
-const { app, BrowserWindow } = require('electron');
+//   npx electron ../../spikes/side_rig/main.js [--rig rig.json --front rig_front.json]   lab window (keys on the HUD)
+//   ... --tour      cycles every action, loops until closed
+//   ... --capture   every action at 20/50/80 % + expressions -> shots/ (shots_views/ with --front), then exit
+//   ... --pet [--height 380] [--selftest]   the pet: click-through window over the whole work area, she walks the
+//                  taskbar edge, hover/click/drag her; tray icon has Quit. --selftest drives the autopilot + a
+//                  synthetic click and drag, shoots shots_pet/, then exits.
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
 app.commandLine.appendSwitch('allow-file-access-from-files');
-const CAPTURE = process.argv.includes('--capture');
-const TOUR = process.argv.includes('--tour');
-const SHOTS = path.join(__dirname, process.argv.includes('--front') ? 'shots_views' : process.argv.includes('--rig') ? 'shots_' + path.basename(process.argv[process.argv.indexOf('--rig') + 1], '.json') : 'shots');
+const has = (f) => process.argv.includes(f);
+const argOf = (flag, dflt = null) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : dflt; };
+const CAPTURE = has('--capture'), TOUR = has('--tour'), PET = has('--pet'), SELFTEST = has('--selftest');
+const SHOTS = path.join(__dirname, PET ? 'shots_pet' : has('--front') ? 'shots_views' : has('--rig') ? 'shots_' + path.basename(argOf('--rig'), '.json') : 'shots');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+let tray = null;
 
 app.whenReady().then(async () => {
+  const query = {};
+  if (argOf('--rig')) query.rig = argOf('--rig');
+  if (argOf('--front')) query.front = argOf('--front');
+  let bounds = { width: 640, height: 900, x: 80, y: 40 };
+  if (PET) {
+    const wa = screen.getPrimaryDisplay().workArea;
+    bounds = { x: wa.x, y: wa.y, width: wa.width, height: wa.height };
+    Object.assign(query, { rig: query.rig || 'rig.json', front: query.front || 'rig_front.json', height: argOf('--height', '380'), floor: '2', pet: '1' });
+  }
   const win = new BrowserWindow({
-    width: 640, height: 900, x: 80, y: 40,
-    transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true, resizable: false, hasShadow: false,
-    webPreferences: { contextIsolation: true, sandbox: false, backgroundThrottling: false },
+    ...bounds, transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true, resizable: false, hasShadow: false,
+    webPreferences: { preload: PET ? path.join(__dirname, 'preload.js') : undefined, contextIsolation: true, sandbox: false, backgroundThrottling: false },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => { if (level >= 2) console.log(`[renderer] ${message} (${sourceId}:${line})`); });
-  const argOf = (flag) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : null; };
-  const query = {}; if (argOf('--rig')) query.rig = argOf('--rig'); if (argOf('--front')) query.front = argOf('--front');
+  if (PET) {
+    win.setIgnoreMouseEvents(true, { forward: true });
+    ipcMain.on('pet:hit', (_e, over) => { if (!win.isDestroyed()) win.setIgnoreMouseEvents(!over, { forward: true }); });
+    ipcMain.on('pet:quit', () => app.quit());
+    const icon = nativeImage.createFromPath(path.join(__dirname, 'tray.png'));
+    tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }));
+    tray.setToolTip('Whale-chan');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Whale-chan', enabled: false }, { type: 'separator' },
+      { label: 'Autopilot on/off', click: () => win.webContents.send('pet:command', 'auto') },
+      { label: 'Wave', click: () => win.webContents.send('pet:command', 'wave') },
+      { label: 'Nap', click: () => win.webContents.send('pet:command', 'sleep') },
+      { type: 'separator' }, { label: 'Quit', click: () => app.quit() },
+    ]));
+  }
   await win.loadFile(path.join(__dirname, 'index.html'), Object.keys(query).length ? { query } : undefined);
   const js = (s) => win.webContents.executeJavaScript(s, true);
   let ready = false;
@@ -34,6 +60,7 @@ app.whenReady().then(async () => {
   }
   if (!ready) { console.error('renderer never became ready'); app.exit(1); return; }
   console.log('ready', JSON.stringify(await js('lab.info()')));
+  if (PET) console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds));
 
   if (TOUR) {
     const plan = [['idle', 3], ['walk', 4], ['run', 3], ['hop', 2], ['wave', 3], ['look', 3], ['talk', 3], ['sit', 3], ['sleep', 4], ['wake', 2], ['idle', 2]];
@@ -52,13 +79,46 @@ app.whenReady().then(async () => {
     })();
     return;
   }
+  const shoot = async (name) => { const img = await win.webContents.capturePage(); fs.writeFileSync(path.join(SHOTS, name + '.png'), img.toPNG()); };
+  if (PET && SELFTEST) {
+    fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true });
+    const report = { shots: [], errors: [], states: [], window: bounds, dpr: await js('window.devicePixelRatio'), stage: await js('lab.stage()') };
+    const check = async (tag) => { const err = await js('window.__error || null'); if (err) { report.errors.push({ tag, err }); await js('window.__error = null'); } };
+    const snap = async (name) => { await wait(30); await shoot(name); report.shots.push({ name, pos: await js('lab.pos()'), bbox: await js('lab.bbox()'), pet: await js('pet.info()') }); };
+    await js('lab.hud(false); lab.pause(true); pet.auto(true)');
+    // autopilot: 100 simulated seconds in 10 s slices
+    for (let i = 0; i < 10; i++) { await js('lab.step(10)'); await snap(`auto_${i}`); await check('auto ' + i); }
+    // hover, click, drag + throw, using her current hit box
+    const centre = async () => { const b = await js('lab.bbox()'); return [Math.round((b.x0 + b.x1) / 2), Math.round((b.y0 + b.y1) / 2)]; };
+    await js("pet.go('idle', {dur: 30}); lab.step(1.5)");
+    let [cx, cy] = await centre();
+    await js(`pet.simulate({type:'move', x:${cx - 300}, y:${cy}}); lab.step(0.5)`); await snap('hover_far');
+    await js(`pet.simulate({type:'move', x:${cx}, y:${cy}}); lab.step(0.8)`); await snap('hover_on');
+    await js(`pet.simulate({type:'down', x:${cx}, y:${cy}}); pet.simulate({type:'up', x:${cx}, y:${cy}}); lab.step(0.7)`); await snap('click'); await check('click');
+    await js("lab.step(3); pet.go('idle', {dur: 30}); lab.step(1)");
+    [cx, cy] = await centre();
+    await js(`pet.simulate({type:'down', x:${cx}, y:${cy}})`);
+    for (let i = 1; i <= 12; i++) { await js(`pet.simulate({type:'move', x:${cx + i * 45}, y:${cy - i * 36}}); lab.step(0.05)`); if (i === 6) await snap('drag_mid'); }
+    await snap('drag_end'); await check('drag');
+    await js(`pet.simulate({type:'up', x:${cx + 12 * 45}, y:${cy - 12 * 36}}); lab.step(0.25)`); await snap('thrown'); await check('throw');
+    await js('lab.step(0.5)'); await snap('falling');
+    await js('lab.step(2.5)'); await snap('landed'); await check('land');
+    await js('lab.step(4)'); await snap('after');
+    report.log = await js('pet.log()');
+    await js('lab.pause(false)'); await wait(600); report.fps = await js('lab.fps()');
+    await check('end');
+    fs.writeFileSync(path.join(SHOTS, 'report.json'), JSON.stringify(report, null, 1));
+    const states = [...new Set(report.log.map((l) => l.state))];
+    console.log('pet selftest:', report.shots.length, 'shots, states', states.join(','), 'errors', report.errors.length, 'fps', report.fps);
+    app.exit(report.errors.length ? 2 : 0);
+    return;
+  }
   if (!CAPTURE) return;
 
   fs.rmSync(SHOTS, { recursive: true, force: true }); fs.mkdirSync(SHOTS, { recursive: true });
-  const shoot = async (name) => { const img = await win.webContents.capturePage(); fs.writeFileSync(path.join(SHOTS, name + '.png'), img.toPNG()); };
   const report = { actions: {}, emotions: [], errors: [] };
   await js('lab.hud(false); lab.pause(true)');
-  const plan = [['idle', 2.4], ['walk', 2.0], ['run', 1.4], ['hop', 1.2], ['wave', 2.0], ['look', 2.0], ['talk', 2.0], ['sit', 2.4], ['sleep', 3.0], ['wake', 1.6], ['turn', 1.2]];
+  const plan = [['idle', 2.4], ['walk', 2.0], ['run', 1.4], ['hop', 1.2], ['wave', 2.0], ['look', 2.0], ['talk', 2.0], ['sit', 2.4], ['sleep', 3.0], ['wake', 1.6], ['turn', 1.2], ['stretch', 2.4], ['celebrate', 1.4], ['land', 0.36]];
   for (const [name, D] of plan) {
     try {
       await js(`lab.begin(${JSON.stringify(name)})`);
@@ -74,7 +134,8 @@ app.whenReady().then(async () => {
     await js("lab.stop(); lab.step(0.8)");
   }
   await js("lab.begin('idle'); lab.step(0.5)");
-  for (const e of ['neutral', 'happy', 'sad', 'angry', 'surprised', 'think']) {
+  const emos = (await js('lab.info()')).kit ? ['neutral', 'happy', 'sad', 'angry', 'surprised', 'think', 'cheerful', 'shy', 'panic', 'affection', 'pouty', 'sleepy'] : ['neutral', 'happy', 'sad', 'angry', 'surprised', 'think'];
+  for (const e of emos) {
     await js(`lab.emotion(${JSON.stringify(e)}); lab.step(0.6)`); await wait(30); await shoot(`emo_${e}`); report.emotions.push(e);
   }
   await js('lab.pause(false)');

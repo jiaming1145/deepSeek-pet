@@ -1,0 +1,374 @@
+{
+ "source": "spikes/model/generated/see_through/out_canonical_front_tight/canonical_front_tight_768.psd",
+ "canvas": [
+  768,
+  768
+ ],
+ "layers": [
+  {
+   "name": "back_hair",
+   "z": 0,
+   "bbox": [
+    131,
+    68,
+    509,
+    495
+   ],
+   "size": [
+    378,
+    427
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    378,
+    427
+   ],
+   "file": "back_hair.png"
+  },
+  {
+   "name": "tail",
+   "z": 1,
+   "bbox": [
+    333,
+    407,
+    642,
+    597
+   ],
+   "size": [
+    309,
+    190
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    309,
+    190
+   ],
+   "file": "tail.png"
+  },
+  {
+   "name": "legwear",
+   "z": 2,
+   "bbox": [
+    240,
+    554,
+    376,
+    699
+   ],
+   "size": [
+    136,
+    145
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    136,
+    145
+   ],
+   "file": "legwear.png"
+  },
+  {
+   "name": "footwear",
+   "z": 3,
+   "bbox": [
+    232,
+    661,
+    384,
+    751
+   ],
+   "size": [
+    152,
+    90
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    152,
+    90
+   ],
+   "file": "footwear.png"
+  },
+  {
+   "name": "neck",
+   "z": 4,
+   "bbox": [
+    291,
+    248,
+    329,
+    324
+   ],
+   "size": [
+    38,
+    76
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    38,
+    76
+   ],
+   "file": "neck.png"
+  },
+  {
+   "name": "bottomwear",
+   "z": 5,
+   "bbox": [
+    157,
+    403,
+    462,
+    605
+   ],
+   "size": [
+    305,
+    202
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    305,
+    202
+   ],
+   "file": "bottomwear.png"
+  },
+  {
+   "name": "handwear",
+   "z": 6,
+   "bbox": [
+    159,
+    351,
+    460,
+    503
+   ],
+   "size": [
+    301,
+    152
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    301,
+    152
+   ],
+   "file": "handwear.png"
+  },
+  {
+   "name": "topwear",
+   "z": 7,
+   "bbox": [
+    247,
+    309,
+    373,
+    433
+   ],
+   "size": [
+    126,
+    124
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    126,
+    124
+   ],
+   "file": "topwear.png"
+  },
+  {
+   "name": "headwear",
+   "z": 8,
+   "bbox": [
+    125,
+    54,
+    508,
+    270
+   ],
+   "size": [
+    383,
+    216
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    383,
+    216
+   ],
+   "file": "headwear.png"
+  },
+  {
+   "name": "face",
+   "z": 9,
+   "bbox": [
+    222,
+    124,
+    401,
+    314
+   ],
+   "size": [
+    179,
+    190
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    179,
+    190
+   ],
+   "file": "face.png"
+  },
+  {
+   "name": "nose",
+   "z": 10,
+   "bbox": [
+    301,
+    266,
+    308,
+    274
+   ],
+   "size": [
+    7,
+    8
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    7,
+    8
+   ],
+   "file": "nose.png"
+  },
+  {
+   "name": "mouth",
+   "z": 11,
+   "bbox": [
+    292,
+    278,
+    322,
+    303
+   ],
+   "size": [
+    30,
+    25
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    30,
+    25
+   ],
+   "file": "mouth.png"
+  },
+  {
+   "name": "eyebrow",
+   "z": 12,
+   "bbox": [
+    242,
+    196,
+    367,
+    205
+   ],
+   "size": [
+    125,
+    9
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    125,
+    9
+   ],
+   "file": "eyebrow.png"
+  },
+  {
+   "name": "eyewhite",
+   "z": 13,
+   "bbox": [
+    238,
+    231,
+    379,
+    271
+   ],
+   "size": [
+    141,
+    40
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    141,
+    40
+   ],
+   "file": "eyewhite.png"
+  },
+  {
+   "name": "eyelash",
+   "z": 14,
+   "bbox": [
+    229,
+    225,
+    388,
+    270
+   ],
+   "size": [
+    159,
+    45
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    159,
+    45
+   ],
+   "file": "eyelash.png"
+  },
+  {
+   "name": "irides",
+   "z": 15,
+   "bbox": [
+    249,
+    232,
+    366,
+    270
+   ],
+   "size": [
+    117,
+    38
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    117,
+    38
+   ],
+   "file": "irides.png"
+  },
+  {
+   "name": "front_hair",
+   "z": 16,
+   "bbox": [
+    178,
+    88,
+    427,
+    294
+   ],
+   "size": [
+    249,
+    206
+   ],
+   "alpha_bbox": [
+    0,
+    0,
+    249,
+    206
+   ],
+   "file": "front_hair.png"
+  }
+ ],
+ "canonical_to_canvas": {
+  "scale": 0.15894039735099338,
+  "offset": [
+   58.49006622516556,
+   -267.0198675496689
+  ],
+  "from": "spikes/model/generated/see_through/in/canonical_front_tight.json"
+ }
+}
