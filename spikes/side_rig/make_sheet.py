@@ -11,7 +11,7 @@ TAG = sys.argv[1] if len(sys.argv) > 1 else ""          # e.g. rig_q34 -> shots_
 SHOTS = os.path.join(HERE, "shots_" + TAG if TAG else "shots")
 OUT = os.path.join(HERE, "evidence")
 os.makedirs(OUT, exist_ok=True)
-rep = json.load(open(os.path.join(SHOTS, "report.json")))
+rep = json.load(open(os.path.join(SHOTS, "report.json"), encoding="utf-8"))   # her log is Chinese now
 acts = list(rep["actions"].keys())
 cell = (240, 338)
 

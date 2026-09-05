@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(HERE, "shots_face")
 OUT = os.path.join(HERE, "evidence")
 os.makedirs(OUT, exist_ok=True)
-rep = json.load(open(os.path.join(SHOTS, "report.json")))
+rep = json.load(open(os.path.join(SHOTS, "report.json"), encoding="utf-8"))   # her log is Chinese now
 names = [("mood_" + m, m) for m in rep["moods"]] + [("viseme_" + v, "viseme " + v) for v in rep["visemes"]] + \
         [("look_" + d, "look " + d) for d in rep["looks"]] + [(f"fade_{i}", f"fade {s}s") for i, s in enumerate(rep["fade"])] + [("blink", "blink")]
 cell = (350, 300)

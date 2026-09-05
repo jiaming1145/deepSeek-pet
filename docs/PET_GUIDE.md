@@ -230,6 +230,15 @@ which point it drops the act. The token stays in her marker line. Asking a model
 so this is a switch in our own code instead: the tray menu has *Out of character (TIMEOUT_SIGNAL)*, which picks
 a plain system prompt and stops her speaking at all. Tick it off and she is herself again.
 
+**Closed eyes.** Worth knowing because it bit us. Her shut eyes are drawn cells, and in the shipped artwork the
+`closed` and `happy` cells sit near the top of their frame while every other state fills it. Dropped onto her
+face that put the lash line above her eye with a gap of bare skin under it, which reads as a missing eye rather
+than a closed one. The re-matte tool now measures each short cell and records the shift that seats it about two
+thirds of the way down the eye, where a lid actually rests, and the face kit applies that when it swaps the cell
+in. The side view has no drawn cells, so it used to close by squashing the eye to a sliver; it now fades the
+white and the iris out and walks the lash line down instead. Before and after: `evidence/closed_eye_fix.png`
+and `evidence/closed_eye_side.png`.
+
 **Language.** She speaks Chinese, both when the model writes her lines and when it is unreachable. Her offline
 lines exist in both Chinese and English (`voice.js`, `LINES_ZH` and `LINES_EN`) so she is never bilingual by
 accident, which is exactly the sort of seam that makes something read as a program.
