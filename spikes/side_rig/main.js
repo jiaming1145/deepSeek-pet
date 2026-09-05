@@ -9,7 +9,7 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, powerMonitor } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
-const { createBrain, think } = require('./brain.js');
+const { createBrain, think, chat } = require('./brain.js');
 
 app.commandLine.appendSwitch('allow-file-access-from-files');
 const has = (f) => process.argv.includes(f);
@@ -30,6 +30,9 @@ app.whenReady().then(async () => {
     try { return await think(brain, state, history, activities); } catch (e) { return null; }
   });
   ipcMain.handle('pet:brain', () => ({ enabled: brain.enabled, calls: brain.calls, ok: brain.ok, failed: brain.failed, lastError: brain.lastError }));
+  ipcMain.handle('pet:chat', async (_e, turns, state, history) => {
+    try { return await chat(brain, turns, state, history); } catch (e) { return { error: String(e.message || e) }; }
+  });
   ipcMain.handle('pet:memory:load', () => { try { return JSON.parse(fs.readFileSync(memFile, 'utf8')); } catch (e) { return null; } });
   ipcMain.on('pet:memory:save', (_e, data) => { try { fs.writeFileSync(memFile, JSON.stringify(data)); } catch (e) { console.error('could not save her memory:', e.message); } });
   const query = {};
@@ -61,6 +64,7 @@ app.whenReady().then(async () => {
       // here instead, deterministically: the switch picks which system prompt is sent, and quiets her lines.
       { label: 'Out of character (TIMEOUT_SIGNAL)', type: 'checkbox', checked: false,
         click: (item) => { brain.mode = item.checked ? 'plain' : 'character'; win.webContents.send('pet:command', item.checked ? 'plain' : 'character'); } },
+      { label: 'Chat', click: () => win.webContents.send('pet:command', 'chat') },
       { label: 'Wave', click: () => win.webContents.send('pet:command', 'wave') },
       { label: 'Nap', click: () => win.webContents.send('pet:command', 'sleep') },
       { type: 'separator' }, { label: 'Quit', click: () => app.quit() },

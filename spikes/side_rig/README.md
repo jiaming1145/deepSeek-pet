@@ -33,7 +33,11 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   remarks. `memory.js` - what persists between runs (first met, time together, pats, throws, her needs at
   shutdown), written by the main process to `<userData>/whalechan-memory.json`. `node voice.test.mjs` runs 27
   tests over both. The speech bubble is a plain DOM element in `index.html`, positioned above her silhouette each
-  frame and never able to take a click.
+  frame and never able to take a click. The CHAT BOX in the same file is interactive, so `overChat()` is folded
+  into the hit region - without that the window stays click-through over the panel and you cannot type into it.
+  Open it by double-clicking her, pressing C, or the tray's Chat item. `brain.chat()` is a separate call from
+  `brain.think()`: no activity to pick, a 700-token budget, its own 30 s timeout, and the last 8 turns for
+  context. Both key handlers ignore events whose target is an input, or typing drives her animations.
 - `brain.js` - the optional language-model brain, required by `main.js` and run ONLY in the main process so the
   key at `~/.ds/deepseek.key` never reaches the renderer. It returns a suggestion or null; `pet.js` fires it in
   the background and never awaits it on the frame path. Rate limited to one call per 45 s and 60 per hour; a 401

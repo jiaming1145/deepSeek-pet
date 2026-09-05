@@ -659,6 +659,7 @@ const lab = window.lab = {
   fps: () => +(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(1),
 };
 window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;   // typing into the chat box is not a command
   const k = e.key.toLowerCase();
   const em = { 1: 'neutral', 2: 'happy', 3: 'sad', 4: 'angry', 5: 'surprised', 6: 'think', 7: 'awkward', 8: 'question', 9: 'curious' }[k];
   const act = { i: 'idle', w: 'walk', r: 'run', h: 'hop', v: 'wave', l: 'look', t: 'talk', s: 'sit', z: 'sleep', k: 'wake', f: 'turn', x: 'stretch', c: 'celebrate', b: 'tail_react', u: 'stumble' }[k];

@@ -11,6 +11,12 @@ const V = createVoice();         // what she says; see voice.js
 let MEM = blankMemory();         // what she remembers about you; see memory.js
 const bubble = document.getElementById('say');
 let bubbleUntil = 0;
+const chatBox = document.getElementById('chat');
+const chatLog = document.getElementById('chatLog');
+const chatIn = document.getElementById('chatIn');
+const chatSend = document.getElementById('chatSend');
+const turns = [];              // the conversation so far, newest last
+let chatBusy = false;
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
 const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, nextIdleLine: 20, nextThought: 35, lastSave: 0, quiet: false, log: [] };
@@ -89,6 +95,85 @@ function placeBubble() {
 }
 const ctxNow = () => ({ ...mindCtx(), hourOfDay: new Date().getHours() });
 
+// --- the chat box ------------------------------------------------------------------------------------------
+// Her bubble is a line over her head; this is a real conversation, so it gets a panel with history and an input.
+// The window is click-through everywhere except her pixels, so while the panel is open its rectangle has to
+// count as "her" too, or you could see the box but never type into it.
+function chatOpen() { return chatBox && chatBox.classList.contains('on'); }
+function chatRect() { return chatBox ? chatBox.getBoundingClientRect() : null; }
+function overChat(x, y) {
+  if (!chatOpen()) return false;
+  const r = chatRect();
+  return r && x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4;
+}
+function showChat(on) {
+  if (!chatBox) return;
+  chatBox.classList.toggle('on', on);
+  if (on) {
+    if (!turns.length) addLine('sys', '和她说说话吧。她会用鲸鱼娘的语气回答。');
+    setOver(true);
+    setTimeout(() => chatIn && chatIn.focus(), 30);
+    if (P.auto && P.state === 'wander') enter('idle', { dur: 6 });
+  }
+}
+// Her （…） asides are rendered as stage directions rather than plain text, which is most of what makes a
+// role-play reply readable. Built as DOM nodes, never innerHTML, because the text comes from a model.
+function renderHer(text, into) {
+  for (const part of String(text).split(/(（[^）]*）|\([^)]*\))/g)) {
+    if (!part) continue;
+    const node = document.createElement(/^[（(]/.test(part) ? 'span' : 'span');
+    if (/^[（(]/.test(part)) node.className = 'act';
+    node.textContent = part;
+    into.appendChild(node);
+  }
+}
+function addLine(kind, text) {
+  if (!chatLog) return null;
+  const el = document.createElement('div');
+  el.className = `msg ${kind}`;
+  if (kind === 'her') renderHer(text, el); else el.textContent = text;
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return el;
+}
+async function sendChat() {
+  if (!chatIn || chatBusy) return;
+  const text = chatIn.value.trim();
+  if (!text) return;
+  chatIn.value = '';
+  turns.push({ role: 'you', text });
+  addLine('you', text);
+  touched();
+  observe(M, 'pet', { zone: 'body' });        // being spoken to is attention
+  lab.start('talk');
+  chatBusy = true;
+  if (chatSend) chatSend.disabled = true;
+  const waiting = addLine('her', '（……）');
+  if (!bridge || !bridge.chat) {
+    waiting.textContent = '（她现在听不见你——桌宠模式外没有接上大脑）';
+    chatBusy = false; if (chatSend) chatSend.disabled = false;
+    return;
+  }
+  const res = await bridge.chat(turns, summarise(M, ctxNow()), describeMemory(MEM, Date.now()));
+  waiting.textContent = '';
+  if (res && res.text) {
+    renderHer(res.text, waiting);
+    turns.push({ role: 'her', text: res.text });
+    note('chat', { line: res.text.slice(0, 60) });
+  } else {
+    waiting.className = 'msg sys';
+    waiting.textContent = `她没能回答：${(res && res.error) || 'unknown'}`;
+  }
+  chatLog.scrollTop = chatLog.scrollHeight;
+  chatBusy = false;
+  if (chatSend) chatSend.disabled = false;
+  if (chatIn) chatIn.focus();
+}
+if (chatSend) chatSend.addEventListener('click', sendChat);
+if (chatIn) chatIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+const chatClose = document.getElementById('chatClose');
+if (chatClose) chatClose.addEventListener('click', () => showChat(false));
+
 // --- her optional brain ----------------------------------------------------------------------------------
 // We ask, and carry on. Whatever comes back arrives later and only ever becomes a SUGGESTION for her next
 // decision, so a slow, broken, unpaid or absent model can never stall her or take her over.
@@ -114,7 +199,7 @@ function onTick(dt) {
   mindTick(M, dt, mindCtx());
   // hit state follows her even when the mouse is still (she walks out from under the cursor)
   P.pickT += dt;
-  if (P.cursor && !P.drag && P.pickT >= 0.05) { P.pickT = 0; setOver(onHer(P.cursor[0], P.cursor[1])); }
+  if (P.cursor && !P.drag && P.pickT >= 0.05) { P.pickT = 0; setOver(overChat(P.cursor[0], P.cursor[1]) || onHer(P.cursor[0], P.cursor[1])); }
   // attention: look at a nearby cursor, turn around if it stays behind her
   if (P.cursor && !P.drag && !p.held && !p.airborne) {
     const [hx, hy] = lab.headPx(), st = lab.stage();
@@ -155,6 +240,7 @@ lab.onTick(onTick);
 // ------------------------------------------------------------------ pointer
 function pointerDown(x, y) {
   P.cursor = [x, y];
+  if (overChat(x, y)) return false;      // clicks inside the panel belong to the panel, not to picking her up
   if (!onHer(x, y)) return false;
   P.drag = { x0: x, y0: y, moved: false }; setOver(true); document.body.style.cursor = 'grabbing';
   return true;
@@ -173,8 +259,12 @@ function pointerUp(x, y) {
   const d = P.drag; endDrag();
   if (!d) return;
   touched();
-  if (d.moved) { lab.release(); if (P.auto) enter('fall', { dur: 999 }); }
-  else if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); recordMemory(MEM, 'pet'); saveSoon(); say(vReact(V, P.t, 'pet', { zone })); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
+  if (d.moved) { lab.release(); if (P.auto) enter('fall', { dur: 999 }); return; }
+  // double-click her to talk to her: the tray item and the C key are both easy to miss
+  const dbl = P.t - (P.lastClickAt ?? -9) < 0.45;
+  P.lastClickAt = P.t;
+  if (dbl) { showChat(true); return; }
+  if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); recordMemory(MEM, 'pet'); saveSoon(); say(vReact(V, P.t, 'pet', { zone })); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
   else lab.start(pick(['wave', 'celebrate', 'tail_react']));
 }
 window.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown(e.clientX, e.clientY); });
@@ -187,11 +277,14 @@ window.addEventListener('blur', bail);
 window.addEventListener('pointercancel', bail);
 document.addEventListener('visibilitychange', () => { if (document.hidden) bail(); });
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && bridge) bridge.quit();
+  const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable);
+  if (e.key === 'Escape') { if (chatOpen()) showChat(false); else if (bridge) bridge.quit(); return; }
+  if (typing) return;
+  if (e.key.toLowerCase() === 'c') showChat(!chatOpen());
   if (e.key.toLowerCase() === 'p') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); }
 });
 if (bridge && bridge.onIdle) bridge.onIdle((sec) => { P.userIdle = sec; });
-if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'plain' || cmd === 'character') { P.quiet = cmd === 'plain'; if (P.quiet && bubble) bubble.classList.remove('on'); } else if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
+if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'chat') { showChat(!chatOpen()); } else if (cmd === 'plain' || cmd === 'character') { P.quiet = cmd === 'plain'; if (P.quiet && bubble) bubble.classList.remove('on'); } else if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
 
 // Things worth remembering are saved as they happen, not only on the 30 s timer: a pat that arrives seconds
 // before you close her should still be there tomorrow.
@@ -222,6 +315,9 @@ const pet = window.pet = {
   go(state, opts) { enter(state, opts || {}); },
   simulate(ev) { if (ev.type === 'down') return pointerDown(ev.x, ev.y); if (ev.type === 'move') return pointerMove(ev.x, ev.y); if (ev.type === 'up') return pointerUp(ev.x, ev.y); throw new Error('unknown event ' + ev.type); },
   log: () => P.log.slice(),
+  chat: (on) => showChat(on !== false),
+  ask: async (text) => { showChat(true); chatIn.value = text; await sendChat(); return turns[turns.length - 1]; },
+  turns: () => turns.slice(),
   say: (line) => say(speak(V, P.t, line)),
   history: () => describeMemory(MEM, Date.now()),
   memory: () => ({ ...MEM }),

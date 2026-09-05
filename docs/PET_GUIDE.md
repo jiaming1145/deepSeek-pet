@@ -133,12 +133,40 @@ You can see all of this: `evidence/mind_hour.png` charts a simulated hour, and t
 plain-English reason for every choice, which is kept in her log. Ask her `pet.mind()` in the console and she will
 tell you what she is doing, why, how she feels and what she needs.
 
+## Talking to her
+
+Double-click her, press `C`, or use the tray menu's *Chat*, and a chat box opens at the bottom right. Type and
+she answers in character. The window is click-through everywhere except her own pixels, so while the box is open
+its rectangle counts as her too, otherwise you would see the panel but never be able to type into it.
+
+Her replies are formatted as role-play, not as chat: a stage direction in brackets, then two to four short
+paragraphs, more stage directions inside them, no bullet points and no Markdown. The brackets are rendered as
+italic grey so they read as actions rather than speech. For example:
+
+> （尾巴轻轻拍打着水面，歪着头看你）主人好呀，人家是鲸鱼娘啦！……才、才不是因为喜欢主人才留下来的！
+>
+> （小脸微红，偷偷瞄你一眼）人家最喜欢吃米饭了。都说我圆圆的，哼——这是浮力！
+>
+> （拍拍尾巴，语气软下来）既然认识了，以后就请主人多关照人家哦。
+
+Talking to her counts as attention, so her need for company fills while you chat and her face changes to match.
+
 ## What she says
 
-She talks in a small speech bubble above her head (`evidence/speech_bubble.png`). The lines are short and chosen
-by situation, not at random: a head pat gets "more please", a tail grab gets "not the tail!", being picked up gets
-"wh- hey!", a hard landing gets "OW". Left alone she eventually says "are you there?"; late at night she suggests
-you go to bed.
+Away from the chat box she talks in a small bubble above her head. The lines are short and chosen by situation,
+not at random, and they carry the same bracketed stage directions her chat replies do, so her voice does not
+change shape depending on whether the model answered:
+
+| When | She says |
+|---|---|
+| you pat her head | （把头凑过去）再摸一下嘛 |
+| you grab her tail | （炸毛）那是人家的尾鳍啦 |
+| you pick her up | （拍打你的手）放人家下来啦 |
+| you drop her hard | （眼眶红了）好痛！ |
+| you have been gone a day | （打了个哈欠）本鲸都快睡着了 |
+| it is past 1am | （拽拽你袖子）主人该睡了 |
+
+All seventy of her offline lines are written this way.
 
 Two rules keep it from becoming annoying. She will not repeat a line she has used recently, and she stays silent
 unless there is a reason to speak, with a minimum gap between unprompted remarks. A pet that chatters constantly
@@ -288,6 +316,5 @@ Honest list, so nothing reads as finished when it is not.
 - The language model only picks from the eight things she already knows how to do. It cannot invent a new
   behaviour, and it has no memory of its own between calls beyond the summary she sends it.
 - She does not know what is on your screen, only whether you have touched your keyboard recently.
-- She cannot hear you, and there is no way to talk back to her.
 - Three of the drawn eye shapes are weak: the dizzy spiral reads as a dark blob, and the half-closed lid reads as a
   hard bar. They come from the expression artwork, not from the code, so fixing them means redrawing those cells.
