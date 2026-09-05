@@ -71,6 +71,9 @@ def kit_pieces(rig, mood, atlas_json, face_at, layer_count):
         cw, ch = at["cell_px"]
         cell = Image.open(os.path.join(FACE, at["file"])).convert("RGBA").crop(cell_box(at, row, col, (cw, ch)))
         kx, ky = reg["cell_origin_on_face_px"]
+        off = (reg.get("state_offsets_px") or {}).get(state)          # cells drawn high in their frame, re-seated
+        if off:
+            kx, ky = kx + off[0], ky + off[1]
         xy = place(kx, ky)
         size = (max(1, round(cw * sc)), max(1, round(ch * sc)))
         out.append((face_at + 0.5 + depth / 10.0, lambda c, cell=cell, size=size, xy=xy: c.alpha_composite(cell.resize(size, Image.LANCZOS), xy)))

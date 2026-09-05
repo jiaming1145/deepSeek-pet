@@ -120,7 +120,7 @@ function buildLayer(name, spec, texName, tint, order) {
 }
 
 // ------------------------------------------------------------------ views (side + front share the stage)
-let rig, group, bones, boneList, restHead, skeleton, boneIndex, layerMeshes, facePieces, FLOOR_Y, GROUND_Y, springs, ASSETS, VIEW_NAME, NATIVE;
+let rig, group, bones, boneList, restHead, skeleton, boneIndex, layerMeshes, facePieces, FLOOR_Y, GROUND_Y, springs, ASSETS, VIEW_NAME, NATIVE, EYE_H;
 let kit = null;                          // face kit, mounted on the front view's head
 const VIEWS = {};
 const groundFor = (view) => STAGE.margin - view.floorY;
@@ -171,6 +171,8 @@ async function buildView(name, file) {
     view.meshes.push(dup ? buildLayer(nm, dup, dup.from, dup.tint ?? 1, i) : buildLayer(nm, rigJ.attach[nm] || { rigid: 'head' }, nm, 1, i));
   }
   for (const k of ['eyewhite', 'irides', 'eyelash', 'eyebrow', 'mouth']) facePieces[k] = layerMeshes[k];
+  const eyeLay = rigJ.layers.eyewhite;
+  view.eyeH = eyeLay ? (eyeLay.bbox[3] - eyeLay.bbox[1]) : 40;      // her eye opening in canvas px
   const eyeC = toW(rigJ.eyes.center), mouthC = toW(rigJ.mouth.center), headH = bones.head.userData.head || new THREE.Vector2();
   for (const k of Object.keys(facePieces)) {
     const m = facePieces[k]; if (!m) continue;
@@ -201,7 +203,7 @@ function current() { return VIEW_NAME ? VIEWS[VIEW_NAME] : null; }
 function activate(view) {
   VIEW_NAME = view.name; rig = view.rig; group = view.group; bones = view.bones; boneList = view.boneList; restHead = view.restHead;
   skeleton = view.skeleton; boneIndex = view.boneIndex; layerMeshes = view.layerMeshes; facePieces = view.facePieces;
-  FLOOR_Y = view.floorY; GROUND_Y = view.groundY; springs = view.springs; ASSETS = view.assets; NATIVE = view.native;
+  FLOOR_Y = view.floorY; GROUND_Y = view.groundY; springs = view.springs; ASSETS = view.assets; NATIVE = view.native; EYE_H = view.eyeH;
 }
 function showOnly(name) {
   for (const v of Object.values(VIEWS)) { const on = v.name === name; v.group.visible = on; for (const m of v.meshes) if (m.isSkinnedMesh) m.visible = on; }
@@ -454,7 +456,7 @@ function applyFace(dt) {
   if (S_.blink.next <= 0 && S_.blink.phase === 0) { S_.blink.phase = 0.001; S_.blink.next = 1.8 + Math.random() * 3.2; }
   if (S_.blink.phase > 0) { S_.blink.phase += dt; if (S_.blink.phase > 0.22) S_.blink.phase = 0; }
   const blinkAmt = S_.blink.phase > 0 ? Math.sin(Math.PI * clamp(S_.blink.phase / 0.22, 0, 1)) : 0;
-  const closed = clamp(Math.max(blinkAmt, S_.eyesClosed || 0), 0, 1);
+  const closed = S_.eyesHold != null ? S_.eyesHold : clamp(Math.max(blinkAmt, S_.eyesClosed || 0), 0, 1);
   if (isFront() && kit) {
     kit.setMood(kitMood(S_.emotion));
     kit.eyesClosed = S_.eyesClosed || 0;
@@ -468,9 +470,20 @@ function applyFace(dt) {
   const eyeY = Math.max(0.06, emoCur.eyeScale * (1 - closed));
   const px = S * 1;   // 1 px in world units
   const [ix, iy] = S_.irisOff || [0, 0];
-  for (const k of ['eyewhite', 'irides', 'eyelash']) { const m = facePieces[k]; if (!m) continue; m.scale.set(1, eyeY, 1); m.position.copy(m.userData.base); }
+  // A shut eye is a lash line resting low, not an eye squashed to a sliver. So the white and the iris fade out
+  // as the lid comes down, while the lash keeps most of its width and travels to where the lid closes.
+  for (const k of ['eyewhite', 'irides']) {
+    const m = facePieces[k]; if (!m) continue;
+    m.scale.set(1, eyeY, 1); m.position.copy(m.userData.base);
+    m.material.opacity = 1 - closed; m.material.transparent = true; m.visible = closed < 0.98;
+  }
   if (facePieces.irides) facePieces.irides.position.add(new THREE.Vector3(ix * px, iy * px, 0));
-  if (facePieces.eyelash) facePieces.eyelash.position.y -= (1 - eyeY) * 6 * px;
+  if (facePieces.eyelash) {
+    const m = facePieces.eyelash;
+    m.scale.set(1, Math.max(0.4, eyeY), 1);
+    m.position.copy(m.userData.base);
+    m.position.y -= closed * 0.42 * (EYE_H || 40) * px;
+  }
   if (facePieces.eyebrow) { const m = facePieces.eyebrow; m.rotation.z = emoCur.browRot * M(); m.position.copy(m.userData.base); m.position.y += emoCur.browY * px; }
   if (facePieces.mouth) { const m = facePieces.mouth; m.scale.set(emoCur.mouthW, emoCur.mouthH * (1 + 2.2 * (S_.mouthOpen || 0)), 1); }
 }
@@ -634,6 +647,7 @@ const lab = window.lab = {
   pause(v) { S_.paused = !!v; },
   hud(v) { S_.hudOn = !!v; hud.style.display = v ? 'block' : 'none'; },
   emotion(name) { if (!EMO[name] && !KIT_TO_EMO[name] && !(kit && kit.recipe(name))) throw new Error('unknown emotion ' + name); S_.emotion = name; },
+  eyes(closed) { S_.eyesHold = closed == null ? null : clamp(closed, 0, 1); },   // testing hook: hold the lids
   look(yaw, pitch) { S_.look.yaw = clamp(yaw || 0, -1, 1); S_.look.pitch = clamp(pitch || 0, -1, 1); },
   lookAt(px, py) { if (px == null) { lab.look(0, 0); return; } const [hx, hy] = lab.headPx(); lab.look((px - hx) / (STAGE.k * 1.2), (hy - py) / (STAGE.k * 0.9)); },
   headPx() { const v = new THREE.Vector3(); bones.head.getWorldPosition(v); return toPx(v.x, v.y); },

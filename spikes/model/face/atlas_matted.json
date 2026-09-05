@@ -52,7 +52,17 @@
    "cell_origin_on_face_px": [
     640.0,
     210.0
-   ]
+   ],
+   "state_offsets_px": {
+    "closed": [
+     0,
+     67
+    ],
+    "happy": [
+     0,
+     80
+    ]
+   }
   },
   "eye_r": {
    "anchor_px": [
@@ -78,7 +88,17 @@
    "cell_origin_on_face_px": [
     128.0,
     210.0
-   ]
+   ],
+   "state_offsets_px": {
+    "closed": [
+     0,
+     51
+    ],
+    "happy": [
+     0,
+     64
+    ]
+   }
   },
   "mouth": {
    "anchor_px": [
