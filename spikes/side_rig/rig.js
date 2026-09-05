@@ -190,11 +190,11 @@ async function mountKit(view, faceOrder) {
   // the face kit's pieces live in neutral.png px; neutral.png is a crop of the 4096x8192 canonical, and the front
   // layers were decomposed from a crop of the same canonical (rig.canonical_to_canvas) - so kit px -> canvas px is affine
   const map = view.rig.canonical_to_canvas, hh = view.bones.head.userData.head;
-  const k = new FaceKit({ base: '../model/face', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5,
+  const k = new FaceKit({ base: '../model/face', atlasJson: 'atlas_matted.json', parent: view.bones.head, pxScale: map.scale * S, renderOrder: faceOrder + 0.5,
     place: (u, v) => { const [cx, cy] = k.atlas.face.canonical_crop_box; const w = toW([(u + cx) * map.scale + map.offset[0], (v + cy) * map.scale + map.offset[1]]); return new THREE.Vector3(w.x - hh.x, w.y - hh.y, 0); } });
   try { await k.load(); } catch (e) { console.warn('face kit not mounted: ' + (e.message || e)); return; }
   kit = k; view.kit = k;
-  for (const n of ['eyewhite', 'irides', 'eyelash', 'eyebrow', 'mouth', 'nose']) if (view.layerMeshes[n]) view.layerMeshes[n].visible = false;
+  for (const n of ['eyewhite', 'irides', 'eyelash', 'eyebrow', 'mouth']) if (view.layerMeshes[n]) view.layerMeshes[n].visible = false;   // the kit replaces these; it draws no nose, so hers stays
   view.facePieces = {};
 }
 function current() { return VIEW_NAME ? VIEWS[VIEW_NAME] : null; }

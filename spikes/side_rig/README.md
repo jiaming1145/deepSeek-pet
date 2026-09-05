@@ -24,7 +24,10 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
 - `rig.js` - runtime: views, skinning, springs, actions, face (procedural pieces in side view, face kit in
   front view), physics (hold/throw/land), pose crossfade, stage in px, `window.lab` control surface.
 - `pet.js` - pointer interaction + autopilot (`window.pet`); `preload.js` - bridge for click-through toggling.
-- `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`).
+- `facekit.js` - expression atlases as swappable pieces (`spikes/model/face`); `atlasJson` picks the manifest,
+  the runtime uses `atlas_matted.json`.
+- `preview_front.py` - offline render of the front rig + face kit (no Electron), for checking the face:
+  `python spikes/side_rig/preview_front.py --mood happy --zoom 5`.
 - `main.js` - Electron harness (lab / tour / capture / pet / selftest); `tray.png` - tray icon.
 - `assets/` side layers (17), `assets_front/` front layers (17 + left/right splits), `assets_q34/` 3/4 stand-in.
 - `rig.json` side rig, `rig_front.json` front rig (carries `assets` and `canonical_to_canvas`).
@@ -41,3 +44,13 @@ the tray icon has Wave / Nap / Autopilot / Quit. Sheets: `python make_sheet.py v
   face/hair layers. A raised arm is drawn above the hair (renderOrder 40).
 - `capturePage` returns physical px (this 4K screen at 150 % gives 1.5x the window px); hit boxes are window px.
 - Action -> view: locomotion/sleep/held/fall = side; idle/talk/wave/look/sit/stretch/celebrate = front.
+- The shipped face atlases were cut with a generous round matte: an open-eye cell was ~61 % pale skin and a
+  closed-eye cell ~88 %, lifted from a differently shaded copy of her face, so each eye pasted a disc of wrong
+  skin over the decomposed head. `tools/face/rematte_atlases.py` rebuilds every cell's alpha from the ink it
+  contains (plus what the ink encloses, plus a short feather) and writes `spikes/model/face/matted/` +
+  `atlas_matted.json`; the mouth and brow cells were already tight and come through unchanged. Evidence:
+  `evidence/face_matte_before_after.png`.
+- The kit draws no nose, so her `nose` layer stays visible under it. The kit's eye cells are verbatim pixels
+  from the canonical (an 'open' cell composited over its own source window differs by 0.0), and the kit-to-canvas
+  map is confirmed by cross-correlating the kit face against the decomposed head (scale 0.1585 fitted vs 0.1589
+  analytic) - so if the eyes ever look wrong, suspect the matte or the draw order, not the alignment.
