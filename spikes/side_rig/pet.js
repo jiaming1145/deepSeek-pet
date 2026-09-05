@@ -2,10 +2,13 @@
 // (wander, look, sit, stretch, nap). In the pet window a preload bridge (window.petBridge) tells the main process when
 // the cursor is over her so the window stops being click-through; in the lab the same code runs without the bridge.
 import './rig.js';
+import { createMind, observe, tick as mindTick, decide as mindDecide, shouldChange, summarise } from './mind.js';
 const lab = window.lab, bridge = window.petBridge || null;
+const M = createMind();          // what she wants; see mind.js. The dice are gone.
 const Q = new URLSearchParams(location.search);
 const rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, log: [] };
+const P = { auto: Q.get('pet') === '1', state: 'idle', since: 0, until: 0, t: 0, target: null, gait: 'walk', cursor: null, over: false, drag: null, lastTouch: 0, hoverT: 0, behindT: 0, pickT: 0, userIdle: null, near: false, log: [] };
+const mindCtx = () => ({ cursorNear: P.near, userIdleSeconds: P.userIdle });
 const IDLE_EMO = ['neutral', 'neutral', 'relaxed', 'gentle', 'happy'];
 // what she does when you touch each part of her
 const REACT = {
@@ -19,26 +22,27 @@ const REACT = {
 };
 const onHer = (x, y) => lab.pick(x, y);
 
-function note(state, extra) { P.log.push({ t: +P.t.toFixed(1), state, ...(extra || {}) }); if (P.log.length > 300) P.log.shift(); }
+function note(state, extra) { P.log.push({ t: +P.t.toFixed(1), state, mood: M.mood, ...(extra || {}) }); if (P.log.length > 300) P.log.shift(); }
+const feel = (fallback) => { try { lab.emotion(M.mood); } catch (e) { lab.emotion(fallback || 'neutral'); } };
 function enter(state, opts = {}) {
   P.state = state; P.since = P.t; P.until = P.t + (opts.dur ?? 3);
   note(state, opts.note ? { note: opts.note } : undefined);
   switch (state) {
-    case 'idle': lab.start('idle'); lab.emotion(opts.emotion || pick(IDLE_EMO)); break;
+    case 'idle': lab.start('idle'); if (opts.emotion) lab.emotion(opts.emotion); else feel(); break;
     case 'wander': {
       const st = lab.stage(), p = lab.pos();
       let tx = p.x, tries = 0;
       while (Math.abs(tx - p.x) < Math.min(1.2, st.w * 0.3) && tries++ < 20) tx = rnd(0.9, Math.max(0.9, st.w - 0.9));
       P.target = tx; P.gait = opts.gait || (Math.abs(tx - p.x) > st.w * 0.45 || Math.random() < 0.2 ? 'run' : 'walk');
-      lab.turnTo(tx > p.x ? 1 : -1); lab.start(P.gait); lab.emotion(P.gait === 'run' ? 'cheerful' : pick(['neutral', 'happy']));
+      lab.turnTo(tx > p.x ? 1 : -1); lab.start(P.gait); if (P.gait === 'run') lab.emotion('cheerful'); else feel();
       P.until = P.t + 40; note('wander', { target: +tx.toFixed(2), gait: P.gait });
       break;
     }
     case 'look': lab.start('look'); lab.emotion('curious'); break;
-    case 'sit': lab.start('sit'); lab.emotion(pick(['relaxed', 'happy', 'neutral'])); break;
+    case 'sit': lab.start('sit'); feel('relaxed'); break;
     case 'stretch': lab.start('stretch'); lab.emotion('sleepy'); break;
-    case 'tail': lab.start('tail_react'); lab.emotion('happy'); break;
-    case 'talk': lab.start('talk'); lab.emotion(pick(['happy', 'cheerful', 'think'])); break;
+    case 'tail': lab.start('tail_react'); feel('happy'); break;
+    case 'talk': lab.start('talk'); feel('happy'); break;
     case 'sleep': lab.start('sleep'); lab.emotion('sleepy'); break;
     case 'wake': lab.start('wake'); lab.emotion('neutral'); break;
     case 'react': lab.start(opts.action || pick(['wave', 'celebrate', 'tail_react', 'talk'])); lab.emotion(opts.emotion || pick(['happy', 'cheerful', 'affection', 'surprised'])); break;
@@ -48,18 +52,12 @@ function enter(state, opts = {}) {
   }
 }
 function decide() {
-  const bored = P.t - P.lastTouch, r = Math.random();
+  // She no longer rolls dice. mind.js scores everything she could do against the needs she actually has and
+  // hands back a choice with a plain-English reason, which is kept in the log so her behaviour is explainable.
   if (P.state === 'sleep') return enter('wake', { dur: 1.3 });
   if (P.state === 'wake') return enter('idle', { dur: rnd(2, 4) });
-  if (P.state !== 'idle') return enter('idle', { dur: rnd(1.5, 5) });
-  if (bored > 90 && r < 0.12) return enter('sleep', { dur: rnd(25, 70) });
-  if (r < 0.42) return enter('wander');
-  if (r < 0.55) return enter('look', { dur: rnd(2, 4) });
-  if (r < 0.68) return enter('sit', { dur: rnd(6, 14) });
-  if (r < 0.76) return enter('stretch', { dur: 2.6 });
-  if (r < 0.86) return enter('tail', { dur: 2.2 });
-  if (r < 0.92) return enter('talk', { dur: rnd(2, 4) });
-  return enter('idle', { dur: rnd(2, 6) });
+  const c = mindDecide(M, mindCtx());
+  return enter(c.activity, { dur: Math.max(1.2, c.until - M.t), note: c.reason });
 }
 function touched() { P.lastTouch = P.t; }
 
@@ -68,6 +66,7 @@ function setOver(v) { if (v === P.over) return; P.over = v; if (bridge) bridge.s
 function onTick(dt) {
   P.t += dt;
   const p = lab.pos();
+  mindTick(M, dt, mindCtx());
   // hit state follows her even when the mouse is still (she walks out from under the cursor)
   P.pickT += dt;
   if (P.cursor && !P.drag && P.pickT >= 0.05) { P.pickT = 0; setOver(onHer(P.cursor[0], P.cursor[1])); }
@@ -75,11 +74,12 @@ function onTick(dt) {
   if (P.cursor && !P.drag && !p.held && !p.airborne) {
     const [hx, hy] = lab.headPx(), st = lab.stage();
     const near = Math.hypot(P.cursor[0] - hx, P.cursor[1] - hy) < st.k * 2.6;
+    P.near = near;
     if (near) lab.lookAt(P.cursor[0], P.cursor[1]); else lab.lookAt(null);
     if (P.over) {
       P.hoverT += dt;
-      if (P.state === 'sleep' && P.hoverT > 1.2) { touched(); enter('wake', { dur: 1.3 }); }
-      else if (P.state === 'idle' && P.hoverT > 0.5) lab.emotion('happy');
+      if (P.state === 'sleep' && P.hoverT > 1.2) { touched(); observe(M, 'hover'); enter('wake', { dur: 1.3 }); }
+      else if (P.state === 'idle' && P.hoverT > 0.5) { observe(M, 'hover'); feel('happy'); }
     } else P.hoverT = 0;
     const behind = p.view === 'side' && near && Math.sign(P.cursor[0] - hx) === -p.facing;
     P.behindT = behind ? P.behindT + dt : 0;
@@ -91,7 +91,7 @@ function onTick(dt) {
   if ((P.drag || P.state === 'held') && !p.held && p.action !== 'dangle') { endDrag(); if (P.auto && P.state === 'held') enter('idle', { dur: 1 }); }
   if (!P.auto) return;
   if (P.state === 'held' || P.state === 'fall') {
-    if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' });
+    if (P.state === 'fall' && !p.airborne && p.action !== 'fall' && p.action !== 'dangle') { observe(M, 'drop', { impact: p.landed || 0 }); enter('landed', { dur: 1.6, emotion: p.action === 'stumble' ? 'hurt' : 'awkward' }); }
     return;
   }
   if (P.state === 'wander') {
@@ -99,7 +99,7 @@ function onTick(dt) {
     if ((arrived && !p.turning) || P.t >= P.until) enter('idle', { dur: rnd(1.5, 4) });
     return;
   }
-  if (P.t >= P.until) decide();
+  if (shouldChange(M, mindCtx()) || P.t >= P.until) decide();
 }
 lab.onTick(onTick);
 
@@ -114,7 +114,7 @@ function pointerMove(x, y) {
   P.cursor = [x, y];
   if (P.drag) {
     if (!P.drag.moved && Math.hypot(x - P.drag.x0, y - P.drag.y0) > 5) {
-      P.drag.moved = true; touched(); lab.hold(P.drag.x0, P.drag.y0); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
+      P.drag.moved = true; touched(); observe(M, 'grab'); lab.hold(P.drag.x0, P.drag.y0); if (P.auto) enter('held', { dur: 999 }); else lab.emotion('panic');
     }
     if (P.drag.moved) lab.holdAt(x, y);
   }
@@ -125,7 +125,7 @@ function pointerUp(x, y) {
   if (!d) return;
   touched();
   if (d.moved) { lab.release(); if (P.auto) enter('fall', { dur: 999 }); }
-  else if (P.auto) { if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[lab.zone(x, y)] || {}) }); }
+  else if (P.auto) { const zone = lab.zone(x, y); observe(M, 'pet', { zone }); if (P.state === 'sleep') enter('wake', { dur: 1.3 }); else enter('react', { dur: 2.6, ...(REACT[zone] || {}) }); }
   else lab.start(pick(['wave', 'celebrate', 'tail_react']));
 }
 window.addEventListener('mousedown', (e) => { if (e.button === 0) pointerDown(e.clientX, e.clientY); });
@@ -141,10 +141,15 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && bridge) bridge.quit();
   if (e.key.toLowerCase() === 'p') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); }
 });
+if (bridge && bridge.onIdle) bridge.onIdle((sec) => { P.userIdle = sec; });
 if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if (cmd === 'sleep') enter('sleep', { dur: 60 }); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });
 
 const pet = window.pet = {
-  info: () => ({ auto: P.auto, state: P.state, over: P.over, bridge: !!bridge }),
+  info: () => ({ auto: P.auto, state: P.state, over: P.over, bridge: !!bridge, mind: summarise(M, mindCtx()) }),
+  mind: () => summarise(M, mindCtx()),
+  needs: () => ({ ...M.needs }),
+  feels: () => M.mood,
+  setIdle(seconds) { P.userIdle = seconds; },
   state: () => ({ ...P, log: undefined, cursor: P.cursor }),
   auto(v) { P.auto = !!v; if (P.auto) enter('idle', { dur: 1 }); },
   go(state, opts) { enter(state, opts || {}); },

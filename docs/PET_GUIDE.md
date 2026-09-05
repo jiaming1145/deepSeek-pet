@@ -61,7 +61,10 @@ Two extras make her feel alive rather than mechanical:
 | File | What it is |
 |---|---|
 | `spikes/side_rig/rig.js` | The heart of it. Loads the pieces, builds the skeleton, poses the bones for each action, runs the springs, handles gravity when you throw her, and draws everything 60 times a second. Everything else is a layer on top of this. |
-| `spikes/side_rig/pet.js` | Her behaviour and your interaction. Decides on her own to wander, sit, stretch, chat or nap; notices your cursor; handles click, drag and throw. If `rig.js` is the body, this is the personality. |
+| `spikes/side_rig/pet.js` | Your interaction with her, and the bridge between her mind and her body. Notices your cursor, handles click, drag and throw, and turns her chosen activity into an animation. |
+| `spikes/side_rig/mind.js` | What she wants. Four needs, a score for every activity, and the choice that follows. Pure arithmetic: no graphics, no network, no Electron, so it can be tested on its own. |
+| `spikes/side_rig/mind.test.mjs` | Nineteen tests of her behaviour, run with `node spikes/side_rig/mind.test.mjs`. They assert things a person would expect: left alone she gets lonely, petted regularly she stays awake, a hard drop frightens her and she recovers, she never repeats herself twice running. |
+| `spikes/side_rig/mind_trace.mjs` | Runs her mind for a simulated hour against a scripted day and writes the timeline, which becomes `evidence/mind_hour.png`. |
 | `spikes/side_rig/facekit.js` | Her face. Swaps her eyes, eyebrows and mouth for different drawn versions to make expressions, blinks on a timer, moves her mouth while talking, and fades smoothly between moods. |
 | `spikes/side_rig/rig.json` | The side-on skeleton and the list of pieces. Generated, not hand-written. |
 | `spikes/side_rig/rig_front.json` | The same for the front-on view. |
@@ -90,8 +93,50 @@ Two extras make her feel alive rather than mechanical:
 
 ## How she decides what to do
 
-Left alone she runs a simple loop: pick something to do, do it for a few seconds, pick again. Wandering picks a
-spot on your screen and walks or runs there. If nobody has touched her for a long while she may lie down for a nap.
+This is the part that is genuinely unusual. Every open-source desktop pet I am aware of picks its next animation
+by rolling dice. She does not.
+
+She carries four **needs**, each a number from empty to satisfied:
+
+| Need | Fills up when | Drains when |
+|---|---|---|
+| rest | she naps; sitting and standing take the edge off but never fully restore it | always, slowly; walking costs extra |
+| company | you click her, and slowly while your cursor is near | always; faster when you are gone |
+| play | she walks about or plays with her tail | always, slowly |
+| safety | quietly, over a minute or so | you drop or throw her; a hard landing hits it hard |
+
+Everything she can do is scored against those needs. Walking is worth a lot when she is bored and nothing when
+she is not. Napping scores high when she is tired **and** you have been away from your keyboard for a while, and
+is heavily penalised if you were just playing with her. Doing the same thing twice in a row is penalised so she
+does not look stuck. The highest score wins, and she commits to it for a while instead of twitching.
+
+Two details matter more than they sound. First, an activity that only pays off when you are present, such as
+talking to you, is scored down when you are not there. Without that she spends your whole absence calling out to
+an empty room, which is both sad and boring to watch. Second, your presence *slows* her loneliness but does not
+cure it, so being near her makes her want to interact rather than making her content to be ignored.
+
+Her **mood** is not stored separately; it is read off the needs. That is why her face never contradicts her
+behaviour. Frightened when safety is low, sleepy when rest is low, sad when she has been alone a while and then
+settling to calm, curious when your cursor is near, happy right after you touch her.
+
+She also knows whether you are actually at your computer. Electron reports your system idle time, which is the
+difference between "he is busy working" and "he has left the room" — and it is what lets her decide to nap rather
+than perform to nobody.
+
+You can see all of this: `evidence/mind_hour.png` charts a simulated hour, and the file `mind.js` writes a
+plain-English reason for every choice, which is kept in her log. Ask her `pet.mind()` in the console and she will
+tell you what she is doing, why, how she feels and what she needs.
+
+Measured over that simulated hour, her behaviour genuinely changes with the situation:
+
+| | with you at the desk | while you are away | when you come back |
+|---|---|---|---|
+| sitting and idling | 62% | 46% | 58% |
+| looking at you and talking | 20% | 17% | 26% |
+| walking about | 12% | 24% | 6% |
+
+Wandering picks a spot on your screen and walks or runs there. Napping only happens when she is genuinely tired
+and you are genuinely away.
 
 Your cursor overrides all of it. Come near and she looks at you. Linger behind her and she turns around. Hover and
 she brightens. Click and she reacts, and *what* she does depends on where you clicked: her head, her tail and her
@@ -146,9 +191,11 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
-- There is no brain yet. She picks actions at random, not because she understood anything. Wiring a language model
-  to choose her actions is the next large step, and the seam for it already exists: everything she can do is
-  reachable by name through `window.lab` and `window.pet`.
+- She has wants, but no understanding. She cannot be told anything, and she does not know what is on your screen.
+  A language model would slot in at the seam that already exists: `mind.js` exposes `summarise()`, which packs her
+  state into a few lines suitable for a prompt, and `suggest()`, which lets an outside brain propose her next
+  activity. A suggestion is honoured once, only if it names something she can actually do, and only at her next
+  decision point, so a slow or broken model can never freeze or hijack her.
 - She cannot speak or hear.
 - Three of the drawn eye shapes are weak: the dizzy spiral reads as a dark blob, and the half-closed lid reads as a
   hard bar. They come from the expression artwork, not from the code, so fixing them means redrawing those cells.
