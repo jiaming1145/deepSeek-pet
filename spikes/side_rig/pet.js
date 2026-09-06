@@ -128,7 +128,7 @@ function performFrom(asked, said, act) {
       : plan.target * st.w;
     enter('wander', { target: x, gait: plan.gait || 'walk', dur: 40, emotion: plan.emotion || undefined });
   } else if (AS_STATE[plan.action]) {
-    enter(AS_STATE[plan.action], { dur: plan.dur || (plan.action === 'dance' ? 9 : 6), emotion: plan.emotion || undefined });
+    enter(AS_STATE[plan.action], { dur: plan.dur || (plan.action === 'dance' ? 15 : 6), emotion: plan.emotion || undefined });
   } else if (AS_REACTION[plan.action]) {
     enter('react', { dur: plan.dur || 3, action: AS_REACTION[plan.action], emotion: plan.emotion || undefined });
   }

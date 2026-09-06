@@ -39,7 +39,7 @@ export const ACTIVITIES = {
   sit:     { serves: { rest: 1.0 },                 caps: { rest: 0.85 }, dur: [10, 22], view: 'front', baseline: 0.16 },
   stretch: { serves: { rest: 0.9, play: 0.4 },      caps: { rest: 0.7 },  dur: [2.6, 2.6], view: 'front', baseline: 0.10 },
   tail:    { serves: { play: 1.6 },                 dur: [2.2, 4.5], view: 'front' },
-  dance:   { serves: { play: 2.2 },                 dur: [6, 12],  view: 'front' },
+  dance:   { serves: { play: 2.2 },                 dur: [14, 20], view: 'front' },   // her routine is 24 beats long; cutting it at 6 s only ever showed the first move
   talk:    { serves: { company: 1.6, play: 0.5 },   dur: [4, 9],   view: 'front', needsYou: true },
   sleep:   { serves: { rest: 3.0, company: -0.3 },  dur: [45, 130], view: 'side'  },
 };

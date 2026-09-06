@@ -86,6 +86,23 @@ learned the hard way:
 - A generous box (`GRAB_PAD`) around her counts as interactive, because the hover-to-interactive round trip
   measures 15-64 ms and a fast swipe-and-grab lands inside it.
 
+Animation, if you are editing an action in `rig.js`:
+- Give the joints different phases. One shared sine across hips, chest and head is what made the first dance
+  look like a machine; half a beat of lag down the chain fixes most of it.
+- No corners in any curve. `Math.abs(Math.sin(x))` has a cusp at every zero and you can see it. Use
+  `0.5 - 0.5 * Math.cos(x)` for a bounce and `ease()` for anything that starts or stops.
+- Write holds in deliberately. A four-beat move that moves for four beats reads as worse than one that moves for
+  one and holds for three.
+- Scale the attack of an accent to how far the joint travels. Hips over 0.14 of a beat is a snap; an arm over
+  the same 0.14 of a beat crosses 28 px between two frames and strobes.
+- In the FRONT view a thigh rotation kicks the leg out sideways, it does not bend the knee. A bend is a
+  shortening (`userData.sy`), which is the trick `A.hop` already uses.
+- Judge it with numbers, not stills. `--out` probes in the scratchpad step the rig at 60 fps and dump every
+  joint angle and screen position; peak px-per-frame and its frame-to-frame change tell you what a contact sheet
+  cannot. A whole-body jolt above about 0.3 is visible.
+- Her sleeves, her dress and her hair are all the same navy. An arm held low against her body is invisible, so
+  choreography has to keep her hands out where they read against the background.
+
 ## Conventions
 
 - Stage: world units, `STAGE.k` px per unit, x from the window's left edge, y up from the floor.
