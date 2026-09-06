@@ -382,22 +382,197 @@ A.stretch = (tau) => {
   S_.eyesClosed = 0.8 * u; S_.mouthOpen = 0.6 * u;
 };
 A.celebrate = (tau) => { A.hop(tau); const raise = isFront() ? 2.1 : 2.8; bones.upper_arm_near.userData.pose = raise; bones.upper_arm_far.userData.pose = raise * farSign(); bones.forearm_near.userData.pose = 0.4 * Math.sin(tau * 12); bones.forearm_far.userData.pose = -0.4 * Math.sin(tau * 12); };
+// ---- her dance routine -------------------------------------------------------------------------------------
+// A dance is not a sine wave. The old one was exactly that: one short loop, every joint driven off the same beat
+// at the same instant, nothing ever still. That is why it read as leaping on the spot with the limbs flapping.
+// What follows is a routine instead - six moves that each say something different, played in order, with pauses
+// written into them. The stillness between the moves is what makes the movement read as dancing; a body that
+// never stops moving reads as a machine, however carefully the machine is tuned.
+const BPM = 108, BEAT = 60 / BPM;
+const ease = (u) => { const x = clamp(u, 0, 1); return x * x * (3 - 2 * x); };   // soft start, soft stop
+const swell = (u) => Math.sin(Math.PI * clamp(u, 0, 1));                          // 0 up to 1 and back
+// a hit: snaps on in a twelfth of a beat, then leans back out. This is what an accent feels like.
+const hit = (d, decay = 2.2, atk = 0.14) => (d < 0 ? 0 : Math.exp(-decay * d) * (d < atk ? ease(d / atk) : 1));
+// ease() is flat at both ends, so an accent snaps hard through the middle but never starts or stops dead.
+// atk is how long the snap takes, in beats: short for her hips, longer for an arm that has further to go.
+
+const blankPose = () => ({
+  hips: 0, chest: 0, neck: 0, head: 0, chestSy: 1,
+  armN: 0, armF: 0, foreN: 0, foreF: 0, handN: 0, handF: 0,   // "F" values are mirrored onto her far side
+  thighN: 0, thighF: 0, shinN: 0, shinF: 0, shortN: 0, shortF: 0,
+  rootX: 0, rootY: 0, rootRot: 0, squash: 0, mouth: 0.14, eyes: 0,
+  tail: [0, 0, 0, 0, 0, 0],
+});
+const mixPose = (A_, B_, k) => {
+  const o = blankPose();
+  for (const key of Object.keys(o)) {
+    if (key === 'tail') { for (let i = 0; i < 6; i++) o.tail[i] = lerp(A_.tail[i], B_.tail[i], k); }
+    else o[key] = lerp(A_[key], B_[key], k);
+  }
+  return o;
+};
+// a wave down the tail, so it trails the body instead of waving as one stiff rod
+const tailWave = (p, phase, amp, lag = 0.30) => { for (let i = 0; i < 6; i++) p.tail[i] = amp * Math.sin(phase - i * lag); };
+
+// 1. STEP-TOUCH. The plainest social dance step there is, and the one that establishes the pulse: she puts her
+//    weight on one foot, taps the other in beside it, and reverses. Arms stay low and swing across her.
+const mvStep = (bt, p) => {
+  const s = Math.sin(Math.PI * bt / 2);                    // one full left-right-left over the four beats
+  const sC = Math.sin(Math.PI * (bt - 0.5) / 2);           // the chest is half a beat behind the hips
+  const sK = Math.sin(Math.PI * (bt - 0.9) / 2);           // the head is behind the chest
+  p.rootX = 0.19 * s; p.hips = 0.20 * s; p.chest = -0.11 * sC; p.neck = 0.07 * sK; p.head = 0.17 * sK;
+  p.rootY = 0.028 * (0.5 - 0.5 * Math.cos(2 * Math.PI * bt));   // one soft bounce per beat, no corner at the bottom
+  p.squash = 0.03 * (0.5 + 0.5 * Math.cos(2 * Math.PI * bt));
+  p.armN = 0.85 + 0.55 * s; p.armF = 0.85 - 0.55 * s;      // the arms alternate rather than moving as a pair,
+  // and they stay out from her body: navy sleeves against a navy dress read as nothing at all
+  p.foreN = 0.55 + 0.22 * Math.sin(Math.PI * (bt - 0.6) / 2);
+  p.foreF = 0.55 - 0.22 * Math.sin(Math.PI * (bt - 0.6) / 2);
+  p.handN = 0.12 * sK; p.handF = -0.12 * sK;
+  const free = clamp(s, 0, 1), freeF = clamp(-s, 0, 1);     // the foot with no weight on it taps in
+  p.thighF = -0.20 * free; p.shortF = 0.16 * free;
+  p.thighN = 0.20 * freeF; p.shortN = 0.16 * freeF;
+  tailWave(p, Math.PI * bt / 2 - 0.7, 0.16);
+  p.mouth = 0.16;
+};
+
+// 2. BODY ROLL. A ripple that starts at her hips and arrives at her head late, twice. Nothing here is a rotation
+//    of the whole body: the point is that the parts arrive at different times.
+const mvRoll = (bt, p) => {
+  const w = (lag) => Math.sin(Math.PI * (bt - lag) / 2);
+  p.hips = 0.13 * w(0); p.chest = -0.10 * w(0.35); p.neck = 0.08 * w(0.6); p.head = 0.19 * w(0.7);
+  p.chestSy = 1 + 0.055 * w(0.35);
+  p.rootY = 0.035 + 0.030 * w(0.15);
+  p.squash = -0.025 * w(0.35);                             // she lengthens as the wave passes through her
+  const open = ease(bt / 1.6);
+  p.armN = 0.75 + 0.95 * open + 0.30 * w(0.5);             // arms float out and drift with the wave
+  p.armF = 0.75 + 0.95 * open + 0.30 * w(0.9);
+  p.foreN = 0.30 + 0.25 * w(0.6); p.foreF = 0.30 + 0.25 * w(1.0);
+  p.handN = 0.22 * w(0.8); p.handF = 0.22 * w(1.2);
+  p.shortN = 0.06 * (1 - w(0)); p.shortF = 0.06 * (1 + w(0));
+  tailWave(p, Math.PI * bt / 2 - 0.4, 0.20, 0.38);
+  p.mouth = 0.20;
+};
+
+// 3. SCOOP. One big asymmetric sweep: the near arm carves from her knee up over her head while she leans away
+//    from it, then the whole thing rings out. Asymmetry is most of what makes this look choreographed.
+const mvScoop = (bt, p) => {
+  const u = ease(bt / 2.4);
+  const ring = bt > 2.4 ? Math.exp(-3.2 * (bt - 2.4)) * Math.sin(8.5 * (bt - 2.4)) : 0;
+  p.armN = 0.12 + 1.92 * u + 0.20 * ring;                  // all the way overhead
+  p.armF = 0.12 + 0.62 * u - 0.14 * ring;                  // the other arm only opens partway: not a pair
+  p.foreN = 0.62 - 0.42 * u; p.foreF = 0.42 + 0.10 * u;
+  p.handN = 0.30 * u + 0.18 * ring; p.handF = -0.12 * u;
+  p.hips = -0.14 * u; p.chest = 0.16 * u + 0.05 * ring; p.neck = 0.09 * u; p.head = 0.25 * u + 0.10 * ring;
+  p.rootX = -0.055 * u; p.rootRot = 0.05 * u; p.rootY = 0.045 * swell(bt / 4);
+  p.squash = -0.05 * u;
+  p.shortN = 0.13 * u; p.shortF = 0.04 * u; p.thighN = -0.10 * u;
+  tailWave(p, 2.1 * u + 1.2, 0.24, 0.34);
+  p.mouth = 0.22 + 0.14 * u;
+};
+
+// 4. BOUNCE. Hands up, four bounces, the one moment in the routine that is allowed to be pure energy - and it
+//    works precisely because the moves either side of it are not.
+const mvBounce = (bt, p) => {
+  // three bounces, then the fourth beat is held with her hands still up. Four beats of continuous jumping was
+  // what read as leaping on the spot; the held beat is what turns it into a phrase.
+  const b = (0.5 - 0.5 * Math.cos(2 * Math.PI * Math.min(bt, 3))) * (1 - ease((bt - 3) / 0.6));
+  p.rootY = 0.085 * b; p.squash = 0.055 * (1 - b);
+  p.armN = 1.70 + 0.30 * b; p.armF = 1.70 + 0.30 * b;
+  p.foreN = 0.45 + 0.35 * b; p.foreF = 0.45 + 0.35 * b;
+  p.handN = 0.25 * Math.sin(2 * Math.PI * bt - 0.9); p.handF = 0.25 * Math.sin(2 * Math.PI * bt - 0.9);
+  const s = Math.sin(Math.PI * bt / 2);
+  p.hips = 0.10 * s; p.chest = -0.07 * s; p.head = 0.16 * Math.sin(Math.PI * (bt - 0.7) / 2);
+  p.rootX = 0.04 * s;
+  p.shortN = 0.14 * (1 - b); p.shortF = 0.14 * (1 - b);      // she loads into her knees between bounces
+  p.thighN = 0.05 * s; p.thighF = -0.05 * s;
+  tailWave(p, 2 * Math.PI * Math.min(bt, 3.2) - 0.5, 0.26, 0.26);
+  p.mouth = 0.34 + 0.26 * b; p.eyes = 0.18 * b;            // squinting with the effort, which reads as delight
+};
+
+// 5. HIP POP. Two sharp accents with genuine stillness between them. If you take one thing out of this routine
+//    it should not be this: the held beats are what stop the whole thing looking like a wobble.
+const mvPop = (bt, p) => {
+  const side = hit(bt) - hit(bt - 2);                        // the hips snap: they hardly travel, so they can
+  const upN = hit(bt, 2.0, 0.5), upF = hit(bt - 2, 2.0, 0.5);   // the arms take longer, because they are arms
+  p.hips = 0.27 * side; p.chest = -0.14 * side; p.neck = 0.07 * side; p.head = 0.21 * side;
+  p.rootX = 0.14 * side; p.rootRot = -0.055 * side;
+  p.rootY = 0.012 + 0.02 * (hit(bt, 5) + hit(bt - 2, 5));
+  p.armN = 0.45 + 1.15 * upN; p.armF = 0.45 + 1.15 * upF;
+  p.foreN = 0.75 - 0.40 * upN; p.foreF = 0.75 - 0.40 * upF;
+  p.handN = 0.20 * (upN - upF); p.handF = -0.20 * (upN - upF);
+  p.shortN = 0.13 * upF; p.shortF = 0.13 * upN;              // she sinks into the leg she is popping away from
+  p.chestSy = 1 + 0.02 * Math.sin(2 * Math.PI * bt * 0.5);   // she is still breathing while she holds
+  tailWave(p, 2.6 * (upN - upF) + 1.0, 0.22, 0.36);          // the tail follows the slow arm, not the fast hip
+  p.mouth = 0.18 + 0.10 * Math.abs(side);
+};
+
+// 6. POSE. She strikes it on the first beat and then holds it for three, which is a very long time in animation
+//    and exactly why it lands. Only her breath and her tail move.
+const mvPose = (bt, p) => {
+  // 0.6 of a beat is a third of a second: still a strike, but her hand no longer crosses 28 px between two
+  // frames, which is fast enough to strobe rather than read as speed.
+  const k = ease(bt / 0.68) * (1 - ease((bt - 3.1) / 0.9));
+  p.armN = 0.18 + 1.95 * k; p.armF = 0.18 - 0.32 * k;      // one arm thrown up, the other across her
+  p.foreN = 0.30 - 0.22 * k; p.foreF = 0.95 * k;
+  p.handN = 0.26 * k; p.handF = -0.30 * k;
+  p.hips = -0.13 * k; p.chest = 0.12 * k; p.neck = 0.10 * k; p.head = 0.27 * k;
+  p.rootX = -0.05 * k; p.rootRot = 0.045 * k; p.rootY = 0.02 * k;
+  p.squash = -0.035 * k;
+  p.thighN = -0.16 * k; p.shortN = 0.18 * k; p.shortF = 0.05 * k;
+  p.chestSy = 1 + 0.025 * Math.sin(2 * Math.PI * bt * 0.55);
+  tailWave(p, 1.9 + 0.55 * Math.sin(2 * Math.PI * bt * 0.5), 0.26 * k + 0.06, 0.40);
+  p.mouth = 0.24 * k + 0.12; p.eyes = 0.35 * ease((bt - 1.2) / 0.5) * (1 - ease((bt - 2.4) / 0.5));
+};
+
+const ROUTINE = [[mvStep, 4], [mvRoll, 4], [mvScoop, 4], [mvBounce, 4], [mvPop, 4], [mvPose, 4]];
+// how big she dances it. Delighted is not the same dance as tired, and it should not look like it.
+const VIGOUR = { cheerful: 1.14, happy: 1.10, affection: 1.06, smug: 1.02, curious: 0.95, gentle: 0.92,
+  pouty: 0.86, relaxed: 0.85, sad: 0.72, sleepy: 0.62, hurt: 0.68 };
+const ROUTINE_BEATS = ROUTINE.reduce((n, m) => n + m[1], 0);
+const XFADE = 0.5;   // beats of overlap, so one move flows into the next instead of cutting to it
+
 A.dance = (tau) => {
-  // front view: weight shifts side to side, arms alternate overhead, tail keeps the beat. Arm raises stay under
-  // ~2 rad for the same reason wave and stretch do - higher and the hair layer swallows them.
   poseReset();
-  const f = 1.5, ph = 2 * Math.PI * f * tau, sway = Math.sin(ph);
-  S_.rootY = 0.05 * Math.abs(Math.sin(2 * ph));
-  S_.rootX = 0.055 * sway;
-  bones.hips.userData.pose = 0.13 * sway;
-  bones.chest.userData.pose = -0.10 * sway;
-  bones.head.userData.pose = 0.09 * sway;
-  bones.upper_arm_near.userData.pose = 1.5 + 0.45 * Math.sin(ph);
-  bones.upper_arm_far.userData.pose = (1.5 + 0.45 * Math.sin(ph + Math.PI)) * farSign();
-  bones.forearm_near.userData.pose = 0.3 * Math.sin(2 * ph);
-  bones.forearm_far.userData.pose = -0.3 * Math.sin(2 * ph);
-  tailSway(tau * 2.2, 0.22);
-  S_.mouthOpen = 0.25 + 0.2 * Math.abs(sway);
+  let bt = (tau / BEAT) % ROUTINE_BEATS;
+  let i = 0;
+  while (bt >= ROUTINE[i][1]) { bt -= ROUTINE[i][1]; i = (i + 1) % ROUTINE.length; }
+  const [fn, len] = ROUTINE[i];
+  let pose = blankPose();
+  fn(bt, pose);
+  if (bt > len - XFADE) {                                  // ease into the next move over the last half beat
+    const nxt = ROUTINE[(i + 1) % ROUTINE.length];
+    const q = blankPose();
+    nxt[0](bt - len, q);                                   // the next move, started early and running negative
+    pose = mixPose(pose, q, ease((bt - (len - XFADE)) / XFADE));
+  }
+  // a small continuous groove underneath everything, so even a held pose is alive
+  const g = 2 * Math.PI * tau / (BEAT * 2);
+  pose.rootY += 0.006 * Math.sin(g);
+  pose.chestSy += 0.012 * Math.sin(g + 0.8);
+  const vig = VIGOUR[S_.emotion] ?? 1;
+  if (vig !== 1) {
+    for (const key of Object.keys(pose)) {
+      if (key === 'tail') { for (let t = 0; t < 6; t++) pose.tail[t] *= vig; }
+      else if (key === 'chestSy') pose.chestSy = 1 + (pose.chestSy - 1) * vig;
+      else if (key !== 'mouth' && key !== 'eyes') pose[key] *= vig;
+    }
+  }
+
+  const fs = farSign();
+  S_.rootX = pose.rootX; S_.rootY = pose.rootY; S_.rootRot = pose.rootRot; S_.squash = pose.squash;
+  bones.hips.userData.pose = pose.hips;
+  bones.chest.userData.pose = pose.chest; bones.chest.userData.sy = pose.chestSy;
+  bones.neck.userData.pose = pose.neck; bones.head.userData.pose = pose.head;
+  bones.upper_arm_near.userData.pose = pose.armN; bones.upper_arm_far.userData.pose = pose.armF * fs;
+  bones.forearm_near.userData.pose = pose.foreN; bones.forearm_far.userData.pose = pose.foreF * fs;
+  bones.hand_near.userData.pose = pose.handN; bones.hand_far.userData.pose = pose.handF * fs;
+  bones.thigh_near.userData.pose = pose.thighN; bones.thigh_far.userData.pose = pose.thighF * fs;
+  bones.shin_near.userData.pose = pose.shinN; bones.shin_far.userData.pose = pose.shinF * fs;
+  // a bent knee in the front view is a shortened leg, not a rotation - rotating a thigh here kicks it sideways
+  bones.thigh_near.userData.sy = 1 - 0.45 * pose.shortN; bones.shin_near.userData.sy = 1 - 0.85 * pose.shortN;
+  bones.thigh_far.userData.sy = 1 - 0.45 * pose.shortF; bones.shin_far.userData.sy = 1 - 0.85 * pose.shortF;
+  for (let t = 0; t < 6; t++) { const b = bones['tail_' + (t + 1)]; if (b && b.userData.head) b.userData.pose = pose.tail[t]; }
+  S_.mouthOpen = pose.mouth; S_.eyesClosed = pose.eyes;
 };
 A.tail_react = (tau) => { A.idle(tau); const k = Math.exp(-tau * 1.2) * Math.sin(tau * 9); for (const [i, n] of ['tail_1', 'tail_2', 'tail_3', 'tail_4', 'tail_5', 'tail_6'].entries()) bones[n].userData.pose = 0.35 * k * (0.4 + i * 0.15); };
 A.stumble = (tau) => { A.idle(tau); const u = Math.sin(Math.min(tau, 0.6) / 0.6 * Math.PI), m = BODY; bones.hips.userData.pose = m * 0.35 * u; bones.chest.userData.pose = m * 0.25 * u; S_.eyesClosed = 0.5 * u; S_.mouthOpen = 0.7 * u; S_.rootY = -0.05 * u; if (tau > 0.9) S_.next = 'idle'; };
@@ -615,7 +790,11 @@ function applyPose() {
   if (isFront()) for (const [layer, bone] of [['handwear_l', 'upper_arm_l'], ['handwear_r', 'upper_arm_r']]) {
     const m = layerMeshes[layer]; if (!m) continue;
     if (m.userData.baseOrder == null) m.userData.baseOrder = m.renderOrder;
-    m.renderOrder = Math.abs(bones[bone].userData.pose) > 0.9 ? 40 : m.userData.baseOrder;   // a raised arm is in front of the hair
+    // A raised arm draws in front of the hair. The test needs hysteresis: one bare threshold makes the layer pop
+    // in and out every time an arm crosses it, which is precisely what an arm does while she is dancing.
+    const raised = Math.abs(bones[bone].userData.pose);
+    m.userData.armUp = m.userData.armUp ? raised > 0.60 : raised > 0.85;
+    m.renderOrder = m.userData.armUp ? 40 : m.userData.baseOrder;
   }
   bones.root.position.set(restHead.root.x, restHead.root.y + (S_.rootY || 0), 0);
   bones.root.rotation.z = S_.rootRot || 0;

@@ -319,6 +319,57 @@ goes back to passing them through.
 
 ---
 
+## Her dance, and why it is built the way it is
+
+Worth its own section, because it is the clearest example in the whole project of the difference between
+*moving* and *looking alive*, and because the first version of it was bad in an instructive way.
+
+**The first version was one repeating wobble.** Every joint was driven off the same sine wave at the same
+instant: her hips, her chest and her head all leaned left at the same moment and all came back at the same
+moment, her arms sat permanently overhead twitching, and she bobbed up and down about three times a second. Two
+things made it look wrong. Everything moved together, which nothing alive does. And nothing ever stopped. It
+read, accurately, as a machine hopping on the spot.
+
+**What it is now is a routine.** Six moves, played in order, taking about thirteen seconds:
+
+| # | Move | What she does |
+|---|------|----------------|
+| 1 | Step-touch | Weight onto one foot, tap the other in beside it, reverse. The plainest social dance step there is, and it sets the pulse. |
+| 2 | Body roll | A ripple that starts at her hips and reaches her head late. |
+| 3 | Scoop | One arm carves a big arc up over her head while she leans away from it, then rings out. |
+| 4 | Bounce | Hands up, three bounces, then a held fourth beat. The one burst of pure energy. |
+| 5 | Hip pop | Two sharp accents with real stillness between them. |
+| 6 | Pose | She strikes a pose on the first beat and holds it for three. |
+
+Four ideas do most of the work, and they are worth knowing because they apply to every other animation here:
+
+- **Things arrive late.** Her hips lead, her chest is about half a beat behind them, her head is behind that. A
+  body is a chain, so movement takes time to travel up it. Driving everything off the same instant is the single
+  most reliable way to make a character look like a puppet.
+- **Stillness is part of the dance.** Beats 11, 17, 19, 21 and 22 are holds, where almost nothing moves. A dance
+  with no pauses in it is a washing machine. The holds are what make the bursts read as bursts.
+- **Not every joint accents at the same speed.** Her hips can snap across in a twentieth of a second because
+  they barely travel. Her arm covering sixty degrees in that same time is not an accent, it is a teleport. So
+  the sharpness of a hit is a setting, and the big limbs get a slower one. That is only the ordinary physical
+  fact that heavy things take longer to get going.
+- **Nothing is allowed to turn a corner.** Anywhere a curve has a sharp point in it, you see a jolt. The old
+  bounce used the absolute value of a sine wave, which comes to a point at the bottom of every step, and that
+  point was visible. Everything now eases in and out.
+
+**How it was checked.** Guessing at fluidity from a still image does not work, so the routine is measured
+instead. A probe steps her through all thirteen seconds sixty times a second and records every joint angle and
+every joint's position on screen. Two numbers matter: how far a joint moves between two frames (more than about
+a tenth of a radian and it strobes rather than reading as speed), and how much that changes from frame to frame
+(a spike there is a jolt). Fixing the accents dropped the worst whole-body jolt from 0.95 to 0.15, and every
+joint is now under the strobe threshold. Watch it: `spikes/side_rig/evidence/dance_routine.gif`. Frame by frame:
+`evidence/dance_routine_sheet.png`.
+
+**She dances it bigger when she is happier.** One number scales the whole routine according to her mood, so
+cheerful is about a sixth larger than neutral and sleepy is about a third smaller. Same choreography, different
+conviction.
+
+---
+
 ## Two problems worth understanding
 
 These two caused real, visible bugs, and knowing them will save you time.
@@ -361,6 +412,11 @@ survived so long.
 Honest list, so nothing reads as finished when it is not.
 
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
+- She dances one fixed routine. It is long enough that you rarely see it repeat, but it always starts at the
+  same move, and it is not aware of any music that might actually be playing.
+- Landing after a throw is not reproducible: run the screenshot helper twice and her hair sometimes flies out
+  into a spiky halo and sometimes does not. That is her hair springs going unstable, it depends on frame timing
+  rather than on anything in the animation, and it is not fixed.
 - Her face has a blink with a proper middle rung, double and sleepy blinks, and a jolt through her head and hair
   when a feeling arrives, but there are still no idle eye movements between blinks.
 - The words that move her are a fixed keyword list. She understands 跳舞 and 去左边, not an arbitrary instruction.
