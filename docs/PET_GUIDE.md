@@ -382,6 +382,25 @@ through anything that is *not* skin, so it keeps the white of the eye and the so
 skin. It has to judge by colour, not by distance: a wide-open eye's disc reaches further onto the cheek than a
 narrow one's, and an earlier distance-based version of this tool missed exactly that case.
 
+**A feeling could come back from the dead.** When her mood changes she gets a small physical jolt: a quick head
+snap and a kick through her hair. It fades out over about half a second, and the code that fades it works out
+how old the jolt is by comparing it against the rig's clock. One of the screenshot tool's entry points restarts
+that clock. If a mood had been set just beforehand, its jolt was suddenly *younger than zero* - and the fading
+term, which shrinks as something gets older, therefore grew instead. Measured, it drove her head to minus 4291
+radians, about 683 complete rotations, which flung the hair hanging off her head out to its limits and drew a
+spiky halo around her. The fix is one line: a jolt with a negative age belongs to a clock that no longer exists,
+so throw it away.
+
+It is worth knowing for two reasons beyond the bug itself. The running pet never hit it, because the pet uses a
+different entry point that leaves the clock alone - only the screenshot tool did, which meant the damage showed
+up as pictures that came out mangled on one run and clean on the next, and that reads as a flaky tool rather
+than as a bug. And it is a good reminder that a decay term is a trap: `exp(-k * age)` is a fade only while age
+is positive, and an explosion the moment it is not.
+
+Regression test: `npx electron ../../spikes/side_rig/mood_impulse.test.cjs` from `apps/desktop`. It fails on the
+old code and passes on the fixed code, and it keeps a control case that was always fine so a future change
+cannot quietly "fix" it by deleting the jolt entirely.
+
 **Left and right are easy to get backwards.** She is drawn facing one way, and to face the other way the whole
 drawing is flipped like a mirror. That means any pose written in code is already mirrored for free. Multiplying a
 pose by the facing direction *as well* flips it twice, which cancels out — the pose stops depending on which way she
@@ -414,9 +433,11 @@ Honest list, so nothing reads as finished when it is not.
 - She only walks along the bottom of the screen. No climbing the sides, no sitting on a window edge.
 - She dances one fixed routine. It is long enough that you rarely see it repeat, but it always starts at the
   same move, and it is not aware of any music that might actually be playing.
-- Landing after a throw is not reproducible: run the screenshot helper twice and her hair sometimes flies out
-  into a spiky halo and sometimes does not. That is her hair springs going unstable, it depends on frame timing
-  rather than on anything in the animation, and it is not fixed.
+- The screenshot tool is not perfectly reproducible. Roughly one run in four it catches her turn on the other
+  side of the flip - the turn takes 0.28 s and the tool photographs it at 0.24 s - and because which way she is
+  facing then persists, every later shot in that run is mirrored. It is the tool sampling too close to a state
+  change, not anything wrong with her, but it does mean a picture that differs from the last one is not by
+  itself evidence of a change.
 - Her face has a blink with a proper middle rung, double and sleepy blinks, and a jolt through her head and hair
   when a feeling arrives, but there are still no idle eye movements between blinks.
 - The words that move her are a fixed keyword list. She understands 跳舞 and 去左边, not an arbitrary instruction.

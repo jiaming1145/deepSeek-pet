@@ -86,6 +86,15 @@ learned the hard way:
 - A generous box (`GRAB_PAD`) around her counts as interactive, because the hover-to-interactive round trip
   measures 15-64 ms and a fast swipe-and-grab lands inside it.
 
+Two things about the rig's clock, `S_.t`, because one of them cost real time:
+- `lab.start()` leaves it alone; `lab.begin()` sets it back to zero. Anything holding a timestamp taken against
+  it - `S_.emoKick`, `S_.turn`, `S_.blend`, `S_.viewSwap` - is stale the moment `lab.begin()` runs, and stale
+  means its age goes negative. A decay written as `exp(-k * age)` then grows without limit: the mood impulse
+  reached -4291 rad on her head this way. Guard every one of them against a negative age, not just an old one.
+- It also means the screenshot tool and the running pet do not take the same code path, so a defect can live in
+  your evidence and not in the product, or the reverse. `mood_impulse.test.cjs` exercises both and keeps the
+  `lab.start()` case as a control.
+
 Animation, if you are editing an action in `rig.js`:
 - Give the joints different phases. One shared sine across hips, chest and head is what made the first dance
   look like a machine; half a beat of lag down the chain fixes most of it.

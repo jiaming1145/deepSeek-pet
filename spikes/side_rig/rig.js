@@ -872,7 +872,11 @@ function tick(dt) {
   // the impulse of a feeling arriving, decaying over about half a second
   if (S_.emoKick) {
     const age = S_.t - S_.emoKick.t0;
-    if (age > 0.7) S_.emoKick = null;
+    // A negative age means the clock was restarted under it (lab.begin does that), so this impulse belongs to a
+    // timeline that no longer exists. Left alone its decay term, exp(-6 * age), grows instead of shrinking: one
+    // measured case drove her head to -4291 radians, which whipped the hair chains attached to it straight out
+    // to their limits and produced the spiky halo that made screenshots look randomly broken. Drop a stale kick.
+    if (age < 0 || age > 0.7) S_.emoKick = null;
     else {
       const k = S_.emoKick.mag * Math.exp(-6 * age);
       bones.head.userData.pose += 0.07 * k * Math.sin(age * 34);
