@@ -46,8 +46,7 @@ DEEPSEEK_API_KEY=... pnpm --filter @ds/eval run session      # 20-turn session: 
 On Windows PowerShell, read the key inside the one command that needs it and never echo it:
 `$env:DEEPSEEK_API_KEY = (Get-Content $HOME\.ds\deepseek.key -Raw).Trim(); pnpm --filter @ds/eval run eval`.
 
-Reports land in the gitignored `eval/out/`. The copies that back the claims below are in
-`docs/evidence/phase2/`.
+Reports land in the gitignored `eval/out/`.
 
 ### End-to-end
 
@@ -61,39 +60,8 @@ The `20 real turns` test is skipped unless `DEEPSEEK_API_KEY` is set. The other 
 run. The Phase 1 browser harness (`pnpm --filter @ds/desktop run test:e2e`) is a separate config and
 is unaffected.
 
-### What the Phase 2 numbers cover
-
-**The live half is unmeasured.** The DeepSeek account this was built against returns HTTP 402
-*Insufficient Balance* for every chat completion, so Phase 2 ships **no** judged eval result, no
-first-sentence latency, no prompt-cache figure, no paint latency, and **zero** of the three
-permitted persona tuning iterations. None of it is estimated and no offline number stands in for a
-live one; `docs/evidence/phase2/not-measured.md` carries the verification and the exact commands
-that produce all of it once the balance is topped up.
-
-What the harness *would* measure is 138 eval turns (46 prompts × 3 runs), not the addendum's
-200–500-turn denominators, so the writing-quality axes are directional; 27 gate rows are checked
-(17 judge/derived axes and 10 local shape metrics), of which `trait_hit` reports SKIP because Phase 2
-ships no trait probes; A8 (persona bleed across three personas) is out of scope because only one
-persona exists, and A10 (self-fact consistency) has no probe at all and is deferred with it. The
-judge and the linter read the raw reply (tags stripped, before `sanitizeForDisplay`); the shape
-metrics read the sanitized text the user sees. What *was* measured — the built app on a virgin profile, in both themes, on the real
-desktop, with CPU and working-set samples and six in-app checks — is indexed in
-[`docs/evidence/phase2/README.md`](docs/evidence/phase2/README.md), and everything Phase 2
-deliberately did not build is listed in
-[`docs/evidence/phase2/deferred.md`](docs/evidence/phase2/deferred.md).
-
 ## Credits
 This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion.
 
 See NOTICE for third-party licenses.
 
-## Live2D artwork production pipeline
-
-The project-local Codex production blueprint is installed alongside the desktop app. It covers the
-gated workflow from an approved character brief or canonical image through separated transparent
-parts, QA, Photoshop PSD packaging, and the final Cubism handoff. It does not claim to automate
-Cubism rigging or produce a finished `.cmo3`/`.moc3` model.
-
-Start with [`docs/LIVE2D_PIPELINE.md`](docs/LIVE2D_PIPELINE.md), then follow
-[`docs/BUILD_PHASES.md`](docs/BUILD_PHASES.md). The reusable project skills live under
-`.agents/skills/`, and the phase implementation prompts live under `build-prompts/`.
