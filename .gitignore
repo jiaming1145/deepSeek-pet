@@ -17,8 +17,6 @@ apps/desktop/test-results/
 apps/desktop/playwright-report/
 # agent scratch (SDD ledger, briefs, review packages)
 .superpowers/
-# agent worktrees
-.claude/worktrees/
 # gpt-collab MCP session state (agent scratch, like .superpowers/)
 .gptmcp/
 # secrets and key material — never commit
@@ -29,12 +27,8 @@ apps/desktop/playwright-report/
 *.key
 *.pfx
 *.p12
-# MCP / tool scratch. Only the generated subdirectories: apps/desktop/.impeccable/config.json is
-# checked in on purpose, so `.impeccable/` as a whole must NOT be ignored.
+# MCP / tool scratch
 .playwright-mcp/
-**/.impeccable/mocks/
-**/.impeccable/review/
-**/.impeccable/questions/
 
 # Live2D artwork production pipeline
 .venv/
@@ -45,3 +39,30 @@ __pycache__/
 runs/
 *.psd
 *.psb
+
+# Agent tooling and agent-written prose stay local. None of it is needed to run the app, so it is
+# kept out of the public repo. Re-add one file deliberately with `git add -f <path>`.
+/.claude/
+/.serena/
+/.agents/
+/codex-prompts/
+/build-prompts/
+/plugin-template/
+/config/
+/mcp/
+/uxp/
+/docs/
+/artifacts/
+**/.impeccable/
+**/evidence/
+**/evidence_runtime/
+/CLAUDE.md
+/AGENTS.md
+/FILE_INVENTORY.txt
+/scripts/build_plugin.py
+/scripts/validate_bundle.py
+/scripts/install_prompts.*
+*.md
+!/README.md
+!/eval/judge.md
+!/spikes/vrm/anim/SOURCES.md
