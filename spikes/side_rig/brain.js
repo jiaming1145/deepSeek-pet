@@ -102,7 +102,7 @@ function request(key, body, timeoutMs) {
 }
 
 function createBrain(opts = {}) {
-  const key = opts.key || readKey(opts.keyFile);
+  const key = opts.key || readKey(opts.keyFile, opts.env);
   return {
     enabled: !!key,
     key,                              // never leaves this process

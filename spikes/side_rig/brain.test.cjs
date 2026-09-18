@@ -49,16 +49,24 @@ console.log('she does not pester the endpoint');
 
 console.log('a missing key disables her brain rather than breaking her');
 {
-  const b = createBrain({ keyFile: 'C:/definitely/not/a/key/file' });
+  // env: {} so the test means the same thing on a machine where DEEPSEEK_API_KEY is set
+  const b = createBrain({ keyFile: 'C:/definitely/not/a/key/file', env: {} });
   ok('no key means disabled', b.enabled === false);
   think(b, STATE, '', ACTS).then((r) => ok('and thinking simply returns nothing', r === null));
 }
 
 console.log('the key can come from the environment instead of the key file');
 {
-  ok('DEEPSEEK_API_KEY wins when set', readKey('C:/definitely/not/a/key/file', { DEEPSEEK_API_KEY: ' sk-env ' }) === 'sk-env');
-  ok('a blank variable falls through to the file', readKey('C:/definitely/not/a/key/file', { DEEPSEEK_API_KEY: '  ' }) === null);
-  ok('and no variable at all reads the file', readKey('C:/definitely/not/a/key/file', {}) === null);
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-test-'));
+  const keyFile = path.join(dir, 'deepseek.key');
+  fs.writeFileSync(keyFile, 'sk-file\n');
+  ok('DEEPSEEK_API_KEY wins even over an existing key file', readKey(keyFile, { DEEPSEEK_API_KEY: ' sk-env ' }) === 'sk-env');
+  ok('a blank variable falls through to the file', readKey(keyFile, { DEEPSEEK_API_KEY: '  ' }) === 'sk-file');
+  ok('and no variable at all reads the file', readKey(keyFile, {}) === 'sk-file');
+  ok('neither means no key', readKey('C:/definitely/not/a/key/file', {}) === null);
+  ok('createBrain passes the environment through', createBrain({ keyFile: 'C:/definitely/not/a/key/file', env: { DEEPSEEK_API_KEY: 'sk-env' } }).enabled === true);
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 if (process.argv.includes('--live')) {

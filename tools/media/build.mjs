@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const argOf = (flag, dflt) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : dflt; };
+const argOf = (flag, dflt) => { const i = process.argv.indexOf(flag); const v = i >= 0 ? process.argv[i + 1] : undefined; return v != null && !v.startsWith('--') ? v : dflt; };
 const REC = path.resolve(ROOT, argOf('--rec', '.cache/media'));
 const OUT = path.resolve(ROOT, argOf('--out', 'media'));
 const ONLY = argOf('--scene', null);
@@ -29,33 +29,33 @@ const WALL = { c0: '#eef2f9', c1: '#d9e1ef' };   // her navy and white need a li
 const frames = (dir) => fs.readdirSync(dir).filter((f) => /^frame_\d{4}\.png$/.test(f)).sort().map((f) => path.join(dir, f));
 const run = (cmd, args) => execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 
-// Union of the opaque area over the recording (every 5th frame is enough), so the crop follows her path and the
-// speech bubble instead of the whole window. The bottom edge stays put: she stands on it.
+// Union of the opaque area over every frame of the recording, so the crop follows her path, the speech bubble
+// and the top of a throw instead of the whole window. The bottom edge stays put: she stands on it.
 function pathBox(files, W, H, pad) {
   let x0 = W, y0 = H, x1 = 0, y1 = 0;
-  for (let i = 0; i < files.length; i += 5) {
+  for (let i = 0; i < files.length; i++) {
     const m = run('magick', [files[i], '-format', '%@', 'info:']).trim().match(/(\d+)x(\d+)\+(\d+)\+(\d+)/);
     if (!m) continue;
     const [w, h, x, y] = m.slice(1).map(Number);
     if (!w || !h) continue;
     x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + h);
   }
+  if (x1 <= x0 || y1 <= y0) throw new Error('no opaque pixels in any frame; is the recording empty?');
   const even = (n) => n - (n % 2);
   const cx0 = even(Math.max(0, x0 - pad)), cy0 = even(Math.max(0, y0 - pad));
   const cx1 = even(Math.min(W, x1 + pad));
   return { x: cx0, y: cy0, w: cx1 - cx0, h: H - cy0 };
 }
 
-// gifsicle's lossy LZW takes about a third off with no visible change. It is looked for on PATH, then through
-// npx; when neither works the GIF is simply left as ffmpeg wrote it.
+// gifsicle's lossy LZW takes about a third off with no visible change. It is looked for on PATH (argv, no
+// shell), then through npx, which on Windows has to go through cmd.exe: that path is only taken when the file
+// name is safe to quote there (no % signs). When neither works the GIF is left as ffmpeg wrote it.
 function shrink(gif) {
   const args = ['-O3', '--lossy=40', gif, '-o', gif + '.tmp'];
-  for (const [cmd, a] of [['gifsicle', args], ['npx', ['--yes', 'gifsicle', ...args]]]) {
-    try {
-      execSync([cmd, ...a].map((x) => JSON.stringify(x)).join(' '), { stdio: ['ignore', 'pipe', 'pipe'] });
-      fs.renameSync(gif + '.tmp', gif);
-      return true;
-    } catch (e) { fs.rmSync(gif + '.tmp', { force: true }); }
+  const attempts = [() => execFileSync('gifsicle', args, { stdio: ['ignore', 'pipe', 'pipe'] })];
+  if (!gif.includes('%')) attempts.push(() => execSync(['npx', '--yes', 'gifsicle', ...args].map((x) => `"${x}"`).join(' '), { stdio: ['ignore', 'pipe', 'pipe'] }));
+  for (const attempt of attempts) {
+    try { attempt(); fs.renameSync(gif + '.tmp', gif); return true; } catch (e) { fs.rmSync(gif + '.tmp', { force: true }); }
   }
   return false;
 }
@@ -108,4 +108,5 @@ function build(scene, cfg) {
   console.log(`${scene}: ${files.length} frames, crop ${box.w}x${box.h}+${box.x}+${box.y} -> ${gif} (${probe.replace(/,/g, 'x').replace(/x(\d+)$/, ', $1 frames')}, ${kb} KB${shrunk ? '' : ', gifsicle not found'})`);
 }
 
+if (ONLY && !SCENES[ONLY]) { console.error(`unknown scene '${ONLY}'; one of ${Object.keys(SCENES).join(', ')}`); process.exit(1); }
 for (const [scene, cfg] of Object.entries(SCENES)) if (!ONLY || ONLY === scene) build(scene, cfg);

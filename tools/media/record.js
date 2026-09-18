@@ -17,15 +17,19 @@ const os = require('node:os');
 const RIG = path.join(__dirname, '..', '..', 'spikes', 'side_rig');
 const { createBrain, think, chat } = require(path.join(RIG, 'brain.js'));
 
-const argOf = (flag, dflt = null) => { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : dflt; };
+// A flag's value is the next argument, unless that is itself a flag (then the value is missing, not '--x').
+const argOf = (flag, dflt = null) => { const i = process.argv.indexOf(flag); const v = i >= 0 ? process.argv[i + 1] : undefined; return v != null && !v.startsWith('--') ? v : dflt; };
 const SCENE = argOf('--scene', 'hero');
 const OUT = path.resolve(argOf('--out', path.join(os.tmpdir(), 'whalechan-media', SCENE)));
 const FPS = 20;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.commandLine.appendSwitch('allow-file-access-from-files');
-// Her memory must not be the owner's real one: a recording session is not a real visit.
-app.setPath('userData', path.join(os.tmpdir(), 'whalechan-media-userdata'));
+// Her memory must not be the owner's real one, and one recording must not remember another: each run gets a
+// fresh profile that is deleted on exit.
+const USER_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'whalechan-media-'));
+app.setPath('userData', USER_DATA);
+app.on('quit', () => { try { fs.rmSync(USER_DATA, { recursive: true, force: true }); } catch (e) { /* temp dir; the OS will get it */ } });
 
 const SCENES = {
   hero: { w: 1000, h: 520, height: 330, x: 0.42 },
@@ -59,12 +63,14 @@ app.whenReady().then(async () => {
   await win.loadFile(path.join(RIG, 'index.html'), { query: { rig: 'rig.json', front: 'rig_front.json', height: String(cfg.height), floor: '8', pet: '1' } });
 
   const js = (s) => win.webContents.executeJavaScript(s, true);
-  for (let i = 0; i < 300; i++) {
+  let ready = false;
+  for (let i = 0; i < 300 && !ready; i++) {
     const err = await js('window.__error || null');
     if (err) { console.error('RENDERER ERROR\n' + err); app.exit(1); return; }
-    if (await js('!!window.__ready')) break;
-    await wait(100);
+    ready = await js('!!window.__ready');
+    if (!ready) await wait(100);
   }
+  if (!ready) { console.error('renderer never became ready (30 s); nothing recorded'); app.exit(1); return; }
   const info = await js('lab.info()');
   console.log('ready', JSON.stringify({ view: info.view, bones: info.bones, layers: info.layers, actions: info.actions.length, moods: info.kitMoods.length }));
 

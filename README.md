@@ -59,9 +59,9 @@ The tray icon (bottom right of Windows) has Chat, Wave, Nap, Autopilot and an ou
 
 **Give her a brain (optional).** Get a key from [platform.deepseek.com](https://platform.deepseek.com/) and
 either set `DEEPSEEK_API_KEY` in the environment or save it to `~/.ds/deepseek.key`. She then thinks about what
-to do every 45 seconds or so, comments on things, and answers in the chat box. The key never leaves the Electron
-main process, and without it she makes no network requests at all. See [SECURITY.md](SECURITY.md) for exactly
-what is sent.
+to do every 45 seconds or so, comments on things, and answers in the chat box. The key is read only by the
+Electron main process and never reaches the page that renders her; without it she makes no network requests at
+all. See [SECURITY.md](SECURITY.md) for exactly what is sent.
 
 ## What she does
 
@@ -70,16 +70,16 @@ what is sent.
 - 🤏 **You can pick her up.** Real hold, swing and throw physics with a startle, a dangling tail that curls when
   she is held high, distress when shaken, and a landing pose.
 - 💬 **Talk to her and she acts it out.** Ask her to dance, come over, sit down or go to sleep; she replies in
-  character with stage directions, and her body follows the brackets.
-- 🎭 **18 moods on a drawn face.** Fourteen eye states, fourteen mouths, seven brows and effects (blush, tears,
+  character with stage directions, and her body acts them out.
+- 🎭 **18 moods on a drawn face.** Fourteen eye states, fourteen mouths, six brows and effects (blush, tears,
   sweat, hearts) combined from her own artwork, with blinks, gaze and visemes while she talks.
 - 💃 **She dances a routine**, not an oscillation: six moves at 108 BPM with holds and accents.
 - 🧡 **She remembers you.** When you first met, how long you have spent together, how often you petted or threw
   her, and how she felt when you closed her. Come back after a day and she has something to say about it.
 - 🖥️ **Lives on the desktop, not in a window.** Click-through everywhere except her own pixels (per-pixel hit
   testing), always on top, walks along the taskbar edge, knows whether you are actually at the computer.
-- 🔒 **Safe by construction.** No keyboard hooks, no clipboard, no screenshots; the brain is rate-limited and
-  validated so a bad reply can never break her.
+- 🔒 **Safe by construction.** No keyboard hooks, no clipboard, no screenshots; her own thoughts are
+  rate-limited and every reply is validated, so a bad answer can never break her.
 
 <p align="center">
   <img src="media/chat.gif" width="880" alt="Typing a request in the chat box; she answers in character and dances in place">
@@ -113,7 +113,7 @@ a turn rather than a cut. The runtime is plain [three.js](https://threejs.org/) 
 | Need | Fills when | Drains when |
 |---|---|---|
 | rest | she naps (sitting only takes the edge off) | always, slowly; walking costs extra |
-| company | you click her, and slowly while your cursor is near | always; faster when you are gone |
+| company | you click her, and slowly while your cursor is near | always; your presence slows it |
 | play | she wanders or plays with her tail | always, slowly |
 | safety | quietly, over a minute | you drop or throw her |
 
@@ -122,10 +122,12 @@ just playing with her. Repeating herself is penalised so she never looks stuck. 
 while instead of twitching. Her behaviour was tuned against a simulated hour (`media/mind_hour.png` shows
 one), because every one of the four tuning traps found so far was invisible by eye and obvious on a chart.
 
-**Her brain.** The language model runs only in the main process, one call per 45 seconds at most, with a
-timeout, and must answer with the name of an activity she actually has; anything else is discarded. In the chat
-box the persona writes her stage directions in brackets, and only the brackets can move her, so nothing she
-merely *says* can trigger an action. The out-of-character switch in the tray is a real switch, not a magic
+**Her brain.** The language model runs only in the main process. Her own thoughts are one call per 45 seconds
+at most (60 an hour), with a timeout, and must answer with the name of an activity she actually has; anything
+else is discarded. A chat message is one call each, with the last eight turns as context. In the chat box the
+model states her action on a separate machine-only line and writes her stage directions in brackets; what you
+asked for, that line and those brackets are the only things that move her, so nothing she merely *says* in
+prose can trigger an action. The out-of-character switch in the tray is a real switch, not a magic
 string the model has to notice.
 
 **Tested where it can be.** Her mind, voice, memory, performance reader and brain are plain Node modules with
