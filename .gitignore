@@ -64,5 +64,10 @@ runs/
 /scripts/install_prompts.*
 *.md
 !/README.md
+!/README.zh-CN.md
+!/CONTRIBUTING.md
+!/CODE_OF_CONDUCT.md
+!/SECURITY.md
+!/.github/**/*.md
 !/eval/judge.md
 !/spikes/vrm/anim/SOURCES.md

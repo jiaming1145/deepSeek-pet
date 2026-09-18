@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and show-and-tell
+    url: https://github.com/jiaming1145/deepSeek-pet/discussions
+    about: Ask how something works, or show what she did on your desktop.
+  - name: Security
+    url: https://github.com/jiaming1145/deepSeek-pet/security/advisories/new
+    about: Report a key leak or anything security-related privately.

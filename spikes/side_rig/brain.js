@@ -22,7 +22,11 @@ const KEY_FILE = path.join(os.homedir(), '.ds', 'deepseek.key');
 // asked for, not the ALL_CAPS token line, because the tokens are only labels on those Chinese rules.
 const { personaFor } = require('./persona.js');
 
-function readKey(file = KEY_FILE) {
+// The key comes from the DEEPSEEK_API_KEY environment variable, or else from the key file. Either way it is
+// read here, in the main process, and never reaches the page.
+function readKey(file = KEY_FILE, env = process.env) {
+  const fromEnv = (env.DEEPSEEK_API_KEY || '').trim();
+  if (fromEnv) return fromEnv;
   try {
     const k = fs.readFileSync(file, 'utf8').trim();
     return k || null;
@@ -164,7 +168,7 @@ function splitAction(raw) {
 // A real conversation. Separate from think(): no activity to choose, a much longer answer, its own rate limit
 // (the owner is waiting for this one, so it may not be silently dropped), and the last few turns for context.
 async function chat(brain, turns, state, history) {
-  if (!brain.enabled) return { error: brain.lastError || 'no API key at ~/.ds/deepseek.key' };
+  if (!brain.enabled) return { error: brain.lastError || 'no API key: set DEEPSEEK_API_KEY or write it to ~/.ds/deepseek.key' };
   brain.calls++;
   const context = [
     `（她此刻在${state.doing}，心情${state.mood}。`,

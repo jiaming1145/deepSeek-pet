@@ -1,67 +1,185 @@
-# ds — DeepSeek-driven Live2D desktop companion
+<h1 align="center">🐳 Whale-chan · 鲸鱼娘</h1>
 
-Windows desktop pet with a Live2D avatar and a DeepSeek brain. Phase 1 = stage. Phase 2 = 对话.
+<p align="center">
+  <b>A desktop pet with a mind of her own.</b><br>
+  She wants things, decides for herself, talks back in character, and you can pick her up and throw her.
+</p>
 
-## Setup
-1. `npm i -g pnpm@10`
-2. `git submodule update --init`
-3. `pnpm install`
-4. `pnpm fetch-sdk`  (downloads the Live2D Cubism SDK zip: proprietary Core + sample models; ~21 MB)
-5. `pnpm dev`
+<p align="center">
+  English | <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-## Phase 2 — 对话 (brain · 对话框 · 输入)
+<p align="center">
+  <a href="https://github.com/jiaming1145/deepSeek-pet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jiaming1145/deepSeek-pet/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/jiaming1145/deepSeek-pet?color=2f5ba8"></a>
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4">
+  <img alt="Electron 43" src="https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white">
+  <img alt="DeepSeek V4" src="https://img.shields.io/badge/brain-DeepSeek%20V4-4D6BFE">
+  <a href="https://github.com/jiaming1145/deepSeek-pet/commits/main"><img alt="last commit" src="https://img.shields.io/github/last-commit/jiaming1145/deepSeek-pet?color=555"></a>
+</p>
 
-She talks. Type Chinese in the composer, DeepSeek streams a reply, the stream is parsed into
-emotion-tagged sentences and typed into the ADV dialogue band with mouth sync, and every turn is
-written to a local SQLite history you can reread. The band sits over her lower third and extends
-left from her body, so she stands in its right third and her face stays clear; the composer opens
-on the band's own rect.
+<p align="center">
+  <img src="media/hero.gif" width="720" alt="Whale-chan greets the cursor, gets picked up and thrown, complains, walks back and dances">
+</p>
 
-### API key
+She is a drawing of a whale-girl maid, cut into layers and given a skeleton, living in a click-through
+window on your desktop. Nothing about her is a video or a 3D model: her hair, tail and skirt are springs, her
+face is made of swappable drawn pieces, and every move is code posing bones at 60 fps.
 
-Enter it once in the key window (tray → `设置 API Key`). It is encrypted with Electron
-`safeStorage` and stored at `%APPDATA%\ds\key.bin`; it is never written in plaintext. Conversations
-are sent to DeepSeek, whose servers are in mainland China, and replies are AI-generated.
+What makes her different from other desktop pets is **why** she moves. She does not roll dice for her next
+animation. She carries four needs (rest, company, play, safety) that fill and drain as you interact with her or
+leave her alone, scores everything she could do against them, and picks the best. Her mood is derived from those
+same needs, so her face and her behaviour can never disagree. An optional [DeepSeek](https://www.deepseek.com/)
+brain gives her a voice and a personality on top; she works completely without it.
 
-For development only, `DS_DEV_DEEPSEEK_KEY` is read from the environment when the app is not
-packaged; it is held in memory for that run and never persisted. `DEEPSEEK_API_KEY` is reserved for
-the tests and the eval harness — the app never reads it. `DS_FAKE_BRAIN=1` swaps in a scripted
-client, also unpackaged-only.
+## Try her
 
-### Secrets
-
-`pnpm install` runs the `prepare` script, which sets `core.hooksPath` to the versioned `.githooks/`.
-Its `pre-commit` rejects any staged addition matching `sk-[A-Za-z0-9]{20,}` and prints the offending
-file, so a real DeepSeek key cannot be committed; screenshots of the key window must use an empty
-field, because the hook cannot inspect PNGs.
-
-### Eval harness
-
-```
-pnpm --filter @ds/eval run eval:dry                          # offline: fixture, lint, report plumbing
-DEEPSEEK_API_KEY=... pnpm --filter @ds/eval run eval         # 46 prompts x 3 runs = 138 turns + judge pass
-DEEPSEEK_API_KEY=... pnpm --filter @ds/eval run session      # 20-turn session: latency + cache hit
+```bash
+git clone https://github.com/jiaming1145/deepSeek-pet.git
+cd deepSeek-pet
+pnpm install
+pnpm pet
 ```
 
-On Windows PowerShell, read the key inside the one command that needs it and never echo it:
-`$env:DEEPSEEK_API_KEY = (Get-Content $HOME\.ds\deepseek.key -Raw).Trim(); pnpm --filter @ds/eval run eval`.
+Needs [Node 24+](https://nodejs.org/) and [pnpm 10](https://pnpm.io/installation) (`npm i -g pnpm@10`).
+Windows 10/11 is where she is developed and verified; she is Electron and three.js, so macOS and Linux should
+work but are untested (reports welcome).
 
-Reports land in the gitignored `eval/out/`.
+| You | Her |
+|---|---|
+| Hover | She looks at the cursor, and turns around if you stay behind her |
+| Click | A reaction that depends on where you touched her (head, tail, skirt...) |
+| Double-click or `C` | Opens the chat box |
+| Drag | Picks her up. She startles, dangles, and panics if you shake her |
+| Let go | She drops, or flies if you throw her, and lands with an opinion |
+| Leave her alone | She wanders, sits, stretches, plays with her tail, naps when you are away |
+| `P` / `Esc` | Autopilot on or off / quit (click her first so she has focus) |
 
-### End-to-end
+The tray icon (bottom right of Windows) has Chat, Wave, Nap, Autopilot and an out-of-character switch.
 
-```
-pnpm --filter @ds/desktop build
-pnpm --filter @ds/desktop run test:e2e:electron              # launches the real app, writes evidence
-```
+**Give her a brain (optional).** Get a key from [platform.deepseek.com](https://platform.deepseek.com/) and
+either set `DEEPSEEK_API_KEY` in the environment or save it to `~/.ds/deepseek.key`. She then thinks about what
+to do every 45 seconds or so, comments on things, and answers in the chat box. The key never leaves the Electron
+main process, and without it she makes no network requests at all. See [SECURITY.md](SECURITY.md) for exactly
+what is sent.
 
-The `20 real turns` test is skipped unless `DEEPSEEK_API_KEY` is set. The other four run offline on
-`DS_FAKE_BRAIN=1` against a throwaway user-data directory, so every one of them is a genuine first
-run. The Phase 1 browser harness (`pnpm --filter @ds/desktop run test:e2e`) is a separate config and
-is unaffected.
+## What she does
 
-## Credits
-This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion.
+- 🧠 **She wants things.** Four needs, a score for every activity, and a plain-language reason for every choice,
+  kept in her log so her behaviour is explainable.
+- 🤏 **You can pick her up.** Real hold, swing and throw physics with a startle, a dangling tail that curls when
+  she is held high, distress when shaken, and a landing pose.
+- 💬 **Talk to her and she acts it out.** Ask her to dance, come over, sit down or go to sleep; she replies in
+  character with stage directions, and her body follows the brackets.
+- 🎭 **18 moods on a drawn face.** Fourteen eye states, fourteen mouths, seven brows and effects (blush, tears,
+  sweat, hearts) combined from her own artwork, with blinks, gaze and visemes while she talks.
+- 💃 **She dances a routine**, not an oscillation: six moves at 108 BPM with holds and accents.
+- 🧡 **She remembers you.** When you first met, how long you have spent together, how often you petted or threw
+  her, and how she felt when you closed her. Come back after a day and she has something to say about it.
+- 🖥️ **Lives on the desktop, not in a window.** Click-through everywhere except her own pixels (per-pixel hit
+  testing), always on top, walks along the taskbar edge, knows whether you are actually at the computer.
+- 🔒 **Safe by construction.** No keyboard hooks, no clipboard, no screenshots; the brain is rate-limited and
+  validated so a bad reply can never break her.
 
-See NOTICE for third-party licenses.
+<p align="center">
+  <img src="media/chat.gif" width="880" alt="Typing a request in the chat box; she answers in character and dances in place">
+</p>
 
+<table align="center">
+  <tr>
+    <td align="center" width="30%"><img src="media/dance.gif" width="300" alt="Her dance routine"><br><sub>the routine, as she dances it</sub></td>
+    <td align="center"><img src="media/moods.png" alt="Eight of her moods: happy, shy, pouty, confused, hurt, cheerful, gentle, panic"><br><sub>eight of her eighteen moods</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="media/carry.png" alt="Picking her up: startle, tail hanging when held low, tail curling when held high, panic when shaken, dropped, landing"><br>
+  <sub>picking her up: startle, hang, curl, panic when shaken, drop, land</sub>
+</p>
+
+## How she works
+
+**From one drawing to a rig.** Her side view and her front view each went through
+[See-through](https://github.com/shitagaki-lab/see-through), which separates a character drawing into layers
+and paints in what was hidden (the far arm, the hair behind the head). A script derives a skeleton from the
+layer shapes; nobody placed a bone by hand. At runtime each layer is glued to a bone, bendy parts (tail, hair,
+skirt) are skinned across a chain with springs, and actions are small functions of time that pose the bones.
+Locomotion uses the side view, facing you uses the front view, and she squashes between the two so it reads as
+a turn rather than a cut. The runtime is plain [three.js](https://threejs.org/) in an
+[Electron](https://www.electronjs.org/) window: no Live2D, no Spine.
+
+**Her mind.** Everything she can do is scored against her needs:
+
+| Need | Fills when | Drains when |
+|---|---|---|
+| rest | she naps (sitting only takes the edge off) | always, slowly; walking costs extra |
+| company | you click her, and slowly while your cursor is near | always; faster when you are gone |
+| play | she wanders or plays with her tail | always, slowly |
+| safety | quietly, over a minute | you drop or throw her |
+
+Napping scores high when she is tired *and* you have been away from the keyboard, and is penalised if you were
+just playing with her. Repeating herself is penalised so she never looks stuck. She commits to a choice for a
+while instead of twitching. Her behaviour was tuned against a simulated hour (`media/mind_hour.png` shows
+one), because every one of the four tuning traps found so far was invisible by eye and obvious on a chart.
+
+**Her brain.** The language model runs only in the main process, one call per 45 seconds at most, with a
+timeout, and must answer with the name of an activity she actually has; anything else is discarded. In the chat
+box the persona writes her stage directions in brackets, and only the brackets can move her, so nothing she
+merely *says* can trigger an action. The out-of-character switch in the tray is a real switch, not a magic
+string the model has to notice.
+
+**Tested where it can be.** Her mind, voice, memory, performance reader and brain are plain Node modules with
+no DOM or network, covered by `pnpm pet:test` in seconds. Anything visual is proven with captures from the real
+renderer (`--capture`, `--tour`, `--pet --selftest`), and the GIFs above were recorded the same way
+(`tools/media/`).
+
+## Roadmap
+
+- [x] Two-view cutout rig from her own drawings, springs, 20 actions, per-pixel hit testing
+- [x] Needs-driven mind with explainable choices, memory across runs
+- [x] Pick-up, throw and landing physics with a carry animation
+- [x] DeepSeek persona, chat box, spoken lines that move her body
+- [x] Dance routine, richer face (blinks, gaze, visemes, effects)
+- [ ] Window-edge climbing and sitting on your windows
+- [ ] English persona and voice as a first-class option
+- [ ] Packaged installer (no Node required)
+- [ ] macOS and Linux verified
+- [ ] A second character through the same pipeline
+
+## Contributing
+
+Pull requests are welcome, and [CONTRIBUTING.md](CONTRIBUTING.md) explains where everything lives, how to run
+the checks, and the two rules that have each cost a day. Good places to start: macOS/Linux testing, English
+lines, new actions, packaging.
+
+Found a bug? [Open an issue](https://github.com/jiaming1145/deepSeek-pet/issues/new/choose) with what she did.
+Have a question or want to show what she did on your desktop?
+[Discussions](https://github.com/jiaming1145/deepSeek-pet/discussions). Security concerns go through
+[private reporting](https://github.com/jiaming1145/deepSeek-pet/security/advisories/new).
+
+If she made you smile, a ⭐ helps other people find her.
+
+## Also in this repository
+
+`apps/desktop/` and `packages/` hold an earlier prototype: a Live2D avatar with a streamed DeepSeek chat, an
+emotion-tagged dialogue band and a local SQLite history. It still builds and is covered by `pnpm test`, but the
+pet above is where development happens. To run it: `git submodule update --init`, `pnpm fetch-sdk` (downloads
+the Live2D Cubism SDK, about 21 MB), then `pnpm dev`.
+
+## Credits and license
+
+Code is [MIT](LICENSE). The character and her artwork belong to the author and are not covered by the code
+license. Layer decomposition by [See-through](https://github.com/shitagaki-lab/see-through) (Apache-2.0).
+The Live2D prototype uses sample data owned and copyrighted by Live2D Inc., used in accordance with their terms;
+see [NOTICE](NOTICE) for every third-party component.
+
+## Star history
+
+<p align="center">
+  <a href="https://star-history.com/#jiaming1145/deepSeek-pet&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jiaming1145/deepSeek-pet&type=Date&theme=dark">
+      <img alt="Star history" src="https://api.star-history.com/svg?repos=jiaming1145/deepSeek-pet&type=Date" width="600">
+    </picture>
+  </a>
+</p>

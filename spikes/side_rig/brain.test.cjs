@@ -54,6 +54,13 @@ console.log('a missing key disables her brain rather than breaking her');
   think(b, STATE, '', ACTS).then((r) => ok('and thinking simply returns nothing', r === null));
 }
 
+console.log('the key can come from the environment instead of the key file');
+{
+  ok('DEEPSEEK_API_KEY wins when set', readKey('C:/definitely/not/a/key/file', { DEEPSEEK_API_KEY: ' sk-env ' }) === 'sk-env');
+  ok('a blank variable falls through to the file', readKey('C:/definitely/not/a/key/file', { DEEPSEEK_API_KEY: '  ' }) === null);
+  ok('and no variable at all reads the file', readKey('C:/definitely/not/a/key/file', {}) === null);
+}
+
 if (process.argv.includes('--live')) {
   console.log('\nlive call to DeepSeek (costs a fraction of a penny)');
   const b = createBrain({});

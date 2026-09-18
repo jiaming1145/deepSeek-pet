@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: tests
+    # The pet is developed and verified on Windows; the runner matches that.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: her mind, voice, memory, performance reader and brain (plain Node, no Electron)
+        run: pnpm pet:test
+      - name: workspace packages (vitest)
+        run: pnpm test
+
+  typecheck:
+    name: typecheck
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The Live2D prototype in apps/desktop needs the Cubism Core type declarations, fetched from Live2D.
+      - run: pnpm fetch-sdk
+      - run: pnpm typecheck

@@ -1,0 +1,59 @@
+name: Bug report
+description: Something she does (or fails to do) that looks wrong.
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. A short video or GIF of what she did is worth more than a paragraph.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did she do, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1. pnpm pet
+        2. drag her by the tail
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Console output
+      description: Whatever the terminal printed after `pnpm pet`. Lines starting with `[renderer]` are the important ones.
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: Windows version, display scaling and GPU
+      placeholder: Windows 11 24H2, 150 %, RTX 3070
+    validations:
+      required: true
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Was her brain on?
+      description: The terminal says `brain on (DeepSeek)` or `brain off` right after she appears.
+      options:
+        - "off"
+        - "on"
+        - "not sure"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before posting
+      options:
+        - label: I searched the open issues and this is not already reported.
+          required: true
+        - label: No API key appears anywhere in this report.
+          required: true

@@ -1,0 +1,34 @@
+name: Feature request
+description: Something you wish she did.
+title: "[idea] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should she do, and when? Describe it the way you would describe it to a friend.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would matter
+      description: What would this change about living with her on your desktop?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of her
+      options:
+        - behaviour (what she decides to do)
+        - animation or physics
+        - face and expressions
+        - voice, persona or chat
+        - the window, tray or setup
+        - a new character or outfit
+        - something else
+  - type: textarea
+    id: refs
+    attributes:
+      label: References
+      description: Another pet, a video, a drawing, anything that shows what you mean.

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -171,8 +171,11 @@ describe('renderStaticSystem', () => {
     expect(renderStaticSystem(CARD, [], 'plain')).toBe(renderStaticSystem(bundle.card, ['zzz', 'a'], 'plain'));
   });
 
-  it('plain profile matches the measured evidence file (R3-21)', () => {
-    const evidence = readFileSync(fileURLToPath(new URL('../../../docs/evidence/phase3/persona-tokens.txt', import.meta.url)), 'utf8');
+  // The evidence file is part of the private working notes, not the published repo; without it there is nothing
+  // to compare against, so the check is skipped rather than failed on a fresh clone.
+  const EVIDENCE = fileURLToPath(new URL('../../../docs/evidence/phase3/persona-tokens.txt', import.meta.url));
+  it.skipIf(!existsSync(EVIDENCE))('plain profile matches the measured evidence file (R3-21)', () => {
+    const evidence = readFileSync(EVIDENCE, 'utf8');
     const plain = Number(/^plain: (\d+)$/m.exec(evidence)?.[1]);
     const character = Number(/^character: (\d+)$/m.exec(evidence)?.[1]);
     expect(staticSystemTokens(CARD, [], 'plain')).toBe(plain);
