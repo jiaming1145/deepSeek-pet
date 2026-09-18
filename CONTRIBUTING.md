@@ -38,6 +38,7 @@ the code you are touching before changing it.
 
 ```
 pnpm pet:test                       # her mind, voice, memory, performance reader and brain: plain Node, seconds
+git submodule update --init         # once: the Live2D prototype's tests import the Cubism framework
 pnpm test                           # the workspace packages (vitest)
 pnpm typecheck                      # needs `pnpm fetch-sdk` once for the Live2D prototype
 ```

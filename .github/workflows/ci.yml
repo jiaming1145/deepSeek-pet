@@ -11,7 +11,10 @@ jobs:
     # The pet is developed and verified on Windows; the runner matches that.
     runs-on: windows-latest
     steps:
+      # The Live2D prototype's tests import the Cubism framework submodule.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
