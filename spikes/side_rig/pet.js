@@ -531,8 +531,10 @@ window.addEventListener('pointerup', (e) => {
 });
 window.addEventListener('pointercancel', release);
 window.addEventListener('lostpointercapture', () => { if (P.drag) { P.capture = null; pointerUp(...(P.cursor || [0, 0])); } });
-// 'mouseleave' is delivered to the document, never to the window, so the old window listener never once fired
-document.addEventListener('mouseleave', () => { if (!P.drag) cursorGone(); });
+// No DOM event can tell us the cursor has left: 'mouseleave' never reaches the window, and on the document it
+// fires after EVERY forwarded mousemove while the window is click-through (measured 1:1 with a real mouse, and
+// it made every real click and drag pass straight through her). The main process can see the real cursor, so
+// it tells us when it is outside the window instead (`pet:cursor`).
 // losing focus or pointer capture mid-drag must end the drag, or the click-through window stays off for good
 const bail = () => { if (!P.drag) return; const c = P.cursor || [0, 0]; pointerUp(c[0], c[1]); };
 window.addEventListener('blur', bail);
@@ -548,6 +550,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'p') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); }
 });
 if (bridge && bridge.onIdle) bridge.onIdle((sec) => { P.userIdle = sec; });
+if (bridge && bridge.onCursor) bridge.onCursor((inside) => { if (!inside && !P.drag && P.cursor) cursorGone(); });
 // The tray's Nap is a nap: sixty seconds of sleep that her own mind is told about and held off from.
 function trayNap() { enter('sleep', { dur: 60, why: 'you told her to nap' }); P.obeyUntil = P.t + 60; }
 if (bridge && bridge.onCommand) bridge.onCommand((cmd) => { try { if (cmd === 'chat') { showChat(!chatOpen()); } else if (cmd === 'plain' || cmd === 'character') { P.quiet = cmd === 'plain'; if (P.quiet && bubble) bubble.classList.remove('on'); } else if (cmd === 'auto') { P.auto = !P.auto; if (P.auto) enter('idle', { dur: 1 }); } else if ((cmd === 'sleep' || cmd === 'wave') && (P.state === 'held' || P.state === 'fall')) { /* not while in the air */ } else if (cmd === 'sleep') trayNap(); else if (cmd === 'wave') enter('react', { dur: 2.6, action: 'wave' }); } catch (err) { window.__error = String(err.stack || err); } });

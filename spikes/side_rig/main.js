@@ -171,7 +171,17 @@ app.whenReady().then(async () => {
     const pushIdle = () => { if (!win.isDestroyed()) win.webContents.send('pet:idle', powerMonitor.getSystemIdleTime()); };
     pushIdle();
     const idleTimer = setInterval(pushIdle, 2000);
-    win.on('closed', () => clearInterval(idleTimer));
+    // The page cannot tell when the cursor leaves a click-through window (see pet.js), but main can see the real
+    // cursor. Tell the page each time it crosses the window edge, e.g. onto the taskbar or another monitor.
+    let cursorInside = null;
+    const pollCursor = () => {
+      if (win.isDestroyed()) return;
+      const c = screen.getCursorScreenPoint(), b = win.getBounds();
+      const inside = c.x >= b.x && c.y >= b.y && c.x < b.x + b.width && c.y < b.y + b.height;
+      if (inside !== cursorInside) { cursorInside = inside; win.webContents.send('pet:cursor', inside); }
+    };
+    const cursorTimer = setInterval(pollCursor, 200);
+    win.on('closed', () => { clearInterval(idleTimer); clearInterval(cursorTimer); });
     console.log('pet', JSON.stringify(await js('pet.info()')), 'window', JSON.stringify(bounds), 'memory', memFile);
     console.log('brain', brain.enabled ? 'on (DeepSeek)' : 'off - she runs on her own mind alone');
   }

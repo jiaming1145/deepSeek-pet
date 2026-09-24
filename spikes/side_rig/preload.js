@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('petBridge', {
   focus: (on) => ipcRenderer.send('pet:focus', !!on),
   onCommand: (cb) => ipcRenderer.on('pet:command', (_e, cmd) => cb(cmd)),
   onIdle: (cb) => ipcRenderer.on('pet:idle', (_e, seconds) => cb(seconds)),
+  onCursor: (cb) => ipcRenderer.on('pet:cursor', (_e, inside) => cb(inside)),
   loadMemory: () => ipcRenderer.invoke('pet:memory:load'),
   saveMemory: (data) => ipcRenderer.send('pet:memory:save', data),
   think: (state, history, activities) => ipcRenderer.invoke('pet:think', state, history, activities),

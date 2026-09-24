@@ -97,7 +97,12 @@ app.whenReady().then(async () => {
     const [hx, hy] = (await js('lab.headPx()')).map(Math.round);
     await js(`pet.simulate({type:'move', x:${hx + 40}, y:${hy}}); lab.step(0.5)`);
     const nearBefore = await js('pet.state().near');
+    // a document 'mouseleave' must NOT count: with a real mouse it fires after every forwarded move
     await js("document.dispatchEvent(new MouseEvent('mouseleave')); lab.step(0.5)");
+    const ignored = await js('({ near: pet.state().near, over: pet.state().over })');
+    check('a DOM mouseleave is ignored (it fires after every forwarded move while click-through)', ignored.near === true, JSON.stringify(ignored));
+    win.webContents.send('pet:cursor', false);                         // what main sends when the real cursor crosses the edge
+    await wait(50); await js('lab.step(0.5)');
     const after = await js('({ near: pet.state().near, cursor: pet.state().cursor, over: pet.state().over })');
     check('the cursor leaving the window: she stops thinking you are near', nearBefore === true && after.near === false && after.cursor === null && after.over === false,
       `near before ${nearBefore}, after ${JSON.stringify(after)}`);
