@@ -93,6 +93,7 @@ function enter(state, opts = {}) {
       // ignored by the rig, and judging arrival by whichever way she happened to face abandoned the walk.
       P.dir = tx > p.x ? 1 : -1;
       lab.turnTo(P.dir); lab.start(P.gait);
+      if (lab.walkTo) lab.walkTo(tx);          // she eases off over the last stretch and stands at the target
       if (P.gait === 'run') safeEmotion('cheerful'); else if (!opts.emotion || !safeEmotion(opts.emotion)) feel();
       P.until = P.t + 40; note('wander', { target: +tx.toFixed(2), gait: P.gait });
       break;

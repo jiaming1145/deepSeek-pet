@@ -42,7 +42,9 @@ const toUnits = (px, py) => [px / STAGE.k, (window.innerHeight - py) / STAGE.k];
 
 const S_ = { t: 0, dt: 0, paused: false, hudOn: true, action: 'idle', tau: 0, facing: 1, x: 0, y: 0, vx: 0, vy: 0, held: null, emotion: 'neutral',
   blink: { next: 2.2, phase: 0 }, look: { yaw: 0, pitch: 0 }, fps: [], lastFrame: performance.now(), prevPos: new Map(), turn: null, blend: null, next: null, squash: 0, landed: 0,
-  plant: 1, vig: 1, danceBeat0: 0, talkUntil: 0, syl: null, talkOpen: 0, gaze: null, snapCur: null, snapPrev: null };
+  plant: 1, vig: 1, danceBeat0: 0, talkUntil: 0, syl: null, talkOpen: 0, gaze: null, snapCur: null, snapPrev: null,
+  lookTarget: { yaw: 0, pitch: 0 }, headLook: { h: 0, v: 0, p: 0, pv: 0, g: 0, gv: 0 }, gazeLife: null, glanceHead: null, micro: null,
+  breath: null, nod: null, phraseAt: null, settle: null };
 const G = 14;                            // gravity for drops and throws, units/s^2
 const tickHooks = [];
 
@@ -163,6 +165,9 @@ async function buildView(name, file) {
   const view = { name, rig: rigJ, group: grp, bones: B, boneList: list, restHead: rest, skeleton: skel, boneIndex: Object.fromEntries(list.map((b, i) => [b.name, i])),
     layerMeshes: {}, facePieces: {}, floorY, assets: rigJ.assets || 'assets', springs: Object.entries(rigJ.springs || {}).map(([name, v]) => ({ ...v, name })), meshes: [], restBox,
     heightUnits: restBox.maxY - floorY, native: rigJ.facing === '-x' ? -1 : rigJ.facing === '+x' ? 1 : 0,
+    // how far the art reaches in front of her feet and behind them (the tail), for the stage edges
+    frontExt: rigJ.facing === '+x' ? restBox.maxX - rest.root.x : rest.root.x - restBox.minX,
+    backExt: rigJ.facing === '+x' ? rest.root.x - restBox.minX : restBox.maxX - rest.root.x,
     // where her ankles are when she simply stands, in the group's frame: what the ground solver holds them to
     standAnkle: Math.min(...['foot_near', 'foot_far'].map((n) => (B[n].userData.head ? B[n].userData.head.y : Infinity))) };
   const prev = current();
@@ -243,6 +248,12 @@ const SPRING_DRIVE = {
   ahoge:  { accel: 0.009, drag: 0.075, turn: 0.6 },
 };
 const SPRING_ACC_MAX = 60;                // units/s^2: past this it is a teleport, not a motion
+// A mouse drag moves her at 4-5 units/s, several times anything she does on her own, and fed straight into the drive
+// that pinned every strand at its limit as a spiky fan for as long as she was carried. So the push saturates (air
+// drag and inertia both stop growing past a normal brisk motion), is cut to 0.3 while she is carried, and can never
+// ask for more than a third of a chain's travel as a standing deflection. Swaying and trailing, never a flame.
+const SPRING_V_SAT = 1.5, SPRING_A_SAT = 30, SPRING_CARRIED = 0.3, SPRING_HOLD_MAX = 0.33;
+const sat = (x, m) => m * Math.tanh(x / m);
 const SPRING_LP = 0.03;                   // s: finite-difference acceleration is noisy, so it is low-passed
 function stepSprings(dt) {
   if (!(dt > 0)) return;
@@ -282,8 +293,11 @@ function stepSprings(dt) {
         st.pw += (da / dt - st.pw) * lp;
         st.x = p.x; st.y = p.y; st.vx = vx; st.vy = vy; st.pa = pa; st.n++;
       }
-      const push = dr.accel * (dx * st.ay - dy * st.ax) + dr.drag * (dx * st.vy - dy * st.vx);
-      const drive = mir * (-sp.inertia * push / len - damping * dr.turn * st.pw);
+      const vm = Math.hypot(st.vx, st.vy), vk = vm > 1e-9 ? sat(vm, SPRING_V_SAT) / vm : 0;
+      const am = Math.hypot(st.ax, st.ay), ak = am > 1e-9 ? sat(am, SPRING_A_SAT) / am : 0;
+      const push = dr.accel * ak * (dx * st.ay - dy * st.ax) + dr.drag * vk * (dx * st.vy - dy * st.vx);
+      const cap = SPRING_HOLD_MAX * sp.limit * sp.stiffness;      // the drive that would hold a third of the travel
+      const drive = clamp(mir * (-sp.inertia * push / len - damping * dr.turn * st.pw) * (carried ? SPRING_CARRIED : 1), -cap, cap);
       for (let i = 0; i < nSub; i++) {
         const acc = -sp.stiffness * u.spring - damping * u.springVel + drive;
         u.springVel += acc * h;
@@ -329,7 +343,7 @@ const BODY = -1;
 // S_.plant is how firmly her feet are held to the floor by the ground solver in tick(): 1 = standing (the default),
 // 0 = the action owns her height (a jump, lying down, being carried). Values between are part-way, e.g. the dance's
 // bounce hands her height over to the jump for its airtime and takes it back as she lands.
-const poseReset = () => { for (const b of boneList) { b.userData.pose = 0; b.userData.sx = 1; b.userData.sy = 1; } S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.rootScale = 1; S_.squash = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; S_.plant = 1; };
+const poseReset = () => { for (const b of boneList) { b.userData.pose = 0; b.userData.sx = 1; b.userData.sy = 1; } S_.rootY = 0; S_.rootRot = 0; S_.rootX = 0; S_.rootScale = 1; S_.squash = 0; S_.eyesClosed = 0; S_.mouthOpen = 0; S_.irisOff = [0, 0]; S_.speed = 0; S_.plant = 1; S_.rootMotion = false; };
 // A bent knee in the FRONT view is a shortened leg (the knee comes at the camera), not a rotation. Scale is
 // inherited down the chain, so the shin's shortening multiplies the thigh's rather than adding to it - which is why
 // adding the two up (the old sit formula) under-dropped her by about 12 px. The foot is scaled back to its own size
@@ -343,51 +357,126 @@ function bendLegs(side, k) {
   return t1 * (1 - a) + t2 * (1 - a * b);
 }
 const legLen = () => (bones.thigh_near.userData.len || 0.4) + (bones.shin_near.userData.len || 0.2);
-const strideSpeed = (f, amp) => 4 * f * legLen() * Math.sin(amp) * 0.7;   // feet plant without sliding (0.7: the knee shortens the swing)
 const lookIris = () => { S_.irisOff = [(isFront() ? S_.look.yaw : S_.look.yaw * M()) * 6, S_.look.pitch * 3]; };
 const tailSway = (tau, amp) => { for (let i = 1; i <= 6; i++) if (bones['tail_' + i].userData.head) bones['tail_' + i].userData.pose = amp * Math.sin(tau * 1.3 + i * 0.35); };
-const walkCycle = (tau, f, amp, knee, armAmp) => {
-  const ph = 2 * Math.PI * f * tau;
-  const fwd = BODY;
+// ---- walking and running
+// Her feet PLANT. Each frame the foot she is standing on (the lower ankle) is held where it is on the floor and her
+// position moves by whatever that asks (root motion, plantFeet), instead of sliding her along at a set speed while
+// the legs cycle underneath - which is how the old walk skated her feet 2-9 px a frame. For that to look like
+// walking the stride has to match the speed: v = 4 f L sin(amp) is exactly how far a straight stance leg carries
+// her per cycle, so the amplitude is solved from the speed and the cadence rises gently with it. The knee only
+// bends in the swing (a stance knee that bends drops her and scuffs the foot), and there is no bob written in: the
+// ground solver keeps the stance ankle down, so her hips rise as the stance leg passes vertical and dip at double
+// support by themselves - the inverted pendulum every real walk has, and which the old |sin| bob had upside down.
+const walkCycle = (ph, amp, knee, armAmp) => {
+  const fwd = BODY, k = amp / 0.3;
   bones.thigh_near.userData.pose = fwd * amp * Math.sin(ph);
   bones.thigh_far.userData.pose = fwd * amp * Math.sin(ph + Math.PI);
-  bones.shin_near.userData.pose = -fwd * knee * Math.max(0, Math.sin(ph + 0.9));
-  bones.shin_far.userData.pose = -fwd * knee * Math.max(0, Math.sin(ph + Math.PI + 0.9));
+  // A leg swings forward while cos(ph) > 0, and the knee is bent for exactly that half: lifting at toe-off, highest
+  // mid-swing, straight again only as the leg reaches the front and takes the weight. Straightening it any earlier
+  // (the first version did, 0.35 rad early) puts a straight leg on the floor while it is still swinging forward, so
+  // it takes the weight too soon and shoves her backwards for a few frames after every step.
+  bones.shin_near.userData.pose = -fwd * knee * Math.pow(Math.max(0, Math.cos(ph)), 1.5);
+  bones.shin_far.userData.pose = -fwd * knee * Math.pow(Math.max(0, Math.cos(ph + Math.PI)), 1.5);
   bones.upper_arm_near.userData.pose = -fwd * armAmp * Math.sin(ph);
   bones.upper_arm_far.userData.pose = fwd * armAmp * Math.sin(ph);
-  bones.forearm_near.userData.pose = -fwd * 0.25 * (1 + Math.sin(ph));
-  bones.forearm_far.userData.pose = fwd * 0.25 * (1 - Math.sin(ph));
-  S_.rootY = 0.012 * Math.abs(Math.sin(ph));
-  bones.chest.userData.pose = fwd * 0.04 * Math.sin(2 * ph);
-  bones.head.userData.pose = -fwd * 0.03 * Math.sin(2 * ph + 0.5);
+  bones.forearm_near.userData.pose = -fwd * 0.25 * (armAmp / 0.3) * (1 + Math.sin(ph)) * 0.5;
+  bones.forearm_far.userData.pose = fwd * 0.25 * (armAmp / 0.3) * (1 - Math.sin(ph)) * 0.5;
+  bones.chest.userData.pose = fwd * 0.04 * k * Math.sin(2 * ph);
+  bones.head.userData.pose = -fwd * 0.03 * k * Math.sin(2 * ph + 0.5);
 };
+// top speeds in units/s: the same ground the old fixed gaits covered
+const GAIT = { walk: { v: 0.74, knee: 0.75, arm: 0.3, lean: 0.04 }, run: { v: 1.9, knee: 1.2, arm: 0.7, lean: 0.12 } };
+function gait(tau, g0) {
+  const g = S_.gait || (S_.gait = { ph: 0, v: 0, amp: 0 }), dt = S_.dt || 0;
+  // How fast she means to go: full speed, except over the last 0.4 units to a target she was given (lab.walkTo).
+  let want = g0.v, arrived = false;
+  if (S_.walkTarget != null && !S_.turn) {
+    const d = (S_.walkTarget - S_.x) * S_.facing;
+    if (d > 0.005) g.approached = true;
+    if (!g.approached && d < -0.05) S_.turn = { t0: S_.t, from: S_.facing };   // it is behind her: turn round first
+    else if (g.approached && d <= 0.005) { want = 0; arrived = true; }
+    else want = g0.v * Math.sqrt(clamp(d / 0.4, 0, 1));
+  }
+  // She shifts her weight for the first 0.15 s before the first step, then reaches speed over 0.35 s.
+  const acc = g0.v / 0.35;
+  if (tau > 0.15 || g.v > 0.05) g.v = g.v < want ? Math.min(want, g.v + acc * dt) : Math.max(want, g.v - 2 * acc * dt);
+  const L = legLen(), stride = (v) => Math.asin(clamp(v / (4 * (0.9 + 0.5 * Math.sqrt(v)) * L), 0, 0.9));
+  const f = 0.9 + 0.5 * Math.sqrt(g.v), amp = stride(g.v), k = amp / Math.max(stride(g0.v), 1e-3);
+  g.ph += 2 * Math.PI * f * dt; g.amp = amp;
+  walkCycle(g.ph, amp, g0.knee * k, g0.arm * k);   // everything but the legs scales with how far into her stride she is
+  // The lean comes first: that is the weight shift. It tips her body, not her legs (the thighs take it back out), or
+  // the two legs stop mirroring each other and the wrong one looks like the one on the ground.
+  const lean = -BODY * g0.lean * Math.max(k, 0.5 * ease(tau / 0.15));
+  bones.hips.userData.pose += lean; bones.thigh_near.userData.pose -= lean; bones.thigh_far.userData.pose -= lean;
+  S_.stanceSide = Math.cos(g.ph) <= 0 ? 'near' : 'far';   // the leg sweeping back is the one she stands on
+  // Her feet stay level. The foot bone hangs off the shin, so it tipped with the leg: a trailing stance leg pushed its
+  // toe into the floor, and a swinging foot hanging off a bent knee dipped its toe 6 px through it mid-swing. Turned
+  // back against the leg's angle, the foot keeps its sole parallel to the floor; the stance heel's roll onto the toe
+  // is added on top (groundFeet), and the swinging foot clears the floor by the clearance its ankle is given there.
+  for (const s of ['near', 'far']) bones['foot_' + s].userData.pose -= bones['thigh_' + s].userData.pose + bones['shin_' + s].userData.pose;
+  // how far through its swing the other leg is: 0 as it leaves the floor, 1 as it lands
+  const swingPh = S_.stanceSide === 'near' ? g.ph + Math.PI : g.ph;
+  S_.swingS = ((((swingPh + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / Math.PI;
+  S_.speed = g.v;
+  S_.rootMotion = true;
+  // arrived: once the stride has died away at her target, she stands
+  if (arrived && amp < 0.05) { S_.walkTarget = null; S_.next = 'idle'; }
+}
+// Breathing. In for 40 % of a breath and out for 60 %, 3.6-4.2 s a breath and never two the same length: a sine at
+// a fixed rate was the old idle, and a metronome is exactly what a still character must not look like. The chest
+// swells, the shoulders follow a moment later (0.3 rad of the cycle), the head settles a hair against it.
+// Where she looks is not here any more: the head follows her gaze as a layer on top of every action (lookLayer).
+function breathe(on = 1) {
+  const base = 3.6 + 0.6 * Math.random();
+  const b = S_.breath || (S_.breath = { ph: 0, base, len: base });
+  b.ph += (S_.dt || 0) / b.len;
+  if (b.ph >= 1) { b.ph -= 1; b.len = b.base * (0.9 + 0.2 * Math.random()); }
+  const wave = (ph) => { const x = ((ph % 1) + 1) % 1; return x < 0.4 ? ease(x / 0.4) : 1 - ease((x - 0.4) / 0.6); };
+  const w = wave(b.ph), sh = wave(b.ph - 0.3 / (2 * Math.PI));
+  bones.chest.userData.sy *= 1 + on * 0.018 * (2 * w - 1);
+  bones.upper_arm_near.userData.pose += on * 0.015 * sh; bones.upper_arm_far.userData.pose -= on * 0.015 * sh;
+  bones.head.userData.pose -= on * 0.008 * w;
+  return w;
+}
 A.idle = (tau) => {
   poseReset();
   if (isFront()) {
-    bones.chest.userData.sy = 1 + 0.018 * Math.sin(tau * 1.6);
-    bones.head.userData.pose = 0.025 * Math.sin(tau * 0.8 + 1) - S_.look.yaw * 0.1;
+    bones.head.userData.pose = 0.025 * Math.sin(tau * 0.8 + 1);
     tailSway(tau, 0.05);
   } else {
-    bones.chest.userData.pose = 0.025 * Math.sin(tau * 1.6);
-    bones.head.userData.pose = 0.03 * Math.sin(tau * 0.8 + 1) + S_.look.pitch * 0.2;
+    bones.head.userData.pose = 0.03 * Math.sin(tau * 0.8 + 1);
   }
-  bones.upper_arm_near.userData.pose = 0.03 * Math.sin(tau * 1.6 + 0.4);
-  bones.upper_arm_far.userData.pose = -0.03 * Math.sin(tau * 1.6 + 0.4);
-  S_.rootY = 0.004 * Math.sin(tau * 1.6);
+  breathe();
   lookIris();
 };
-A.walk = (tau) => { poseReset(); walkCycle(tau, 1.1, 0.38, 0.75, 0.3); S_.speed = strideSpeed(1.1, 0.38); };
-A.run = (tau) => { poseReset(); walkCycle(tau, 2.0, 0.55, 1.2, 0.7); S_.speed = strideSpeed(2.0, 0.55); bones.hips.userData.pose = -BODY * 0.12; S_.rootY += 0.02 * Math.abs(Math.sin(2 * Math.PI * 2.0 * tau)); };
+A.walk = (tau) => { poseReset(); gait(tau, GAIT.walk); };
+A.run = (tau) => { poseReset(); gait(tau, GAIT.run); };
+// A hop is three things, not one parabola: a crouch that tells you it is coming (0.12 s, arms swinging back), the
+// flight, and a contact where the legs take the weight with her feet planted (0.1 s). Without the crouch a jump has
+// no cause; without the contact she bounces off the floor like a ball.
+const HOP_CROUCH = 0.12, HOP_AIR = 0.6, HOP_LAND = 0.1, HOP_T = HOP_CROUCH + HOP_AIR + HOP_LAND;
 A.hop = (tau) => {
-  poseReset(); S_.plant = 0;          // a jump owns her height
-  const T = 0.7, t = tau % T, u = t / T;
-  S_.rootY = 0.42 * 4 * u * (1 - u);
-  const tuck = Math.sin(Math.PI * u), m = BODY;
-  if (isFront()) for (const s of ['near', 'far']) { bones['thigh_' + s].userData.sy = 1 - 0.35 * tuck; bones['shin_' + s].userData.sy = 1 / (1 - 0.35 * tuck); }
-  else for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * 0.7 * tuck; bones['shin_' + s].userData.pose = -m * 1.1 * tuck; }
+  poseReset();
+  const t = tau % HOP_T, m = BODY, fs = farSign();
+  let bend = 0, tuck = 0, arms = 0;
+  if (t < HOP_CROUCH) { const k = ease(t / HOP_CROUCH); bend = 0.2 * k; arms = -0.45 * k; }            // on the floor
+  else if (t < HOP_CROUCH + HOP_AIR) {
+    const u = (t - HOP_CROUCH) / HOP_AIR;
+    S_.plant = 0;                                                                       // a jump owns her height
+    S_.rootY = 0.42 * 4 * u * (1 - u);
+    tuck = Math.sin(Math.PI * u); bend = 0.2 * (1 - ease(u / 0.12)); arms = 1.6 * tuck - 0.45 * (1 - ease(u / 0.25));
+  } else { const c = Math.sin(Math.PI * (t - HOP_CROUCH - HOP_AIR) / HOP_LAND); bend = 0.18 * c; S_.squash = 0.06 * c; arms = -0.2 * c; }
+  if (isFront()) {
+    for (const s of ['near', 'far']) { bones['thigh_' + s].userData.sy = 1 - 0.35 * tuck; bones['shin_' + s].userData.sy = 1 / (1 - 0.35 * tuck); }
+    if (bend > 0) { bendLegs('near', bend); bendLegs('far', bend); }
+  } else {
+    // side view: a bent knee is a real rotation, and the ground solver lowers her onto it
+    for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * (0.7 * tuck + 1.2 * bend); bones['shin_' + s].userData.pose = -m * (1.1 * tuck + 2.2 * bend); }
+  }
   const up = isFront() ? 1 : -m;
-  bones.upper_arm_near.userData.pose = up * 1.6 * tuck; bones.upper_arm_far.userData.pose = up * 1.6 * tuck * farSign();
-  bones.chest.userData.pose = isFront() ? 0 : m * 0.1 * tuck;
+  bones.upper_arm_near.userData.pose = up * arms; bones.upper_arm_far.userData.pose = up * arms * fs;
+  bones.chest.userData.pose = isFront() ? 0 : m * (0.1 * tuck + 0.25 * bend);
 };
 A.wave = (tau) => {
   poseReset();
@@ -403,16 +492,30 @@ A.wave = (tau) => {
 A.look = (tau) => {
   poseReset();
   const yaw = Math.sin(tau * 1.2), pitch = 0.5 * Math.sin(tau * 0.7);
-  if (isFront()) { bones.head.userData.pose = -0.14 * yaw; bones.neck.userData.pose = -0.03 * yaw; S_.look.yaw = yaw; S_.look.pitch = pitch; tailSway(tau, 0.05); }
+  // The look action owns its gaze (S_.actLook), apart from lab.look's target: the pet resets that every frame the
+  // cursor is not near her, which left this action sweeping her head with her eyes stuck straight ahead.
+  if (isFront()) { S_.actLook = { yaw, pitch }; tailSway(tau, 0.05); }   // her eyes and head follow through lookLayer
   else { bones.head.userData.pose = 0.22 * yaw; bones.neck.userData.pose = 0.06 * yaw; }
   S_.irisOff = [-6 * yaw, 3 * pitch];
   bones.chest.userData.pose = 0.02 * Math.sin(tau * 1.6);
 };
 // The mouth is not driven here: speech is `lab.talking(secs)`, which moves her mouth in any action for exactly as
 // long as there is something being said (see speechCell). A talk action with nothing to say keeps its mouth shut.
+// Her body keeps time with the same syllable clock: a small nod lands every 3-5 syllables and dies away (a beat of
+// emphasis, not a wobble), and she takes a breath in the pause before each phrase. The old 3.1 Hz head sine nodded
+// whether she was saying anything or not.
+const nodCurve = (a) => (a < 0 ? 0 : 8 * Math.E * a * Math.exp(-8 * a));   // 0 -> 1 at 125 ms -> 0, no rebound
 A.talk = (tau) => {
   A.idle(tau);
-  bones.head.userData.pose += 0.04 * Math.sin(tau * 3.1);
+  const n = S_.nod && S_.t - S_.nod >= 0 && S_.t - S_.nod < 1 ? nodCurve(S_.t - S_.nod) : 0;
+  const p = S_.phraseAt && S_.t - S_.phraseAt >= 0 && S_.t - S_.phraseAt < 0.45 ? Math.sin(Math.PI * (S_.t - S_.phraseAt) / 0.45) : 0;
+  if (isFront()) {
+    // facing us a nod is the head dipping, so the neck shortens (and the head is scaled back so the face keeps its shape)
+    const d = 0.03 * n; bones.neck.userData.sy = 1 - d; bones.head.userData.sy = 1 / (1 - d);
+    bones.chest.userData.sy *= 1 - 0.01 * n + 0.02 * p;
+  } else {
+    bones.head.userData.pose += BODY * 0.03 * n; bones.chest.userData.pose += BODY * 0.01 * n - 0.01 * p;
+  }
 };
 A.sit = (tau) => {
   poseReset();
@@ -430,7 +533,7 @@ A.sit = (tau) => {
     bones.skirt_1.userData.sx = 1 + 0.18 * u; bones.skirt_2.userData.sx = 1 + 0.34 * u; bones.skirt_2.userData.sy = 1 - 0.18 * u;
     bones.upper_arm_near.userData.pose = -0.42 * u; bones.forearm_near.userData.pose = -0.85 * u;
     bones.upper_arm_far.userData.pose = 0.42 * u; bones.forearm_far.userData.pose = 0.85 * u;
-    bones.chest.userData.sy = 1 - 0.03 * u + 0.015 * Math.sin(tau * 1.6);
+    bones.chest.userData.sy = 1 - 0.03 * u;
     tailSway(tau, 0.05);
   } else {
     for (const s of ['near', 'far']) { bones['thigh_' + s].userData.pose = m * -1.45 * u; bones['shin_' + s].userData.pose = m * 1.35 * u; }
@@ -441,6 +544,7 @@ A.sit = (tau) => {
     bones.chest.userData.pose += 0.02 * Math.sin(tau * 1.6);
   }
   bones.head.userData.pose = 0.02 * Math.sin(tau * 1.3);
+  breathe();
   lookIris();
 };
 A.sleep = (tau) => {
@@ -847,6 +951,39 @@ const VISEMES = ['aa', 'ih', 'ou', 'ee', 'oh'];
 const EMO_KICK = { panic: 1, shocked: 1, surprised: 0.9, hurt: 0.8, cheerful: 0.7, affection: 0.7, angry: 0.7,
   happy: 0.5, pouty: 0.4, smug: 0.4, confused: 0.4, curious: 0.3, sad: 0.25, gentle: 0, relaxed: 0, sleepy: 0, neutral: 0 };
 const emoCur = { ...EMO.neutral };
+// ---- eye life
+// Eyes that only move when a cursor moves them are painted on. Real gaze holds a point for a while (fixations
+// 0.6-2.5 s, log-normal: mostly short, now and then long), then shifts: about two times in three back to what she
+// is attending to (your cursor, or straight ahead), otherwise a glance off to one side for a third of a second to
+// most of a second. About a third of the shifts ride on a blink, as they do in people. Only for eyes that can move
+// (a plain open eye); in the side view, where there is no gaze cell, the iris makes tiny saccades instead.
+const GAZE_LIFE = new Set(['idle', 'talk', 'sit', 'tail_react', 'wave']);
+const gaussian = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+const fixation = () => clamp(Math.exp(0.2 + 0.435 * gaussian()), 0.6, 2.5);
+function gazeLife() {
+  let G = S_.gazeLife;
+  if (!G || G.next - S_.t > 5) G = S_.gazeLife = { next: S_.t + fixation(), cell: null, until: 0 };   // a stale clock starts over
+  const capable = GAZE_LIFE.has(S_.action) && !(kit && isFront() && (kit.recipe(kitMood(S_.emotion)) || {}).eye_l !== 'open');
+  if (!capable) { G.cell = null; return null; }
+  if (G.cell && S_.t >= G.until) G.cell = null;                  // the glance is over: back to her target
+  if (S_.t >= G.next) {
+    G.next = S_.t + fixation();
+    if (Math.random() < 0.35) {
+      G.cell = ['left', 'right', 'left', 'right', 'up', 'down'][Math.floor(Math.random() * 6)];
+      G.until = S_.t + 0.3 + 0.6 * Math.random();
+      const side = G.cell === 'left' ? 1 : G.cell === 'right' ? -1 : 0;
+      S_.glanceHead = { at: S_.t + 0.12, until: G.until + 0.12, rad: -side * (0.02 + 0.02 * Math.random()) };
+    } else { G.cell = null; S_.glanceHead = null; }
+    if (Math.random() < 0.3 && kit) kit.blink.next = 0;
+  }
+  return G.cell;
+}
+function microSaccade() {
+  let m = S_.micro;
+  if (!m || m.next - S_.t > 5) m = S_.micro = { next: S_.t, x: 0, y: 0 };
+  if (S_.t >= m.next) { const a = Math.random() * 2 * Math.PI, r = 1 + 0.5 * Math.random(); m.x = r * Math.cos(a); m.y = r * Math.sin(a); m.next = S_.t + 0.3 + 0.5 * Math.random(); }
+  return m;
+}
 // Speech. While `lab.talking(secs)` says she is talking, her mouth takes a new shape for every syllable - a random
 // one, never the same twice running - at a rate that wanders between 4 and 6 a second, and every 6-10 syllables it
 // closes for a breath of 0.25-0.4 s. A fixed-rate loop through the five shapes read as a machine; the jitter and
@@ -857,10 +994,13 @@ function speechCell() {
   let s = S_.syl;
   if (!s || s.until - S_.t > 1) s = S_.syl = { until: S_.t, cell: 'closed', left: 6 + Math.floor(Math.random() * 5) };   // a stale clock starts over
   if (S_.t >= s.until) {
-    if (s.left <= 0) { s.cell = 'closed'; s.until = S_.t + 0.25 + Math.random() * 0.15; s.left = 6 + Math.floor(Math.random() * 5); }
+    if (s.left <= 0) { s.cell = 'closed'; s.until = S_.t + 0.25 + Math.random() * 0.15; s.left = 6 + Math.floor(Math.random() * 5); S_.phraseAt = S_.t; }
     else {
       let c; do c = VISEMES[Math.floor(Math.random() * VISEMES.length)]; while (c === s.cell);
       s.cell = c; s.until = S_.t + 1 / (4 + 2 * Math.random()); s.left--;
+      // the body's beat: a nod every 3-5 syllables (A.talk plays it)
+      s.toNod = (s.toNod ?? 1 + Math.floor(Math.random() * 3)) - 1;
+      if (s.toNod <= 0) { S_.nod = S_.t; s.toNod = 3 + Math.floor(Math.random() * 3); }
     }
   }
   return s.cell;
@@ -891,13 +1031,14 @@ function applyFace(dt) {
     const enter = S_.action === 'look' ? 0.4 : 0.45, leave = 0.30, g = S_.gaze;
     const still = g === 'left' ? yaw > leave : g === 'right' ? -yaw > leave : g === 'up' ? pitch > leave : g === 'down' ? -pitch > leave : false;
     S_.gaze = still ? g : Math.abs(yaw) > enter ? (yaw > 0 ? 'left' : 'right') : pitch > enter ? 'up' : pitch < -enter ? 'down' : null;
-    kit.setLook(S_.gaze);
+    kit.setLook(gazeLife() || S_.gaze);
     kit.update(dt);
     if (isFront()) return;
   }
   const eyeY = Math.max(0.06, emoCur.eyeScale * (1 - closed));
   const px = S * 1;   // 1 px in world units
-  const [ix, iy] = S_.irisOff || [0, 0];
+  const mic = microSaccade();
+  const ix = (S_.irisOff || [0, 0])[0] + mic.x, iy = (S_.irisOff || [0, 0])[1] + mic.y;
   // A shut eye is a lash line resting low, not an eye squashed to a sliver. So the white and the iris fade out
   // as the lid comes down, while the lash keeps most of its width and travels to where the lid closes.
   for (const k of ['eyewhite', 'irides']) {
@@ -1057,18 +1198,88 @@ function applyBlend() {
 // squashes her used to leave her floating (the landing by up to 36 px, the dance by 9-29 px) or sunk (a stumble
 // by 11 px, behind the taskbar edge on the desktop). So after the pose is decided, measure where her lowest ankle
 // actually is and move her root to put it back on the floor, weighted by S_.plant.
+// Root motion: hold the stance foot where it is on the floor and move her by whatever that asks. The stance foot is
+// the one the gait says is sweeping back (it is also the lower one: the other knee is bent). Her position
+// then follows her legs exactly, so a foot on the ground cannot slide. Only in the side view, which the gait is
+// drawn for: in the first half of a view swap the front rig is still showing, and there a thigh rotation swings a
+// leg sideways, which as root motion slid her 20 px a frame.
+function plantFeet(dt) {
+  // A stop keeps the feet planted too: while the pose is still blending out of a walk, the foot she was standing on
+  // stays put and she settles over it (switching root motion off at once slid that foot back 5 px on the stop frame).
+  const settling = S_.blend && S_.blend.fromGait && S_.stance;
+  if ((!S_.rootMotion && !settling) || !NATIVE || S_.turn || S_.held || S_.y > 0) { S_.stance = null; return; }
+  // Measured with the view swap's squash taken out (it is a camera trick, not her moving), so a stop that swaps to
+  // the front view still settles her over the planted foot while the side view is showing.
+  const shownX = group.scale.x, shownPX = group.position.x;
+  if (group.userData.physScaleX != null) { group.scale.x = group.userData.physScaleX; group.position.x = S_.x + (S_.rootX || 0) - group.scale.x * restHead.root.x; }
+  applyPose(); group.updateMatrixWorld(true);
+  const v = new THREE.Vector3(), a = {};
+  for (const s of ['near', 'far']) { bones['foot_' + s].getWorldPosition(v); a[s] = { x: v.x, y: v.y }; }
+  group.scale.x = shownX; group.position.x = shownPX;
+  let st = S_.stance;
+  const side = (S_.rootMotion ? S_.stanceSide : S_.stance && S_.stance.side) || (a.near.y <= a.far.y ? 'near' : 'far');
+  let dx = 0;
+  if (!st || st.side !== side) st = S_.stance = { side, wx: a[side].x, sx: S_.x };
+  else {
+    // The foot is held in WORLD terms, so nothing else that moves her body (a squash or slide still blending out)
+    // can drag it. Moves of her position made from outside (lab.setPos) take the planted foot with them.
+    st.wx += S_.x - st.sx;
+    dx = a[side].x - st.wx;
+    S_.x -= dx; group.position.x -= dx;
+  }
+  const sxAfter = S_.x;
+  // she turns when the front of her reaches the edge, and is eased in when her tail is past the other one
+  const ahead = current().frontExt ?? 0.42, behind = current().backExt ?? 0.82;
+  const front = S_.facing > 0 ? STAGE.w - ahead : ahead;
+  const back = S_.facing > 0 ? behind : STAGE.w - behind;
+  if (S_.facing > 0 ? S_.x > front : S_.x < front) S_.turn = { t0: S_.t, from: S_.facing };
+  if (S_.facing > 0 ? S_.x < back : S_.x > back) { const e = Math.sign(back - S_.x) * Math.min(Math.abs(back - S_.x), S_.speed * dt * 2); S_.x += e; group.position.x += e; }   // ease in, never teleport
+  st.wx = a[side].x - dx + (S_.x - sxAfter); st.sx = S_.x;
+}
+const SWING_CLEAR = 0.015;   // units: how high a swinging foot stays above the floor mid-swing, at least
 function groundFeet() {
   const plant = clamp(S_.plant ?? 1, 0, 1);
   if (S_.held || S_.y > 0 || plant <= 0) return;
   const view = current();
   if (!Number.isFinite(view.standAnkle)) return;
   applyPose(); group.updateMatrixWorld(true);
-  const v = new THREE.Vector3();
-  let low = Infinity;
-  for (const s of ['near', 'far']) { bones['foot_' + s].getWorldPosition(v); low = Math.min(low, v.y); }
-  const want = GROUND_Y + view.standAnkle;            // where they are when she just stands there
+  const v = new THREE.Vector3(), y = {};
+  for (const s of ['near', 'far']) { bones['foot_' + s].getWorldPosition(v); y[s] = v.y; }
+  const low = Math.min(y.near, y.far);
+  // Where the ankles are when she just stands there - scaled with her, since a squash or a turn's stretch scales the
+  // whole figure about the floor, feet included: pinning the ankle at its unscaled height put the toe through the
+  // floor in every turn.
+  const want = GROUND_Y + FLOOR_Y + (group.scale.y || 1) * (view.standAnkle - FLOOR_Y);
+  // Walking, the foot to hold down is the one she is standing on, not merely the lower one. And the swinging foot
+  // has to clear the floor until the moment it lands: late in its swing a forward leg with a softly bent knee hangs
+  // its ankle as low as the straight stance leg (any knee bend under twice the thigh angle does), so it came down
+  // five frames early and skated the last 13 px. A real walk solves this with the stance heel: it rises, and the
+  // foot rolls onto its toe. So the swing foot is given a clearance that falls to nothing exactly at contact, and
+  // where that asks for more height than a flat stance foot gives, the stance ankle rises and the foot pivots on its
+  // toe (below) - still planted, not sliding.
+  let corr = want - low, heelSide = null;
+  const hold = S_.heelHold, holdAge = hold ? S_.t - hold.t0 : -1;
+  if (hold && (holdAge < 0 || holdAge > 0.5 || S_.rootMotion)) S_.heelHold = null;
+  if (S_.rootMotion && S_.stanceSide) {
+    const sw = S_.stanceSide === 'near' ? 'far' : 'near', s = clamp(S_.swingS ?? 0.5, 0, 1);
+    const clear = SWING_CLEAR * (1 - Math.pow(2 * s - 1, 8));
+    corr = Math.max(want - y[S_.stanceSide], want + clear - y[sw]);
+    heelSide = S_.stanceSide;
+    S_.heelRise = Math.max(0, y[heelSide] + corr - want);
+  } else if (S_.heelHold) {
+    // She has just stopped: the heel that was up comes down over a few frames instead of dropping in one.
+    heelSide = S_.heelHold.side;
+    const rise = S_.heelHold.rise * Math.exp(-holdAge / 0.07), other = heelSide === 'near' ? 'far' : 'near';
+    corr = Math.max(want + rise - y[heelSide], want - y[other]);
+    S_.heelRise = Math.max(0, y[heelSide] + corr - want);
+  } else S_.heelRise = 0;
   const sy = group.scale.y || 1;
-  S_.rootY = (S_.rootY || 0) + plant * (want - low) / sy;
+  S_.rootY = (S_.rootY || 0) + plant * corr / sy;
+  if (S_.heelRise > 1e-5 && heelSide) {
+    // roll the stance foot onto its toe by exactly the heel's rise, so the toe stays where it was on the floor
+    const f = bones['foot_' + heelSide].userData, tx = f.tailLocal ? f.tailLocal.x : -0.1;
+    if (Math.abs(tx) > 1e-3) f.pose += clamp(-S_.heelRise * plant / sy / tx, -0.7, 0.7);
+  }
 }
 function followHold(dt) {
   const h = S_.held;
@@ -1103,22 +1314,57 @@ function stepPhysics(dt) {
     if (S_.action === 'fall' || S_.action === 'dangle') S_.next = impact > 4.5 ? 'stumble' : 'land';
   }
 }
+// ---- where she looks, as a layer over every action
+// lab.look() sets a TARGET. Her eyes get there first (a 60 ms lag), her head follows on a critically damped spring
+// to 60 % of the way (head 0.18 rad at most, neck and chest a little), so the eyes always lead - which is how a
+// look reads as attention rather than as the whole puppet swivelling. A glance of the gaze scheduler (gazeLife)
+// pulls the head 0.02-0.04 rad after it, 120 ms late; a turn starts with her head. It is added on top of whatever
+// the action posed, before the switch blend, so a switch carries it rather than counting it twice.
+const lookTarget = () => (S_.action === 'look' && S_.actLook ? S_.actLook : S_.lookTarget);
+const LOOK_HEAD = new Set(['idle', 'talk', 'sit', 'look', 'wave', 'tail_react', 'stretch']);
+const critStep = (o, x, v, target, w, dt) => { o[v] += (w * w * (target - o[x]) - 2 * w * o[v]) * dt; o[x] += o[v] * dt; };
+function lookLayer(dt) {
+  const L = S_.headLook, on = LOOK_HEAD.has(S_.action) && !S_.held;
+  const T = lookTarget();
+  const tY = on ? 0.6 * T.yaw : 0, tP = on ? 0.6 * T.pitch : 0;
+  const gh = S_.glanceHead, g = on && gh && S_.t >= gh.at && S_.t < gh.until ? gh.rad : 0;   // only while the glance lasts
+  critStep(L, 'h', 'v', tY, 8, dt); critStep(L, 'p', 'pv', tP, 8, dt); critStep(L, 'g', 'gv', g, 12, dt);
+  if (isFront()) {
+    bones.head.userData.pose += -0.3 * L.h + L.g; bones.neck.userData.pose += -0.083 * L.h; bones.chest.userData.pose += -0.033 * L.h;
+  } else {
+    bones.head.userData.pose += 0.3 * L.p; bones.neck.userData.pose += 0.083 * L.p;
+  }
+  // A turn is led by the head: 0.1 rad toward the side she is turning to over the first 0.08 s, before the flip,
+  // then handed back as the new facing takes over.
+  if (S_.turn && NATIVE) {
+    const tt = S_.t - S_.turn.t0, u = tt / 0.28;
+    const lead = tt < 0 ? 0 : ease(tt / 0.08) * (u < 0.5 ? 1 : 1 - ease((u - 0.5) / 0.5));
+    bones.head.userData.pose += -BODY * 0.1 * lead * (u < 0.5 ? 1 : -1);
+  }
+  // Stopping after a walk or a run: the body carries on a moment, pitching forward and settling (6 Hz, damping 0.4).
+  const st = S_.settle;
+  if (st) {
+    const a = S_.t - st.t0;
+    if (a < -0.5 || a > 0.9) S_.settle = null;          // (a clock restarted under it, or it is over)
+    else if (a >= 0) {
+      const w = 2 * Math.PI * 6, z = 0.4, wd = w * Math.sqrt(1 - z * z), x = st.amp * Math.exp(-z * w * a) * Math.sin(wd * a);
+      if (isFront()) { bones.chest.userData.sy *= 1 - 0.6 * x; bones.neck.userData.sy = (bones.neck.userData.sy || 1) * (1 - 0.4 * x); bones.head.userData.sy = (bones.head.userData.sy || 1) / (1 - 0.4 * x); }
+      else { bones.chest.userData.pose += -BODY * x; bones.head.userData.pose += -BODY * x; }
+    }
+  }
+}
 function tick(dt) {
   S_.dt = dt; S_.t += dt; S_.tau += dt;
   if (S_.held) followHold(dt);
+  // the eyes chase the look target with a 60 ms lag
+  const kEye = 1 - Math.exp(-dt / 0.06);
+  const T = lookTarget();
+  S_.look.yaw += (T.yaw - S_.look.yaw) * kEye; S_.look.pitch += (T.pitch - S_.look.pitch) * kEye;
   const fn = A[S_.action] || A.idle;
   fn(S_.tau);
+  lookLayer(dt);          // before the blend: a switch's snapshot includes it, so it must be in the pose being blended to
   applyBlend();
   stepPhysics(dt);
-  // locomotion: walk in the facing direction, turn at the stage edges (she spans ~0.42 ahead of the root, ~0.82 behind: the tail)
-  if (S_.speed && !S_.turn && !S_.held && S_.y <= 0) {
-    S_.x += S_.facing * S_.speed * dt;
-    const ahead = 0.42, behind = 0.82;
-    const front = S_.facing > 0 ? STAGE.w - ahead : ahead;
-    const back = S_.facing > 0 ? behind : STAGE.w - behind;
-    if (S_.facing > 0 ? S_.x > front : S_.x < front) { S_.x = front; S_.turn = { t0: S_.t, from: S_.facing }; }
-    if (S_.facing > 0 ? S_.x < back : S_.x > back) S_.x += Math.sign(back - S_.x) * Math.min(Math.abs(back - S_.x), S_.speed * dt * 2);   // ease in, never teleport
-  }
   let sx = M();
   if (S_.turn) {
     const u = Math.max(0, (S_.t - S_.turn.t0) / 0.28);
@@ -1148,8 +1394,13 @@ function tick(dt) {
   // Squash and stretch happen about the floor under her, not about the group's origin (the middle of the canvas,
   // most of her height above her feet): scaled about that, a landing squash of 0.18 lifted her feet 36 px. The
   // widening is about her own centre line for the same reason, or she slid sideways on every squash.
-  group.position.x = S_.x + (S_.rootX || 0) - sx * sc * sq * restHead.root.x; group.position.y = GROUND_Y + S_.y + FLOOR_Y * sc * (1 - (1 - sq) * stretch);
+  // Every horizontal scale - her mirror, a turn, a view swap, a squash - is about her own feet, so S_.x is where
+  // her feet are whatever the view or facing. It used to be the canvas centre, and the two rigs stand at different
+  // places on their canvases: every view swap shifted her 0.6 units (190 px in the lab) and every walking turn
+  // flipped her about a point 0.42 units from her feet - a jump the squash was hiding.
+  group.position.x = S_.x + (S_.rootX || 0) - group.scale.x * restHead.root.x; group.position.y = GROUND_Y + S_.y + FLOOR_Y * sc * (1 - (1 - sq) * stretch);
   groundFeet();
+  plantFeet(dt);
   applyPose();
   // the impulse of a feeling arriving, decaying over about half a second
   if (S_.emoKick) {
@@ -1203,11 +1454,25 @@ const lab = window.lab = {
     // Always blended, even when the view changes: the first half of a view swap still shows the old view, and an
     // unblended switch there threw her foot 25 px in one frame. Startle and land snap on purpose.
     startBlend(opts.blend ?? (name === 'land' || name === 'startle' ? 0.012 : null), opts.blendRoot);
-    if (S_.action === 'look' && name !== 'look') { S_.look.yaw = 0; S_.look.pitch = 0; }   // A.look drives the gaze itself; leaving it must hand it back
+    if (S_.blend && S_.rootMotion && name !== 'walk' && name !== 'run') {
+      S_.blend.fromGait = true;
+      S_.heelHold = { side: S_.stanceSide, rise: S_.heelRise || 0, t0: S_.t };
+    }
+    if (name !== 'look') S_.actLook = null;   // A.look drives the gaze itself; leaving it hands the gaze back to lab.look
+    if ((S_.action === 'walk' || S_.action === 'run') && name !== 'walk' && name !== 'run' && (S_.speed || 0) > 0.1) {
+      // (after the view swap, if there is one: played under the swap's squash nobody would see it)
+      S_.settle = { t0: S_.t + (wantView(name) !== VIEW_NAME ? 0.12 : 0), amp: 0.05 * clamp(S_.speed / 0.74, 0, 1.6) };
+      // and her tail keeps going forward for a moment: a stop kicks it
+      for (let i = 1; i <= 6; i++) { const b = bones['tail_' + i]; if (b && b.userData.head) b.userData.springVel += 1.6 * clamp(S_.speed, 0, 2) * (0.5 + i * 0.12); }
+    }
     if (name === 'dance') {
       const i = opts.move != null ? clamp(Math.floor(opts.move), 0, ROUTINE.length - 1) : Math.floor(Math.random() * ROUTINE.length);
       S_.danceBeat0 = moveBeat(i);
     }
+    // a walk becoming a run keeps its stride (phase and speed); anything else starts a gait from standing
+    const moving = (a) => a === 'walk' || a === 'run';
+    if (!(moving(name) && moving(S_.action))) S_.gait = null;
+    S_.walkTarget = null;                       // lab.walkTo() comes after lab.start(), every time
     S_.action = name; S_.tau = 0; if (name === 'turn') S_.turn = null;
     switchView(want);
     return { name, view: want };
@@ -1217,12 +1482,17 @@ const lab = window.lab = {
     if (S_.viewSwap) { activate(VIEWS[S_.viewSwap.to]); showOnly(S_.viewSwap.to); S_.viewSwap = null; }
     group.scale.set(M(), 1, 1); S_.blink.next = 9; S_.blink.phase = 0; for (const b of boneList) { b.userData.spring = 0; b.userData.springVel = 0; } S_.prevPos.clear();
     // everything timed against the old clock is void: speech, the dance's vigour, the frames a blend reads
-    S_.talkUntil = 0; S_.syl = null; S_.talkOpen = 0; S_.gaze = null; S_.vig = own(VIGOUR, S_.emotion) ?? 1; S_.snapCur = null; S_.snapPrev = null;
+    S_.talkUntil = 0; S_.syl = null; S_.talkOpen = 0; S_.gaze = null; S_.gait = null; S_.stance = null; S_.walkTarget = null;
+    S_.look.yaw = S_.look.pitch = S_.lookTarget.yaw = S_.lookTarget.pitch = 0; Object.assign(S_.headLook, { h: 0, v: 0, p: 0, pv: 0, g: 0, gv: 0 });
+    S_.gazeLife = null; S_.glanceHead = null; S_.micro = null; S_.nod = null; S_.phraseAt = null; S_.settle = null; S_.breath = null; S_.heelHold = null; S_.vig = own(VIGOUR, S_.emotion) ?? 1; S_.snapCur = null; S_.snapPrev = null;
     return { name };
   },
   step(sec) { const n = Math.max(1, Math.round(sec * 60)); for (let i = 0; i < n; i++) tick(1 / 60); renderer.render(scene, camera); },
   // step until nothing is in transit (a turn, a view swap, a blend), for captures that must not catch one mid-way
   settle(maxSec = 5) { let n = 0; while ((S_.turn || S_.viewSwap || S_.blend) && n < maxSec * 60) { tick(1 / 60); n++; } renderer.render(scene, camera); return n; },
+  // where a walk or run is headed (stage units), or null: she eases off over the last 0.4 units and stands when she
+  // gets there. Without one she keeps going until told otherwise, as before.
+  walkTo(x) { S_.walkTarget = x == null || !Number.isFinite(+x) ? null : clamp(+x, 0, STAGE.w); if (S_.gait) S_.gait.approached = false; },
   // she is saying something for the next `secs` seconds: her mouth moves, whatever she is doing
   talking(secs) { S_.talkUntil = S_.t + Math.max(0, +secs || 0); },
   stop() { lab.start('idle'); },
@@ -1243,7 +1513,8 @@ const lab = window.lab = {
   },
   eyes(closed) { S_.eyesHold = closed == null ? null : clamp(closed, 0, 1); },   // testing hook: hold the lids
   blink() { if (kit) kit.blink.next = 0; },                                      // testing hook: blink as soon as allowed
-  look(yaw, pitch) { S_.look.yaw = clamp(yaw || 0, -1, 1); S_.look.pitch = clamp(pitch || 0, -1, 1); },
+  // where she should look, -1..1 (yaw + = her left); the eyes get there first and the head follows (lookLayer)
+  look(yaw, pitch) { S_.lookTarget.yaw = clamp(yaw || 0, -1, 1); S_.lookTarget.pitch = clamp(pitch || 0, -1, 1); },
   lookAt(px, py) { if (px == null) { lab.look(0, 0); return; } const [hx, hy] = lab.headPx(); lab.look((px - hx) / (STAGE.k * 1.2), (hy - py) / (STAGE.k * 0.9)); },
   headPx() { const v = new THREE.Vector3(); bones.head.getWorldPosition(v); return toPx(v.x, v.y); },
   // stage + position (units) and her hit box (window px, top-left origin)
@@ -1288,9 +1559,10 @@ const lab = window.lab = {
   pick(px, py) { return pickAt(px, py); },
   zone(px, py) { return zoneAt(px, py); },
   showLayer(name, v) { const m = layerMeshes[name]; if (m) m.visible = !!v; return !!m; },
-  bone(name) { const b = bones[name]; if (!b) return null; const v = new THREE.Vector3(); b.getWorldPosition(v); return { pose: +b.userData.pose.toFixed(3), spring: +b.userData.spring.toFixed(3), rot: +b.rotation.z.toFixed(3), sy: b.userData.sy, px: toPx(v.x, v.y).map((n) => Math.round(n)), visible: b.parent ? b.parent.visible : null }; },
+  bone(name) { const b = bones[name]; if (!b) return null; const v = new THREE.Vector3(); b.getWorldPosition(v); return { pose: +b.userData.pose.toFixed(3), spring: +b.userData.spring.toFixed(3), rot: +b.rotation.z.toFixed(3), sy: b.userData.sy, px: toPx(v.x, v.y).map((n) => Math.round(n)), tip: b.userData.tailLocal ? (() => { const q = new THREE.Vector3(b.userData.tailLocal.x, b.userData.tailLocal.y, 0); b.localToWorld(q); return toPx(q.x, q.y).map((n) => Math.round(n)); })() : null, visible: b.parent ? b.parent.visible : null }; },
   snapshot: () => ({ view: VIEW_NAME, native: NATIVE, mirror: M(), scaleX: +group.scale.x.toFixed(3), action: S_.action, tau: +S_.tau.toFixed(2), x: +S_.x.toFixed(3), y: +S_.y.toFixed(3), facing: S_.facing, rootY: +(S_.rootY || 0).toFixed(3),
-    plant: +(S_.plant ?? 1).toFixed(3), vig: +S_.vig.toFixed(3), blending: !!S_.blend, brow: facePieces.eyebrow ? +facePieces.eyebrow.rotation.z.toFixed(4) : null, springs: Object.fromEntries(springs.flatMap((s) => s.bones).map((n) => [n, +bones[n].userData.spring.toFixed(3)])) }),
+    plant: +(S_.plant ?? 1).toFixed(3), eyeYaw: +S_.look.yaw.toFixed(4), gaze: S_.gaze, headYaw: +S_.headLook.h.toFixed(4), micro: S_.micro ? [+S_.micro.x.toFixed(2), +S_.micro.y.toFixed(2)] : null,
+    breathLen: S_.breath ? +S_.breath.len.toFixed(3) : null, stance: S_.rootMotion ? S_.stanceSide : null, vig: +S_.vig.toFixed(3), blending: !!S_.blend, brow: facePieces.eyebrow ? +facePieces.eyebrow.rotation.z.toFixed(4) : null, springs: Object.fromEntries(springs.flatMap((s) => s.bones).map((n) => [n, +bones[n].userData.spring.toFixed(3)])) }),
   fps: () => +(S_.fps.length / S_.fps.reduce((a, b) => a + b, 0)).toFixed(1),
   // what the face kit is showing (front view), for tests
   face: () => (kit ? { eye_l: kit.regions.eye_l.state, eye_l_in: kit.regions.eye_l.incoming || null, eye_r: kit.regions.eye_r.state, mouth: kit.regions.mouth.state, mouth_in: kit.regions.mouth.incoming || null,

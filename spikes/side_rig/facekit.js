@@ -175,8 +175,11 @@ export class FaceKit {
       // Blinks snap. The lid's rungs are frames of one movement, not moods, so going to or from one snaps too: a
       // blink reopening through 'half_lid' used to crossfade into 'open', and two half-transparent cells over her
       // skin read as a washed-out, ghostly eye for a tenth of a second after every blink.
+      // A change of gaze snaps too: eyes do not dissolve from one direction to the next, they jump (a saccade).
       const lidRung = (s) => s === 'closed' || s === 'half_lid';
-      const instant = region.startsWith('eye') && (blinking || lidRung(st) || lidRung(r.state));
+      const gaze = (s) => typeof s === 'string' && s.startsWith('look_');
+      const glance = (gaze(st) && (gaze(r.state) || r.state === 'open')) || (gaze(r.state) && st === 'open');   // not a mood change
+      const instant = region.startsWith('eye') && (blinking || lidRung(st) || lidRung(r.state) || glance);
       // ...even through a crossfade that is still running: a blink that waited for a mood change to finish
       // arrived late or not at all
       if (instant && r.incoming && r.incoming !== st) { r.incoming = null; r.quads[0].material.opacity = 1; r.quads[1].material.opacity = 0; }
