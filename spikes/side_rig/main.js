@@ -131,7 +131,9 @@ app.whenReady().then(async () => {
     ipcMain.on('pet:focus', (e, on) => {
       if (!fromPage(e) || win.isDestroyed()) return;
       asked.focus = !!on;
-      if (on) takeFocus(); else { win.setFocusable(false); win.blur(); }
+      // blur BEFORE making the window unfocusable: that order hands focus back to the app you were typing in
+      // (measured 11/11 with real input); the other way round Windows gives it to the taskbar every time.
+      if (on) takeFocus(); else { win.blur(); win.setFocusable(false); }
     });
     app.on('second-instance', () => { if (!win.isDestroyed()) win.webContents.send('pet:command', 'wave'); });
     // She lives on the primary display's work area. A resolution or scaling change, or a monitor coming or going,
