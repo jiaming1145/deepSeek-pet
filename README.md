@@ -49,13 +49,15 @@ work but are untested (reports welcome).
 |---|---|
 | Hover | She looks at the cursor, and turns around if you stay behind her |
 | Click | A reaction that depends on where you touched her (head, tail, skirt...) |
-| Double-click or `C` | Opens the chat box |
+| Double-click | Opens the chat box (so does the tray's Chat) |
 | Drag | Picks her up. She startles, dangles, and panics if you shake her |
 | Let go | She drops, or flies if you throw her, and lands with an opinion |
 | Leave her alone | She wanders, sits, stretches, plays with her tail, naps when you are away |
-| `P` / `Esc` | Autopilot on or off / quit (click her first so she has focus) |
+| `Esc` | Closes the chat box. It never quits her |
 
-The tray icon (bottom right of Windows) has Chat, Wave, Nap, Autopilot and an out-of-character switch.
+Her window never takes the keyboard, so clicking, patting or dragging her leaves your typing where it was; only
+the chat box borrows the keyboard, and only while it is open. The tray icon (bottom right of Windows) has Chat,
+Wave, Nap, Autopilot, an out-of-character switch and Quit.
 
 **Give her a brain (optional).** Get a key from [platform.deepseek.com](https://platform.deepseek.com/) and
 either set `DEEPSEEK_API_KEY` in the environment or save it to `~/.ds/deepseek.key`. She then thinks about what
@@ -76,8 +78,9 @@ all. See [SECURITY.md](SECURITY.md) for exactly what is sent.
 - 💃 **She dances a routine**, not an oscillation: six moves at 108 BPM with holds and accents.
 - 🧡 **She remembers you.** When you first met, how long you have spent together, how often you petted or threw
   her, and how she felt when you closed her. Come back after a day and she has something to say about it.
-- 🖥️ **Lives on the desktop, not in a window.** Click-through everywhere except her own pixels (per-pixel hit
-  testing), always on top, walks along the taskbar edge, knows whether you are actually at the computer.
+- 🖥️ **Lives on the desktop, not in a window.** Click-through everywhere except within 14 px of her own pixels
+  (per-pixel hit testing), so a click beside her reaches the app behind. Always on top, never takes your keyboard,
+  walks along the taskbar edge, knows whether you are actually at the computer.
 - 🔒 **Safe by construction.** No keyboard hooks, no clipboard, no screenshots; her own thoughts are
   rate-limited and every reply is validated, so a bad answer can never break her.
 
@@ -113,7 +116,7 @@ a turn rather than a cut. The runtime is plain [three.js](https://threejs.org/) 
 | Need | Fills when | Drains when |
 |---|---|---|
 | rest | she naps (sitting only takes the edge off) | always, slowly; walking costs extra |
-| company | you click her, and slowly while your cursor is near | always; your presence slows it |
+| company | you click her; a hover counts once, however long it lasts | always; your presence slows it |
 | play | she wanders or plays with her tail | always, slowly |
 | safety | quietly, over a minute | you drop or throw her |
 
@@ -131,9 +134,12 @@ prose can trigger an action. The out-of-character switch in the tray is a real s
 string the model has to notice.
 
 **Tested where it can be.** Her mind, voice, memory, performance reader and brain are plain Node modules with
-no DOM or network, covered by `pnpm pet:test` in seconds. Anything visual is proven with captures from the real
-renderer (`--capture`, `--tour`, `--pet --selftest`), and the GIFs above were recorded the same way
-(`tools/media/`).
+no DOM or network, covered by `pnpm pet:test` in seconds (258 checks). Three Electron suites load the real page
+off-screen: how she handles real use (orders, the chat box, which clicks the window takes), her animation
+measured in window pixels (feet on the floor, no pops between moves), and a clock regression; run them from
+`apps/desktop` with `npx electron ../../spikes/side_rig/pet_interaction.test.cjs` (and `anim.test.cjs`,
+`mood_impulse.test.cjs`). Anything visual is proven with captures from the real renderer (`--capture`,
+`--tour`, `--pet --selftest`), and the GIFs above were recorded the same way (`tools/media/`).
 
 ## Roadmap
 
