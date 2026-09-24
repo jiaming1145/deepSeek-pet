@@ -1,8 +1,10 @@
-// Bridge for the pet window: hit state (click-through toggling), quit, tray commands.
+// Bridge for the pet window: hit state (click-through toggling), keyboard focus for the chat box, quit, tray commands.
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('petBridge', {
   setHit: (over) => ipcRenderer.send('pet:hit', !!over),
   quit: () => ipcRenderer.send('pet:quit'),
+  // The window is not focusable, so patting her never takes the keyboard. The chat box asks for it while open.
+  focus: (on) => ipcRenderer.send('pet:focus', !!on),
   onCommand: (cb) => ipcRenderer.on('pet:command', (_e, cmd) => cb(cmd)),
   onIdle: (cb) => ipcRenderer.on('pet:idle', (_e, seconds) => cb(seconds)),
   loadMemory: () => ipcRenderer.invoke('pet:memory:load'),

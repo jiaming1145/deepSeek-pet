@@ -14,7 +14,9 @@
   #hud { position: fixed; left: 8px; top: 8px; font: 11px/1.35 Consolas, monospace; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: pre; pointer-events: none; }
 
   /* her speech bubble: floats over the desktop, so it must read on any wallpaper and never eat a click */
-  #say { position: fixed; left: 0; top: 0; max-width: 260px; padding: 9px 13px; border-radius: 15px;
+  /* width: max-content, or near the right edge of the screen the box shrink-wraps to the space left and a short
+     line comes out as a column one character wide */
+  #say { position: fixed; left: 0; top: 0; width: max-content; max-width: 260px; overflow-wrap: anywhere; padding: 9px 13px; border-radius: 15px;
     background: rgba(255, 255, 255, 0.96); color: #16233a; border: 1.5px solid rgba(40, 70, 120, 0.30);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28); font-size: 15px; line-height: 1.4;
     pointer-events: none; opacity: 0; transform: translate(-50%, -100%) scale(0.92);
@@ -28,7 +30,7 @@
   #chat { position: fixed; right: 26px; bottom: 26px; width: 380px; max-height: 62vh;
     display: none; flex-direction: column; border-radius: 16px; overflow: hidden;
     background: rgba(252, 253, 255, 0.97); border: 1.5px solid rgba(40, 70, 120, 0.28);
-    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.34); color: #16233a; }
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.34); color: #16233a; cursor: default; }
   #chat.on { display: flex; }
   #chatHead { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
     background: linear-gradient(180deg, #1f3d78, #16305f); color: #eaf1ff; font-size: 13px; font-weight: 600; }

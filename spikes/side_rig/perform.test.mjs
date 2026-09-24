@@ -64,5 +64,67 @@ console.log('an instruction beats a description');
   ok('you said sleep, she mimed a spin, sleep wins', p.action === 'sleep', JSON.stringify(p));
 }
 
+console.log('"stop" means stop, and only when it is not refused');
+{
+  const act = (asked, said = '（嗯）') => readPerformance(asked, said)?.action ?? null;
+  ok('停 on its own stops her', act('停！') === 'idle');
+  ok('停下 stops her', act('快停下') === 'idle');
+  ok('别动 stops her', act('别动') === 'idle');
+  ok('stop stops her', act('stop') === 'idle' && act('Stop dancing') === 'idle');
+  ok('stay still stops her', act('stay still') === 'idle');
+  ok('不要停，继续跳舞 keeps her dancing', act('不要停，继续跳舞') === 'dance', String(act('不要停，继续跳舞')));
+  ok('跳个不停 is not a stop', act('跳个不停的舞吧', '（转起圈来）好耶') === 'dance', String(act('跳个不停的舞吧', '（转起圈来）好耶')));
+  ok("don't stop dancing keeps her dancing", act("don't stop dancing") === 'dance', String(act("don't stop dancing")));
+  ok('stay here and dance is a dance, not a freeze', act('stay here and dance for me') === 'dance', String(act('stay here and dance for me')));
+}
+
+console.log('a refusal covers its own clause and nothing more');
+{
+  const p = (asked, said = '（嗯）') => readPerformance(asked, said);
+  ok('别跳舞了，去睡觉吧 sends her to sleep', p('别跳舞了，去睡觉吧')?.action === 'sleep', JSON.stringify(p('别跳舞了，去睡觉吧')));
+  ok('别跳了，坐下 sits her down', p('别跳了，坐下')?.action === 'sit', JSON.stringify(p('别跳了，坐下')));
+  ok('别去左边，去右边 walks her right', p('别去左边，去右边')?.target === 0.88, JSON.stringify(p('别去左边，去右边')));
+  ok('去右边，别去左边 walks her right too', p('去右边，别去左边')?.target === 0.88, JSON.stringify(p('去右边，别去左边')));
+  for (const refusal of ['不许睡觉', '不准睡觉', '我不想让你睡觉', '你不能睡觉', '别睡了']) {
+    ok(`${refusal} does not put her to sleep`, p(refusal)?.action !== 'sleep', JSON.stringify(p(refusal)));
+  }
+  ok('no more dancing does not make her dance', p('no more dancing')?.action !== 'dance');
+  ok('醒醒，去跳舞 is a dance', p('醒醒，去跳舞')?.action === 'dance', JSON.stringify(p('醒醒，去跳舞')));
+  ok('醒醒 on its own wakes her', p('醒醒')?.action === 'wake', JSON.stringify(p('醒醒')));
+  ok('wake up wakes her', p('wake up!')?.action === 'wake');
+  ok('醒醒，别睡了 wakes her rather than doing nothing', p('醒醒，别睡了')?.action === 'wake', JSON.stringify(p('醒醒，别睡了')));
+}
+
+console.log('English keywords are whole words');
+{
+  const p = (asked, said = '(nods)') => readPerformance(asked, said);
+  ok('alright is not a direction', p('alright, how was your day?') === null, JSON.stringify(p('alright, how was your day?')));
+  ok('I left my phone is not a direction', p('I left my phone at home') === null, JSON.stringify(p('I left my phone at home')));
+  ok('you are right is not a direction', p("you're right") === null, JSON.stringify(p("you're right")));
+  ok('welcome is not come', p('welcome to my desktop')?.target !== 'cursor', JSON.stringify(p('welcome to my desktop')));
+  ok('detail is not tail', p('tell me in detail') === null, JSON.stringify(p('tell me in detail')));
+  ok('go left still walks her left', p('go left please')?.target === 0.12);
+  ok('walk to the right still walks her right', p('can you walk over to the right')?.target === 0.88);
+  ok('come here still calls her over', p('Come here!')?.target === 'cursor');
+  ok('dancing counts as dance', p('I love dancing with you')?.action === 'dance');
+  ok('NAP in capitals counts', p('NAP TIME')?.action === 'sleep');
+  ok('an inflection like napping counts', p('go napping')?.action === 'sleep');
+}
+
+console.log('a word that merely contains a negator is not a refusal');
+{
+  const p = (asked, said = '') => readPerformance(asked, said);
+  ok('你能不能跳个舞 is a request to dance', p('你能不能跳个舞')?.action === 'dance', JSON.stringify(p('你能不能跳个舞')));
+  ok('能不能坐下 is a request to sit', p('能不能坐下')?.action === 'sit');
+  ok('你能不能过来 calls her over', p('你能不能过来')?.target === 'cursor');
+  ok('要不要跳个舞 is a request to dance', p('要不要跳个舞')?.action === 'dance');
+  ok('我特别想看你跳舞 is not 别 (don\'t)', p('我特别想看你跳舞')?.action === 'dance');
+  ok('whenever I dance does not contain never', p('whenever I dance')?.action === 'dance');
+  ok('never dance again still refuses', p('never dance again')?.action !== 'dance');
+  ok('（特别开心地转起圈来）is her dancing', p('', '（特别开心地转起圈来）')?.action === 'dance');
+  ok('（别扭地挥了挥手）is her waving', p('', '（别扭地挥了挥手）')?.action === 'wave');
+  ok('（别别扭扭地坐下）is her sitting', p('', '（别别扭扭地坐下）')?.action === 'sit');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

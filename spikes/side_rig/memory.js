@@ -24,19 +24,38 @@ export function blank() {
 
 // Merge whatever was on disk with the defaults, tolerating a missing, truncated or older file. She must always
 // start, so anything unreadable degrades to a fresh memory rather than an error.
+// `raw` may be the parsed object or the file's text. Passing the text is better: `null` then means "no file", and
+// an empty or garbled file is recognisably DAMAGED rather than indistinguishable from a first launch. A damaged
+// memory is flagged (`damaged: true`) so she does not greet an old friend as a stranger, and so the caller can
+// keep the bad file aside before the next save overwrites it.
+const COUNTS = ['sessions', 'totalPets', 'totalThrows', 'secondsTogether'];
+const STAMPS = ['firstMet', 'lastSeen'];
 export function load(raw) {
   const m = blank();
-  if (!raw || typeof raw !== 'object') return m;
-  for (const k of Object.keys(m)) if (raw[k] != null) m[k] = raw[k];
-  m.version = CURRENT_VERSION;
-  if (m.needs && typeof m.needs !== 'object') m.needs = null;
+  if (raw == null) return m;                                   // nothing on disk: genuinely the first launch
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (e) { raw = undefined; }
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { m.damaged = true; return m; }
+  // field by field, so one bad value costs that value and not the whole history
+  for (const k of STAMPS) if (Number.isFinite(raw[k]) && raw[k] > 0) m[k] = raw[k]; else if (raw[k] != null) m.damaged = true;
+  for (const k of COUNTS) if (Number.isFinite(raw[k]) && raw[k] >= 0) m[k] = raw[k]; else if (raw[k] != null) m.damaged = true;
+  if (raw.needs && typeof raw.needs === 'object') {
+    const needs = {};
+    for (const [k, v] of Object.entries(raw.needs)) if (Number.isFinite(v)) needs[k] = Math.min(1, Math.max(0, v));
+    m.needs = Object.keys(needs).length ? needs : null;
+  }
+  if (!m.firstMet && (m.sessions > 0 || m.lastSeen)) m.damaged = true;   // she has been run before, but lost the date
   return m;
 }
 
 // How long she was away, and what that should do to her. Being switched off is not the same as being ignored:
 // she comes back rested, but company drains while she is gone, and after a very long absence she has settled.
+// `firstTime` is true only when there is no sign she has ever met you: not merely a session count of one, which a
+// damaged file also produces.
 export function resume(mem, now, mind) {
   const away = mem.lastSeen ? Math.max(0, (now - mem.lastSeen) / 1000) : 0;
+  const firstTime = !mem.firstMet && !mem.damaged;
   mem.sessions += 1;
   if (!mem.firstMet) mem.firstMet = now;
   if (mind && mem.needs) {
@@ -46,7 +65,7 @@ export function resume(mem, now, mind) {
     mind.needs.safety = 1;                                                       // nothing frightened her while off
     mind.needs.play = Math.max(0, mind.needs.play - Math.min(0.5, away / 7200));
   }
-  return { awaySeconds: away, firstTime: mem.sessions === 1, daysKnown: mem.firstMet ? (now - mem.firstMet) / 86400000 : 0 };
+  return { awaySeconds: away, firstTime, damaged: !!mem.damaged, daysKnown: mem.firstMet ? (now - mem.firstMet) / 86400000 : 0 };
 }
 
 export function record(mem, event, info = {}) {

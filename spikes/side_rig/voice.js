@@ -16,7 +16,9 @@ export const LINES_ZH = {
   greet_short:   ['（抬起头）哦，回来啦', '（尾鳍拍了下水）这么快就回来了', '（别过脸去）哼，来了啊', '（小声）在呢在呢'],
   greet_medium:  ['（鼓着腮帮子）人家等你好久了', '（尾巴轻轻摇）欢迎回来，主人', '（撇过头）才、才不是在等你', '（眼睛一亮）你终于回来了'],
   greet_long:    ['（叉着腰）你跑哪儿去了啦', '（小声嘀咕）还以为主人把人家忘了', '（吸了吸鼻子）这么久才回来……', '（打了个哈欠）本鲸都快睡着了'],
-  greet_firstToday: ['（揉揉眼睛）主人早', '（尾鳍拍拍水）又见面了', '（歪着头笑）今天也要好好的哦'],
+  greet_firstToday: ['（尾鳍拍拍水）又见面了', '（歪着头笑）今天也要好好的哦', '（眨眨眼）今天也来啦'],
+  greet_morning: ['（揉揉眼睛）主人早', '（伸了个懒腰）早上好呀'],
+  greet_first:   ['（好奇地游过来）你就是人家的主人吗？', '（尾鳍轻轻摆了摆）初次见面，请多关照哦', '（歪着头打量你）唔……新来的主人？'],
 
   // --- being touched
   pet_head:      ['（眯起眼睛）唔……', '（把头凑过去）再摸一下嘛', '（尾巴摇个不停）好舒服哦', '（红着脸别开）哼、勉强让你摸'],
@@ -48,7 +50,9 @@ export const LINES_EN = {
   greet_short:   ['oh, hello', 'back already?', 'hi', 'there you are'],
   greet_medium:  ['you were gone a while', 'welcome back', 'I kept your seat warm', 'hi, I missed you a bit'],
   greet_long:    ['you were gone AGES', 'I thought you had forgotten about me', 'finally! where were you?', 'I waited'],
-  greet_firstToday: ['morning', 'hello again', 'good to see you'],
+  greet_firstToday: ['hello again', 'good to see you', 'a new day!'],
+  greet_morning: ['morning', 'good morning'],
+  greet_first:   ['oh! hello, are you my human?', 'nice to meet you', 'hi... I am new here'],
   pet_head:      ['ehehe', 'that is nice', 'more please', 'mm'],
   pet_body:      ['hey', 'careful', 'hehe', 'that tickles'],
   pet_tail:      ['not the tail!', 'hey! that is my tail', 'eep'],
@@ -86,10 +90,13 @@ export function createVoice(opts = {}) {
   };
 }
 
+// A line she has not said lately if there is one; otherwise the one she said longest ago. Falling back to the
+// whole pool made a three-line pool repeat the line she had JUST said about one time in four.
 function pickFrom(v, pool) {
   const fresh = pool.filter((l) => !v.recent.includes(l));
-  const from = fresh.length ? fresh : pool;
-  const line = from[Math.floor(v.rng() * from.length)];
+  const line = fresh.length
+    ? fresh[Math.floor(v.rng() * fresh.length)]
+    : pool.reduce((a, b) => (v.recent.indexOf(b) > v.recent.indexOf(a) ? b : a));
   v.recent = [line, ...v.recent].slice(0, 8);
   return line;
 }
@@ -106,25 +113,43 @@ export function react(v, t, event, info = {}) {
         : info.zone === 'tail' ? L.pet_tail : L.pet_body;
   } else if (event === 'grab') pool = v.lines.grabbed;
   else if (event === 'drop') pool = (info.impact || 0) > 5 ? v.lines.dropped_hard : v.lines.dropped_soft;
-  else if (event === 'greet') {
-    const away = info.awaySeconds ?? 0;
-    const L = v.lines;
-    pool = away > 6 * 3600 ? L.greet_long : away > 900 ? L.greet_medium : away > 60 ? L.greet_short : L.greet_firstToday;
-  }
+  else if (event === 'greet') pool = greeting(v.lines, info);
   if (!pool) return null;
   v.lastSpoke = t;
   v.said++;
   return pickFrom(v, pool);
 }
 
+// Hello, weighted by how long you were gone. `info` carries `awaySeconds`, `firstTime` (she has never met you) and
+// `hour` (local, 0-23). The very first run used to say "又见面了" (we meet again) to a stranger, and a restart
+// half a minute later said "主人早" at any hour of the day.
+function greeting(L, info) {
+  const away = info.awaySeconds ?? 0;
+  const now = new Date();
+  const hour = info.hour ?? now.getHours();
+  const sinceMidnight = info.hour != null ? hour * 3600 : hour * 3600 + now.getMinutes() * 60 + now.getSeconds();
+  if (info.firstTime) return L.greet_first;
+  // An ordinary night away gets a hello for the new day, not "where have you BEEN"; a whole day or more still gets
+  // the earful. A night is three to twenty hours, and it counts if you come back in the morning (five to eleven -
+  // leaving at half past midnight is still last night) or if you were gone since before midnight.
+  const night = away > 3 * 3600 && away < 20 * 3600;
+  if (night && hour >= 5 && hour < 11) return [...L.greet_morning, ...L.greet_firstToday];
+  if (night && away > sinceMidnight) return L.greet_firstToday;
+  return away > 6 * 3600 ? L.greet_long : away > 900 ? L.greet_medium : L.greet_short;
+}
+
 // She is not reacting to anything; should she say something unprompted? Usually the answer is no.
 export function idleLine(v, t, mind, ctx = {}, force = false) {
   if (!force && t - v.lastSpoke < v.minGap) return null;
+  // ten minutes without keyboard or mouse and there is nobody to hear her; she stops talking to the room
+  if (!force && ctx.userIdleSeconds != null && ctx.userIdleSeconds > 600) return null;
   const n = mind.needs, L = v.lines;
   let pool = null;
   if (ctx.hourOfDay != null && (ctx.hourOfDay >= 1 && ctx.hourOfDay < 5)) pool = L.late_night;
   else if (mind.mood === 'sleepy') pool = L.sleepy;
-  else if (n.company < 0.2) pool = L.lonely;
+  // lonely lines follow her face: she misses you for a while after you go, then settles (see moodOf in mind.js).
+  // Keyed on the company number instead, she kept calling "有人在吗" for hours after her face had calmed down.
+  else if (mind.mood === 'sad') pool = L.lonely;
   else if (n.play < 0.25) pool = L.bored;
   else if (ctx.cursorNear) pool = L.cursor_near;
   else if (ctx.userIdleSeconds != null && ctx.userIdleSeconds < 5 && n.company > 0.5) pool = L.you_are_busy;

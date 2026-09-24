@@ -4,14 +4,22 @@
 // giving a `place(px, py)` function and a parent Object3D (the head bone).
 import * as THREE from 'three';
 
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
 const BROW_ALIAS = { verbatim: 'neutral' };   // the atlas's 'neutral_verbatim' cell is erased-hair strands, not a brow
 const REGION_ATLAS = { eye_l: 'eyes', eye_r: 'eyes', brow_l: 'brows', brow_r: 'brows', mouth: 'mouth' };
 // paint on her skin, so it belongs under her hair; everything else is a floating symbol and goes on top
 const SKIN_FX = new Set(['blush_l', 'blush_r', 'face_shadow', 'panic_shadow']);
 // a shut eye is not a binary. These are the rungs, and which cell shows at each.
 const LID_CELL = (lid) => (lid > 0.72 ? 'closed' : lid > 0.34 ? 'half_lid' : null);
-// gaze survives any eye state that still has an eye in it
-const GAZE_OK = new Set(['open', 'half', 'half_lid']);
+// Eyes drawn as something other than an open eye - shut, arcs, hearts, spirals - have no half-way lid. Swapping
+// one for 'half_lid' mid-blink or mid-squint popped a half-OPEN iris into a sleeping or delighted face, so these
+// only ever go fully shut, and a squint on them is drawn as the cheeks pushing up instead (see `squint`).
+const NO_LID = new Set(['closed', 'happy', 'heart', 'spiral']);
+const SQUINTS = new Set(['happy', 'heart', 'spiral']);   // ...of which these are open enough to squint (a shut eye cannot)
+// Gaze swaps the whole eye for a looking one, so only a plain open eye may do it: a half-lidded relaxed, smug or
+// focused eye opened wide the moment the cursor came near, which threw the expression away.
+const GAZE_OK = new Set(['open']);
 
 export class FaceKit {
   constructor(opts) {
@@ -28,6 +36,7 @@ export class FaceKit {
     this.mood = 'neutral'; this.pending = null; this.fade = 0; this.FADE = 0.12;
     this.blink = { next: 2.5, phase: 0, t: [0.055, 0.035, 0.125], slow: false, double: false };
     this.viseme = null; this.look = null; this.eyesClosed = 0; this.sleepy = 0; this.wink = null;
+    this.mouthOpen = 0; this.openCell = null; this.noBlink = false; this.squint = 0; this.lid = 0;
     this.regions = {}; this.fx = {}; this.state = {};
   }
 
@@ -93,6 +102,7 @@ export class FaceKit {
     if (base) {
       if (off) mesh.position.set(base.x + off[0] * this.pxScale, base.y - off[1] * this.pxScale, base.z);
       else mesh.position.copy(base);
+      mesh.userData.seat = mesh.position.clone();          // where this cell sits; the squint lifts it from here
     }
     const { u0, v0, w, h } = this.cellUV(region, stateName);
     const uv = mesh.geometry.attributes.uv;
@@ -109,7 +119,8 @@ export class FaceKit {
     this.applyUV(r.quads[1], region, stateName); r.incoming = stateName; r.t = 0;
   }
   recipe(mood) {
-    const rec = (this.states.recipes || {})[mood];
+    const recipes = this.states.recipes || {};
+    const rec = Object.hasOwn(recipes, mood) ? recipes[mood] : null;
     if (!rec) return null;
     const brow = (v) => BROW_ALIAS[v] || v;
     return { eye_l: rec.eye_l || 'open', eye_r: rec.eye_r || 'open', brow_l: brow(rec.brow_l || 'neutral'), brow_r: brow(rec.brow_r || 'neutral'), mouth: rec.mouth || 'closed', fx: (rec.fx || []).map((f) => (typeof f === 'string' ? f : f.name)) };
@@ -126,6 +137,7 @@ export class FaceKit {
     // seven is a double.
     const B = this.blink;
     B.next -= dt;
+    if (this.noBlink) { B.phase = 0; B.next = Math.max(B.next, 0.3); }     // the host is holding a stare
     if (B.next <= 0 && B.phase === 0) {
       B.phase = 1e-4;
       B.slow = this.sleepy > 0.5;
@@ -143,23 +155,53 @@ export class FaceKit {
       else { B.phase = 0; if (B.double) { B.double = false; B.next = 0.16; } }
     }
     lid = Math.max(lid, this.eyesClosed || 0);
-    const lidCell = LID_CELL(lid);
+    this.lid = lid;
+    const drawn = NO_LID.has(rec.eye_l) || NO_LID.has(rec.eye_r);
+    let lidCell = LID_CELL(lid);
+    if (drawn && lidCell !== 'closed') lidCell = null;
     let eyeL = rec.eye_l, eyeR = rec.eye_r;
     if (this.look && GAZE_OK.has(rec.eye_l) && GAZE_OK.has(rec.eye_r)) { eyeL = eyeR = 'look_' + this.look; }
     if (this.wink && !lidCell) { if (this.wink === 'l') eyeL = 'closed'; else eyeR = 'closed'; }
     if (lidCell) { eyeL = eyeR = lidCell; }
     const blinking = lid > 0.34;
-    let mouth = this.viseme || rec.mouth;
+    // A mouth held open by the body (a gasp, a yawn, a cry) wins over the mood's resting mouth; speech wins over
+    // both. Hysteresis, so a value hovering at a threshold does not flicker between two cells.
+    const mo = this.mouthOpen || 0;
+    this.openCell = mo > (this.openCell === 'open_wide' ? 0.46 : 0.54) ? 'open_wide' : mo > (this.openCell ? 0.24 : 0.3) ? 'open_small' : null;
+    let mouth = this.viseme || this.openCell || rec.mouth;
     const want = { eye_l: eyeL, eye_r: eyeR, brow_l: rec.brow_l, brow_r: rec.brow_r, mouth };
     for (const [region, st] of Object.entries(want)) {
       const r = this.regions[region];
-      const instant = region.startsWith('eye') && (blinking || st === 'closed' || r.state === 'closed');   // blinks snap
+      // Blinks snap. The lid's rungs are frames of one movement, not moods, so going to or from one snaps too: a
+      // blink reopening through 'half_lid' used to crossfade into 'open', and two half-transparent cells over her
+      // skin read as a washed-out, ghostly eye for a tenth of a second after every blink.
+      const lidRung = (s) => s === 'closed' || s === 'half_lid';
+      const instant = region.startsWith('eye') && (blinking || lidRung(st) || lidRung(r.state));
+      // ...even through a crossfade that is still running: a blink that waited for a mood change to finish
+      // arrived late or not at all
+      if (instant && r.incoming && r.incoming !== st) { r.incoming = null; r.quads[0].material.opacity = 1; r.quads[1].material.opacity = 0; }
       if (r.state !== st && !r.incoming) this.setRegion(region, st, !instant);
       if (r.incoming) {
         r.t += dt / this.FADE;
         const k = Math.min(1, r.t);
         r.quads[1].material.opacity = k; r.quads[0].material.opacity = 1 - k;
         if (k >= 1) { this.applyUV(r.quads[0], region, r.incoming); r.state = r.incoming; r.incoming = null; r.quads[0].material.opacity = 1; r.quads[1].material.opacity = 0; }
+      }
+    }
+    // The squint on eyes that have no lid (happy arcs and the like): the cheeks push the eyes up and flatten them a
+    // little, and the brows lift with them. Eased, so it breathes with the move that asks for it.
+    // Driven by the body's squint alone, not by the lid: a blink passing through must not drop her cheeks, and the
+    // swap to 'closed' at 0.72 must not cut the lift off at its peak.
+    const sq = SQUINTS.has(rec.eye_l) || SQUINTS.has(rec.eye_r) ? clamp01((this.eyesClosed || 0) / 0.72) : 0;
+    this.squint += (sq - this.squint) * Math.min(1, dt * 12);
+    const lift = this.squint * 26 * this.pxScale, browLift = this.squint * 20 * this.pxScale;
+    for (const [region, r] of Object.entries(this.regions)) {
+      const eye = region.startsWith('eye');
+      if (!eye && !region.startsWith('brow')) continue;
+      for (const qd of r.quads) {
+        const seat = qd.userData.seat || qd.userData.base; if (!seat) continue;
+        qd.position.set(seat.x, seat.y + (eye ? lift : browLift), seat.z);
+        qd.scale.y = eye ? 1 - 0.14 * this.squint : 1;
       }
     }
     const on = new Set(rec.fx);

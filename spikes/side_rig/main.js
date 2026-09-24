@@ -19,22 +19,56 @@ const SHOTS = path.join(__dirname, PET ? 'shots_pet' : has('--front') ? 'shots_v
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let tray = null;
 
+// One pet at a time. A second `--pet` launch used to put a second her on the desktop, fighting the first over the
+// same memory file; now it quits and the running one waves instead. Only the pet takes the lock, so the lab, the
+// tour and the capture runs still start while she is on the desktop.
+const SECOND = PET && !app.requestSingleInstanceLock();
+if (SECOND) {
+  console.log('she is already on the desktop; this launch quits');
+  app.exit(SELFTEST ? 3 : 0);
+}
+
+// Only our own page may use the bridge. Navigation is blocked below, but this is checked on every message as well,
+// because a page that got in some other way must still not reach the key-holding brain or her memory file.
+const fromPage = (e) => { const u = e && e.senderFrame && e.senderFrame.url; return typeof u === 'string' && u.startsWith('file:'); };
+
 app.whenReady().then(async () => {
+  if (SECOND) return;
   // her memory: one small JSON file beside the app's settings, so she is not a blank slate every launch.
   // Registered for every mode, not just --pet, so the lab and the probes can read it too.
   const memFile = path.join(app.getPath('userData'), 'whalechan-memory.json');
   // Her optional language-model brain. The key is read here and never reaches the page. Everything she does
   // works without it, so a missing key, an empty account or a dead network changes nothing on screen.
   const brain = createBrain({});
-  ipcMain.handle('pet:think', async (_e, state, history, activities) => {
-    try { return await think(brain, state, history, activities); } catch (e) { return null; }
+  ipcMain.handle('pet:think', async (e, state, history, activities) => {
+    if (!fromPage(e)) return null;
+    try { return await think(brain, state, history, activities); } catch (err) { return null; }
   });
-  ipcMain.handle('pet:brain', () => ({ enabled: brain.enabled, calls: brain.calls, ok: brain.ok, failed: brain.failed, lastError: brain.lastError }));
-  ipcMain.handle('pet:chat', async (_e, turns, state, history) => {
-    try { return await chat(brain, turns, state, history); } catch (e) { return { error: String(e.message || e) }; }
+  ipcMain.handle('pet:brain', (e) => (fromPage(e) ? { enabled: brain.enabled, calls: brain.calls, ok: brain.ok, failed: brain.failed, lastError: brain.lastError } : null));
+  ipcMain.handle('pet:chat', async (e, turns, state, history) => {
+    if (!fromPage(e)) return { error: 'refused: not her page' };
+    try { return await chat(brain, turns, state, history); } catch (err) { return { error: String(err.message || err) }; }
   });
-  ipcMain.handle('pet:memory:load', () => { try { return JSON.parse(fs.readFileSync(memFile, 'utf8')); } catch (e) { return null; } });
-  ipcMain.on('pet:memory:save', (_e, data) => { try { fs.writeFileSync(memFile, JSON.stringify(data)); } catch (e) { console.error('could not save her memory:', e.message); } });
+  // A memory file that does not parse is moved aside, not treated as "no memory": the page would otherwise start
+  // blank and its first save would write over the only copy of everything she remembered.
+  ipcMain.handle('pet:memory:load', (e) => {
+    if (!fromPage(e)) return null;
+    let text;
+    try { text = fs.readFileSync(memFile, 'utf8'); } catch (err) { return null; }   // no file yet: first meeting
+    try { return JSON.parse(text); } catch (err) {
+      const aside = `${memFile}.corrupt-${Date.now()}`;
+      try { fs.renameSync(memFile, aside); console.error(`her memory did not parse (${err.message}); kept it as ${aside}`); }
+      catch (err2) { console.error('her memory did not parse and could not be moved aside:', err2.message); }
+      return text;      // the page's loader reads a string as "damaged", not as a first meeting
+    }
+  });
+  // Written to a temporary file and renamed over the real one, so a crash or a power cut mid-write leaves the
+  // previous memory whole instead of a half-written file.
+  ipcMain.on('pet:memory:save', (e, data) => {
+    if (!fromPage(e)) return;
+    const tmp = memFile + '.tmp';
+    try { fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, memFile); } catch (err) { console.error('could not save her memory:', err.message); }
+  });
   const query = {};
   if (argOf('--rig')) query.rig = argOf('--rig');
   if (argOf('--front')) query.front = argOf('--front');
@@ -44,16 +78,66 @@ app.whenReady().then(async () => {
     bounds = { x: wa.x, y: wa.y, width: wa.width, height: wa.height };
     Object.assign(query, { rig: query.rig || 'rig.json', front: query.front || 'rig_front.json', height: argOf('--height', '380'), floor: '2', pet: '1' });
   }
+  // The pet is created NOT focusable: patting her or dragging her must leave the keyboard with whatever the owner
+  // was typing into. The chat box asks for focus while it is open (pet:focus below) and gives it back on close.
   const win = new BrowserWindow({
     ...bounds, transparent: true, frame: false, alwaysOnTop: true, skipTaskbar: true, resizable: false, hasShadow: false,
+    focusable: !PET,
     webPreferences: { preload: PET ? path.join(__dirname, 'preload.js') : undefined, contextIsolation: true, sandbox: false, backgroundThrottling: false },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.webContents.on('console-message', (_e, level, message, line, sourceId) => { if (level >= 2) console.log(`[renderer] ${message} (${sourceId}:${line})`); });
+  // Nothing may navigate this window or open another one. Dropping a link or a file on her used to load it in
+  // her place, and whatever loaded there would have had the bridge.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (PET) {
+    // No application menu: its Ctrl+R and Ctrl+W accelerators reloaded or closed an invisible full-screen window.
+    Menu.setApplicationMenu(null);
     win.setIgnoreMouseEvents(true, { forward: true });
-    ipcMain.on('pet:hit', (_e, over) => { if (!win.isDestroyed()) win.setIgnoreMouseEvents(!over, { forward: true }); });
-    ipcMain.on('pet:quit', () => app.quit());
+    // Main remembers the last hit state but a reloaded (or crashed, or hung) page starts again believing the cursor
+    // is not over her, so it never sends the "click-through again" that would undo it. The window then swallowed
+    // every click on the whole screen. Whenever the page goes away, the window goes back to click-through and
+    // unfocusable, which is what a freshly started page assumes.
+    // A page that only hung comes back with its state intact but only re-sends a hit state when it changes, so
+    // main keeps what the page last asked for and puts it back on 'responsive'; otherwise an open chat box stayed
+    // click-through and unfocusable after a stall until it was closed and reopened.
+    const asked = { over: false, focus: false };
+    const release = () => { if (win.isDestroyed()) return; win.setIgnoreMouseEvents(true, { forward: true }); win.setFocusable(false); };
+    const restart = () => { asked.over = false; asked.focus = false; release(); };
+    // On Windows setFocusable(true) also takes skipTaskbar off, which would put an invisible full-screen window
+    // in the taskbar for as long as the chat box is open.
+    const takeFocus = () => { win.setFocusable(true); win.setSkipTaskbar(true); win.focus(); };
+    win.webContents.on('did-start-loading', restart);
+    win.webContents.on('render-process-gone', restart);
+    win.on('unresponsive', release);
+    win.on('responsive', () => {
+      if (win.isDestroyed()) return;
+      win.setIgnoreMouseEvents(!asked.over, { forward: true });
+      if (asked.focus) takeFocus();
+    });
+    // A reloaded page also starts in character. Tell it the mode the tray is showing, once it is listening
+    // (its command handler is registered after the rig's top-level awaits, which is later than did-finish-load).
+    win.webContents.on('did-finish-load', async () => {
+      for (let i = 0; i < 300 && !win.isDestroyed(); i++) {
+        let up = false;
+        try { up = await win.webContents.executeJavaScript('!!(window.__ready && window.pet)', true); } catch (e) { up = false; }
+        if (up) { win.webContents.send('pet:command', brain.mode === 'plain' ? 'plain' : 'character'); return; }
+        await wait(100);
+      }
+    });
+    ipcMain.on('pet:hit', (e, over) => { if (fromPage(e) && !win.isDestroyed()) { asked.over = !!over; win.setIgnoreMouseEvents(!over, { forward: true }); } });
+    ipcMain.on('pet:quit', (e) => { if (fromPage(e)) app.quit(); });
+    ipcMain.on('pet:focus', (e, on) => {
+      if (!fromPage(e) || win.isDestroyed()) return;
+      asked.focus = !!on;
+      if (on) takeFocus(); else { win.setFocusable(false); win.blur(); }
+    });
+    app.on('second-instance', () => { if (!win.isDestroyed()) win.webContents.send('pet:command', 'wave'); });
+    // She lives on the primary display's work area. A resolution or scaling change, or a monitor coming or going,
+    // used to leave the window at the old size; refit it and rig.js refits her stage on the resize.
+    const refit = () => { if (!win.isDestroyed()) win.setBounds(screen.getPrimaryDisplay().workArea); };
+    for (const ev of ['display-metrics-changed', 'display-added', 'display-removed']) screen.on(ev, refit);
     const icon = nativeImage.createFromPath(path.join(__dirname, 'tray.png'));
     tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }));
     tray.setToolTip('Whale-chan');
@@ -64,7 +148,7 @@ app.whenReady().then(async () => {
       // here instead, deterministically: the switch picks which system prompt is sent, and quiets her lines.
       { label: 'Out of character (TIMEOUT_SIGNAL)', type: 'checkbox', checked: false,
         click: (item) => { brain.mode = item.checked ? 'plain' : 'character'; win.webContents.send('pet:command', item.checked ? 'plain' : 'character'); } },
-      { label: 'Chat', click: () => win.webContents.send('pet:command', 'chat') },
+      { label: 'Chat', click: () => { takeFocus(); win.webContents.send('pet:command', 'chat'); } },
       { label: 'Wave', click: () => win.webContents.send('pet:command', 'wave') },
       { label: 'Nap', click: () => win.webContents.send('pet:command', 'sleep') },
       { type: 'separator' }, { label: 'Quit', click: () => app.quit() },
