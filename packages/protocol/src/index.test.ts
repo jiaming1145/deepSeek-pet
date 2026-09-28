@@ -193,7 +193,10 @@ describe('Phase 3 constants (contracts §2.1)', () => {
     expect(LaneSourceSchema.options).toEqual([...LANE_SOURCES]);
     expect(LANE_RESULTS).toEqual(['completed', 'expired', 'preempted', 'cancelled', 'renderer_lost']);
     expect(LaneResultSchema.options).toEqual([...LANE_RESULTS]);
-    expect(HIT_PARTS).toEqual(['head', 'face', 'hair', 'body', 'arm', 'ticklish']);
+    expect(HIT_PARTS).toEqual([
+      'head', 'face', 'hair', 'body', 'arm', 'hand', 'leg', 'foot', 'tail', 'accessory', 'prop',
+      'ticklish',
+    ]);
     expect(HitPartSchema.options).toEqual([...HIT_PARTS]);
     expect(LOOK_ANCHORS).toEqual(['cursor', 'user', 'away', 'up', 'down', 'left', 'right', 'screen']);
     expect(LookAnchorSchema.options).toEqual([...LOOK_ANCHORS]);

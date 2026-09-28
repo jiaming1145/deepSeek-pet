@@ -56,8 +56,8 @@ describe('CharacterConfigSchema — Phase 3 optional blocks (§4.10)', () => {
     expect(c.hitParts?.Part01Face001.part).toBe('face');
     expect(c.hitPartDefault).toBe('body');
     expect(c.extraMotions?.Extra[0].name).toBe('wave_small');
-    expect(() => parseCharacterConfig({ ...good, hitParts: { X: { part: 'tail', participatesInHitTest: true } } })).toThrow();
-    expect(() => parseCharacterConfig({ ...good, hitPartDefault: 'tail' })).toThrow();
+    expect(() => parseCharacterConfig({ ...good, hitParts: { X: { part: 'wing', participatesInHitTest: true } } })).toThrow();
+    expect(() => parseCharacterConfig({ ...good, hitPartDefault: 'wing' })).toThrow();
     expect(() => parseCharacterConfig({ ...good, ticklishRect: { x0: 0.7, y0: 0.55, x1: 0.3, y1: 0.8 } })).toThrow();
     expect(() => parseCharacterConfig({ ...good, sim: { proactive: { maxPerDay: 6 } } })).toThrow();
     expect(() => parseCharacterConfig({ ...good, extraMotions: { Extra: [{ file: 'f', name: 'Bad-Name', tags: [] }] } })).toThrow();
@@ -89,8 +89,14 @@ describe('normalizeHitArea (§6.4, D6)', () => {
     expect(normalizeHitArea('Face')).toBe('face');
     expect(normalizeHitArea('Hair')).toBe('hair');
     expect(normalizeHitArea('ArmL')).toBe('arm');
+    expect(normalizeHitArea('HandL')).toBe('hand');
+    expect(normalizeHitArea('LegR')).toBe('leg');
+    expect(normalizeHitArea('ShoeL')).toBe('foot');
+    expect(normalizeHitArea('Tail')).toBe('tail');
+    expect(normalizeHitArea('Bonnet')).toBe('accessory');
+    expect(normalizeHitArea('Food')).toBe('prop');
     expect(normalizeHitArea('Ticklish')).toBe('ticklish');
-    expect(normalizeHitArea('Tail')).toBeNull();
+    expect(normalizeHitArea('Wing')).toBeNull();
     expect(normalizeHitArea('')).toBeNull();
   });
 });

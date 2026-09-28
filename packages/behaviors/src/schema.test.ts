@@ -33,7 +33,7 @@ describe('BehaviorSchema', () => {
   it('applies the §4.1 defaults', () => {
     expect(BehaviorSchema.parse(minimal)).toEqual({
       ...minimal, cooldownMs: 0, minLiveliness: 0, motion: null, expression: null, expressionWeight: 0.55,
-      gaze: 'follow', overlay: 'none', locomotion: null, tags: [],
+      gaze: 'follow', overlay: 'none', locomotion: null, interaction: null, tags: [],
     });
   });
   it('enforces every range', () => {
@@ -43,11 +43,13 @@ describe('BehaviorSchema', () => {
       { minMs: 4999 }, { maxMs: 20001 }, { minMs: 9000, maxMs: 8000 }, { minMs: 5000.5 },
       { cooldownMs: 600_001 }, { cooldownMs: -1 },
       { minLiveliness: 1.1 }, { expressionWeight: 1.01 },
-      { gaze: 'stare' }, { overlay: 'wink' }, { locomotion: 'fly' }, { tags: ['loud'] },
+      { gaze: 'stare' }, { overlay: 'wink' }, { locomotion: 'fly' }, { interaction: 'dance' },
+      { tags: ['loud'] },
       { expression: '' }, { when: { fact: 'nope', eq: 1 } },
     ];
     for (const patch of bad) expect(BehaviorSchema.safeParse({ ...minimal, ...patch }).success, JSON.stringify(patch)).toBe(false);
     expect(BehaviorSchema.safeParse({ ...minimal, minMs: 20000, maxMs: 20000, cooldownMs: 600_000, weight: 5 }).success).toBe(true);
+    expect(BehaviorSchema.safeParse({ ...minimal, interaction: 'eat' }).success).toBe(true);
   });
 });
 

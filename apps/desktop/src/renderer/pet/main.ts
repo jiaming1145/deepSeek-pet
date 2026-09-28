@@ -3,7 +3,8 @@ import type { CubismIdHandle } from '@framework/id/cubismid';
 import { CubismUpdateOrder, ICubismUpdater } from '@framework/motion/icubismupdater';
 import type { CubismModel } from '@framework/model/cubismmodel';
 import {
-  GpuPressReader, LEAVE_RING, Live2DStage, OverlayUpdater, Picker, STATIONARY_REPICK_HZ,
+  GpuPressReader, InteractionParameterUpdater, LEAVE_RING, Live2DStage, OverlayUpdater, Picker,
+  RichInteractionController, STATIONARY_REPICK_HZ,
   loadPickerTextures, movedEnough, nextHoverInside, pickerMapFromConfig, shouldRender, type Rng,
 } from '@ds/stage';
 import { Channels, LIVELINESS_PRESETS, type Lane, type LaneSource, type Payload, type SimSnapshot } from '@ds/protocol';
@@ -150,6 +151,7 @@ async function main(): Promise<void> {
   const uiFlags = createUiFlags();
   let overlay: OverlayUpdater | null = null;
   let poseUpdater: PetPoseUpdater | null = null;
+  const interaction = new RichInteractionController();
   const arbiter = new Arbiter({
     now: () => performance.now(),
     schedule: (fn, ms) => { setTimeout(fn, ms); },
@@ -181,6 +183,10 @@ async function main(): Promise<void> {
       release: () => gazeLane?.end('completed', performance.now()),
     },
     overlay: { set: (p) => overlay?.set(p) },
+    interaction: {
+      start: (action) => interaction.startAction(action),
+      stop: (action) => interaction.stopAction(action),
+    },
     blink: {
       force: () => { const b = eyeBlinkOf(); if (b) b._nextBlinkingTime = b._userTimeSeconds; },
       setSleepy: (on) => eyeBlinkOf()?.setBlinkingSetting(0.1, on ? BLINK_CLOSED_SLEEPY_S : 0.05, 0.15),
@@ -211,6 +217,10 @@ async function main(): Promise<void> {
   // silently matches nothing. Same resolver the §5.7 overlay uses; the Framework is booted by
   // Live2DStage.create above.
   const idOf = (name: string): CubismIdHandle => CubismFramework.getIdManager().getId(name);
+  const interactionUpdater = new InteractionParameterUpdater(
+    interaction, stage.model.parameterIds(), idOf,
+  );
+  stage.model.addUpdater(interactionUpdater);
   poseUpdater = new PetPoseUpdater(
     { angleX: idOf('ParamAngleX'), angleZ: idOf('ParamAngleZ'), bodyAngleZ: idOf('ParamBodyAngleZ') },
     stage.model.getModelMatrix() as unknown as ConstructorParameters<typeof PetPoseUpdater>[1],
@@ -316,8 +326,16 @@ async function main(): Promise<void> {
     pick: (x, y) => picker.pick(x, y, stage.currentProjection()),
     hitPartDefault,
     isRejected: (target) => inDebugPanel(debugRoot, target),
-    onGrab: (g) => { arbiter.dragStart(performance.now()); bridge?.send(Channels.arbGrab, g); },
-    onRelease: (r) => { arbiter.dragEnd(performance.now()); bridge?.send(Channels.arbRelease, r); },
+    onGrab: (g) => {
+      interaction.beginGrab(g.part, g.modelX, g.modelY);
+      arbiter.dragStart(performance.now());
+      bridge?.send(Channels.arbGrab, g);
+    },
+    onRelease: (r) => {
+      interaction.release();
+      arbiter.dragEnd(performance.now());
+      bridge?.send(Channels.arbRelease, r);
+    },
     onDisagreement: (delta) => traceSend({ tsRenderer: performance.now(), kind: 'laneResult', lane: null, source: 'touch', generation: null, id: 'alphaDelta', result: null, value: delta }),
     onTap: (t) => {
       // §2.9: avatar:tap (Phase 1 hit-area) first, then arb:touch — both for one gesture.
@@ -407,13 +425,19 @@ async function main(): Promise<void> {
     arbiter.setMode(s.mode);
   });
   bridge?.on(Channels.simEvent, (ev) => arbiter.simEvent(ev.kind, performance.now()));
-  bridge?.on(Channels.simWindowMotion, (m) => dragVisual.onSnapshot(m));
+  bridge?.on(Channels.simWindowMotion, (m) => {
+    interaction.onWindowMotion(m);
+    dragVisual.onSnapshot(m);
+  });
   bridge?.on(Channels.simLanding, (l) => { if (dragVisual.onLanding(l)) sfx?.play('land', Math.min(1, l.impulse / 2400)); });
   bridge?.on(Channels.modeChanged, ({ mode }) => arbiter.setMode(mode));
 
   // Poses and mouth follow the turn (Phase 2, unchanged); the LLM lanes are the arbiter's now.
   // CX-10: one tracker owns the pose so a listening edge can restore the turn's base pose.
-  const pose = new PoseTracker((e) => stage.setEmotion(e));
+  const pose = new PoseTracker((e) => {
+    interaction.setEmotion(e);
+    stage.setEmotion(e);
+  });
   bridge?.on(Channels.brainState, ({ state }) => {
     fpsState.speaking = state !== 'idle';
     applyFps();

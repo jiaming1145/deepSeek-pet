@@ -66,7 +66,14 @@ export const HIT_AREA_ALIASES: Readonly<Record<string, HitPart>> = {
   face: 'face', 脸: 'face', 面: 'face',
   hair: 'hair', 头发: 'hair',
   body: 'body', 身体: 'body', 身: 'body', torso: 'body',
-  arm: 'arm', arml: 'arm', armr: 'arm', hand: 'arm', 手: 'arm', 手臂: 'arm', 胳膊: 'arm',
+  arm: 'arm', arml: 'arm', armr: 'arm', 手臂: 'arm', 胳膊: 'arm',
+  hand: 'hand', handl: 'hand', handr: 'hand', palm: 'hand', 手: 'hand', 手掌: 'hand',
+  leg: 'leg', legl: 'leg', legr: 'leg', thigh: 'leg', 腿: 'leg',
+  foot: 'foot', footl: 'foot', footr: 'foot', shoe: 'foot', shoel: 'foot', shoer: 'foot',
+  脚: 'foot', 鞋: 'foot',
+  tail: 'tail', whale: 'tail', 尾: 'tail', 尾巴: 'tail', 鲸尾: 'tail',
+  accessory: 'accessory', bonnet: 'accessory', bow: 'accessory', 饰品: 'accessory',
+  prop: 'prop', item: 'prop', food: 'prop', 道具: 'prop', 食物: 'prop',
   ticklish: 'ticklish', 痒: 'ticklish',
 };
 

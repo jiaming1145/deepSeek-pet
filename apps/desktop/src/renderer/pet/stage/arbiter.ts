@@ -1,4 +1,6 @@
-import type { Lane, LaneResult, LaneSource, LookAnchor, Payload, PersonaModeIpc, SimEventKind } from '@ds/protocol';
+import type {
+  InteractionAction, Lane, LaneResult, LaneSource, LookAnchor, Payload, PersonaModeIpc, SimEventKind,
+} from '@ds/protocol';
 import { LANE_TTL_MAX_MS } from '@ds/protocol';
 import { livelinessMap, type LivelinessMap } from '@ds/sim';
 import type { GazePattern, MotionRef, OverlayPreset } from '@ds/behaviors';
@@ -75,6 +77,8 @@ export interface BodyPayload {
   overlay: OverlayPreset;
   /** Set only for source 'behaviour': what `onBehaviourResult` reports back to the runner. */
   behaviourId: string | null;
+  /** Optional parameter-level action that composes with the model's authored motion. */
+  interaction: InteractionAction | null;
 }
 /** The arbiter's own lane payloads. Deliberately NOT named `ExpressionPayload` / `GazePayload`:
  *  Task 8 exports differently-shaped types under those names from the same `stage/` directory
@@ -85,6 +89,7 @@ export interface ArbGazePayload { id: string; target: GazeTarget; easeMs?: numbe
 
 export interface TouchReaction {
   motion: MotionRef; expression: { name: string; weight: number }; gaze: GazePattern; overlay: OverlayPreset;
+  interaction?: InteractionAction;
 }
 export interface LlmCommand {
   /** Expression name resolved by the caller from `emotionMap`, or null to clear. */
@@ -95,7 +100,7 @@ export interface LlmCommand {
 }
 export interface BehaviourCommand {
   id: string; motion: MotionRef | null; expression: string | null; expressionWeight: number;
-  gaze: GazePattern; overlay: OverlayPreset; durationMs: number;
+  gaze: GazePattern; overlay: OverlayPreset; durationMs: number; interaction?: InteractionAction | null;
 }
 export type BlinkState = 'follow' | 'rest' | 'sleepy' | 'sleep';
 export type ArbTraceRecord = Payload<'arb:trace'>;
@@ -112,6 +117,7 @@ export interface ArbiterPorts {
    *  released the eyes after 120 ms while the arbiter still believed it owned the lane. */
   gaze: { apply(target: GazeTarget, easeMs?: number, ttlMs?: number): void; release(): void };
   overlay: { set(preset: OverlayPreset): void };
+  interaction?: { start(action: InteractionAction): void; stop(action: InteractionAction): void };
   blink: { force(): void; setSleepy(on: boolean): void };
 }
 
@@ -268,7 +274,10 @@ export class Arbiter {
     try {
       this.committing += 1;
       try {
-        this.grant(this.body, 'behaviour', cmd.durationMs, { id: motionId, motion: cmd.motion, overlay: cmd.overlay, behaviourId: cmd.id }, now);
+        this.grant(this.body, 'behaviour', cmd.durationMs, {
+          id: motionId, motion: cmd.motion, overlay: cmd.overlay, behaviourId: cmd.id,
+          interaction: cmd.interaction ?? null,
+        }, now);
         this.grant(this.expression, 'behaviour', cmd.durationMs, { id: cmd.expression ?? '', name: cmd.expression, weight: cmd.expressionWeight, utteranceEndAt: null }, now);
         this.applyExpression(now);
         this.grant(this.gaze, 'behaviour', cmd.durationMs, { id: cmd.gaze, target: { kind: 'pattern', pattern: cmd.gaze } }, now);
@@ -301,7 +310,9 @@ export class Arbiter {
     this.applyExpression(now);
     // Body: drag is untouchable; llm swaps at the boundary; behaviour/idle/sim/touch swap now.
     const body = this.body.current;
-    const payload: BodyPayload = { id, motion: r.motion, overlay: r.overlay, behaviourId: null };
+    const payload: BodyPayload = {
+      id, motion: r.motion, overlay: r.overlay, behaviourId: null, interaction: r.interaction ?? null,
+    };
     if (body?.source === 'drag') return;
     if (body?.source === 'llm') {
       const boundary = Math.max(now, body.issuedAt + MOTION_MIN_PLAY_MS);
@@ -359,7 +370,9 @@ export class Arbiter {
     if (body?.source === 'touch' || body?.source === 'drag' || this.pendingTouchBody) { this.refuse('body', 'llm', motionId); return; }
     if (now - this.lastLlmMotionAt < MOTION_GROUP_COOLDOWN_MS) { this.refuse('body', 'llm', motionId); return; }
     this.lastLlmMotionAt = now;
-    this.grant(this.body, 'llm', LLM_BODY_MS, { id: motionId, motion: cmd.motion, overlay: 'none', behaviourId: null }, now);
+    this.grant(this.body, 'llm', LLM_BODY_MS, {
+      id: motionId, motion: cmd.motion, overlay: 'none', behaviourId: null, interaction: null,
+    }, now);
   }
 
   /** The utterance ended: starts R3-4's hold clock on the live (or covered) LLM lease. */
@@ -372,7 +385,9 @@ export class Arbiter {
   dragStart(now: number): void {
     if (this.body.current?.source === 'drag') return;
     this.pendingTouchBody = null;
-    this.grant(this.body, 'drag', LANE_TTL_MAX_MS, { id: 'drag', motion: null, overlay: 'none', behaviourId: null }, now);
+    this.grant(this.body, 'drag', LANE_TTL_MAX_MS, {
+      id: 'drag', motion: null, overlay: 'none', behaviourId: null, interaction: null,
+    }, now);
   }
   dragEnd(now: number): void {
     if (this.body.current?.source === 'drag') this.body.end('completed', now);
@@ -468,7 +483,9 @@ export class Arbiter {
   private simBody(motion: MotionRef, ttl: number, now: number): void {
     const id = `${motion[0]}_${motion[1]}`;
     if (!this.mayTakeLane(this.body, 'sim') || this.pendingTouchBody) { this.refuse('body', 'sim', id); return; }
-    this.grant(this.body, 'sim', ttl, { id, motion, overlay: 'none', behaviourId: null }, now);
+    this.grant(this.body, 'sim', ttl, {
+      id, motion, overlay: 'none', behaviourId: null, interaction: null,
+    }, now);
   }
   /** §5.10's "release at t+1500": every lane the return sequence still owns lets go. */
   private releaseSim(now: number): void {
@@ -491,6 +508,7 @@ export class Arbiter {
     if (holder === (this.body as unknown as LaneHolder<P>)) {
       const p = payload as unknown as BodyPayload;
       this.applyOverlay(p.overlay);
+      if (p.interaction) this.ports.interaction?.start(p.interaction);
       if (p.motion) {
         const gen = lease.generation;
         this.ports.motion.startMotionForced(p.motion[0], p.motion[1], fadeFor(source), () => {
@@ -518,7 +536,9 @@ export class Arbiter {
     // runner kept `currentId`, emitted no `behaviourEnd` and refused to select again until
     // `nextDecisionAt`. Only the gaze release and the overlay clear belong under the guard.
     if (holder === (this.body as unknown as LaneHolder<P>)) {
-      const id = (lease.payload as unknown as BodyPayload).behaviourId;
+      const bodyPayload = lease.payload as unknown as BodyPayload;
+      if (bodyPayload.interaction) this.ports.interaction?.stop(bodyPayload.interaction);
+      const id = bodyPayload.behaviourId;
       if (id) this.notifyBehaviourEnd(id, result);
     }
     if (this.granting > 0) return;   // an incoming lease on the same lane is about to set its own state

@@ -44,6 +44,12 @@ describe('per-part reaction table (§5.11)', () => {
     expect(touchReaction('hair', 1)).toEqual({ motion: ['TapBody', 3], expression: { name: 'F01', weight: 0.45 }, gaze: 'cursorLock', overlay: 'headTiltHold' });
     expect(touchReaction('body', 1)).toEqual({ motion: ['TapBody', 2], expression: { name: 'F01', weight: 0.40 }, gaze: 'follow', overlay: 'none' });
     expect(touchReaction('arm', 1)).toEqual({ motion: ['TapBody', 3], expression: { name: 'F06', weight: 0.40 }, gaze: 'cursorLock', overlay: 'leanRight' });
+    expect(touchReaction('tail', 1)).toEqual({ motion: ['TapBody', 1], expression: { name: 'F06', weight: 0.58 }, gaze: 'cursorLock', overlay: 'leanRight', interaction: 'tail_react' });
+    expect(touchReaction('hand', 1).expression.weight).toBe(0.50);
+    expect(touchReaction('leg', 1).gaze).toBe('down');
+    expect(touchReaction('foot', 1).overlay).toBe('leanLeft');
+    expect(touchReaction('accessory', 1).overlay).toBe('headTiltHold');
+    expect(touchReaction('prop', 1).interaction).toBe('inspect');
     expect(touchReaction('ticklish', 1)).toEqual({ motion: ['TapBody', 0], expression: { name: 'F02', weight: 0.65 }, gaze: 'away', overlay: 'leanLeft' });
     expect(ANNOYED_REACTION).toEqual({ motion: ['TapBody', 1], expression: { name: 'F03', weight: 0.70 }, gaze: 'away', overlay: 'headTilt' });
   });

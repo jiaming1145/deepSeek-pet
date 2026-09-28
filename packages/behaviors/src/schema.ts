@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClockPhaseSchema, PresentationModeSchema } from '@ds/protocol';
+import { ClockPhaseSchema, InteractionActionSchema, PresentationModeSchema } from '@ds/protocol';
 import { ConditionSchema } from './conditions.ts';
 
 /** A motion reference into the model3.json groups. Validated against the live catalogue in bind(). */
@@ -58,6 +58,8 @@ export const BehaviorSchema = z.object({
   overlay: OverlayPresetSchema.default('none'),
   /** null = never asks to move. Only drawn when the liveliness locomotion roll passes (§3.4). */
   locomotion: LocomotionSchema.nullable().default(null),
+  /** Optional semantic action for the procedural full-body rig (e.g. eat, wave, inspect). */
+  interaction: InteractionActionSchema.nullable().default(null),
   /** Free tags. `big` is the only one the engine reads (the liveliness weight multiplier). */
   tags: z.array(z.enum(['big', 'quiet', 'sleepy', 'social'])).default([]),
   /** Declarative gate. Absent = always eligible. */

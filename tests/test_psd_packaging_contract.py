@@ -174,10 +174,10 @@ def test_run_manifest_registry_is_unique_and_hash_valid() -> None:
     assert run["state"] == "psd_validated"
     assert run["active_stage"] == "05_cubism"
     assert run["current_cubism_handoff"].endswith(
-        "05_cubism/revisions/v005/handoff_index.json"
+        "05_cubism/revisions/v008/handoff_index.json"
     )
     assert run["next_allowed_transition"] == "cubism_ready"
     assert run["blocked"]["recoverable"] is True
     assert run["blocked"]["evidence"].endswith(
-        "05_cubism/revisions/v005/rigging_checklist.json"
+        "05_cubism/revisions/v008/rigging_checklist.json"
     )

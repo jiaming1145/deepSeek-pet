@@ -12,7 +12,8 @@ const facts: ConditionFacts = {
 function selection(id: string, now: number): Selection {
   return {
     behavior: { id, weight: 1, minMs: 5000, maxMs: 8000, cooldownMs: 0, minLiveliness: 0, motion: ['Idle', 0], expression: null,
-      expressionWeight: 0.55, gaze: 'follow', overlay: 'none', locomotion: null, tags: [] } as Selection['behavior'],
+      expressionWeight: 0.55, gaze: 'follow', overlay: 'none', locomotion: null, interaction: null,
+      tags: [] } as Selection['behavior'],
     durationMs: 6000, nextDecisionAt: now + 14_000, trace: { eligible: [id, 'other'], weights: [1, 1], seed: 42 },
   };
 }
@@ -164,7 +165,7 @@ describe('BehaviourRunner + the REAL Arbiter (fix round 2, finding 1)', () => {
     return {
       behavior: { id, weight: 1, minMs: 20_000, maxMs: 20_000, cooldownMs: 0, minLiveliness: 0,
         motion: ['Idle', index], expression: `E_${id}`, expressionWeight: 0.55, gaze: 'follow',
-        overlay: 'none', locomotion: null, tags: [] } as Selection['behavior'],
+        overlay: 'none', locomotion: null, interaction: null, tags: [] } as Selection['behavior'],
       durationMs: 20_000, nextDecisionAt: now + 14_000, trace: { eligible: [id], weights: [1], seed: 1 },
     };
   }

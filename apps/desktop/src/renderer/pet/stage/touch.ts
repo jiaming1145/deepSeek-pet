@@ -33,6 +33,12 @@ export const TOUCH_REACTIONS: Record<HitPart, TouchReaction> = {
   hair:     { motion: ['TapBody', 3], expression: { name: 'F01', weight: 0.45 }, gaze: 'cursorLock', overlay: 'headTiltHold' },
   body:     { motion: ['TapBody', 2], expression: { name: 'F01', weight: 0.40 }, gaze: 'follow',     overlay: 'none' },
   arm:      { motion: ['TapBody', 3], expression: { name: 'F06', weight: 0.40 }, gaze: 'cursorLock', overlay: 'leanRight' },
+  hand:     { motion: ['TapBody', 3], expression: { name: 'F01', weight: 0.50 }, gaze: 'cursorLock', overlay: 'headTilt' },
+  leg:      { motion: ['TapBody', 2], expression: { name: 'F07', weight: 0.48 }, gaze: 'down',       overlay: 'leanRight' },
+  foot:     { motion: ['TapBody', 1], expression: { name: 'F07', weight: 0.52 }, gaze: 'down',       overlay: 'leanLeft' },
+  tail:     { motion: ['TapBody', 1], expression: { name: 'F06', weight: 0.58 }, gaze: 'cursorLock', overlay: 'leanRight', interaction: 'tail_react' },
+  accessory:{ motion: ['TapBody', 3], expression: { name: 'F01', weight: 0.44 }, gaze: 'cursorLock', overlay: 'headTiltHold' },
+  prop:     { motion: ['TapBody', 3], expression: { name: 'F01', weight: 0.42 }, gaze: 'down',       overlay: 'none', interaction: 'inspect' },
   ticklish: { motion: ['TapBody', 0], expression: { name: 'F02', weight: 0.65 }, gaze: 'away',       overlay: 'leanLeft' },
 };
 /** The burst reaction: F03 at 0.70, NOT scaled (R3-13's caps stay hard). */

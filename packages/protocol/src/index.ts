@@ -137,10 +137,29 @@ export const LANE_RESULTS = ['completed', 'expired', 'preempted', 'cancelled', '
 export type LaneResult = (typeof LANE_RESULTS)[number];
 export const LaneResultSchema = z.enum(LANE_RESULTS);
 
-/** The semantic touch parts (D6: head / face / body / one ticklish zone). */
-export const HIT_PARTS = ['head', 'face', 'hair', 'body', 'arm', 'ticklish'] as const;
+/**
+ * Semantic interaction regions. The original six remain stable; the additional regions let a
+ * full-body character distinguish a tail pull, hand hold, foot/leg touch, accessory adjustment,
+ * and an equipped prop without guessing from screen coordinates.
+ */
+export const HIT_PARTS = [
+  'head', 'face', 'hair', 'body', 'arm', 'hand', 'leg', 'foot', 'tail', 'accessory', 'prop',
+  'ticklish',
+] as const;
 export type HitPart = (typeof HIT_PARTS)[number];
 export const HitPartSchema = z.enum(HIT_PARTS);
+
+/**
+ * High-level actions understood by the procedural interaction rig. These are deliberately
+ * semantic rather than animation filenames: a character bundle may realize `eat` with different
+ * clips and parameters while the behavior/AI contract remains stable.
+ */
+export const INTERACTION_ACTIONS = [
+  'idle', 'walk', 'hop', 'eat', 'drink', 'wave', 'stretch', 'sit', 'sleep', 'wake', 'inspect',
+  'celebrate', 'stumble', 'recover', 'tail_react',
+] as const;
+export type InteractionAction = (typeof INTERACTION_ACTIONS)[number];
+export const InteractionActionSchema = z.enum(INTERACTION_ACTIONS);
 
 /** Conversation mode (R3-12). Product state in kv, never model behaviour. */
 export const PERSONA_MODES_IPC = ['character', 'plain'] as const;

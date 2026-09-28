@@ -33,6 +33,10 @@ function harness(opts: { valence?: number } = {}) {
       release: () => { calls.push('gaze:release'); },
     },
     overlay: { set: (p) => { calls.push(`overlay:${p}`); } },
+    interaction: {
+      start: (action) => { calls.push(`interaction:start:${action}`); },
+      stop: (action) => { calls.push(`interaction:stop:${action}`); },
+    },
     blink: { force: () => { calls.push('blink:force'); }, setSleepy: (on) => { calls.push(`sleepy:${on}`); } },
   };
   const arb = new Arbiter(ports, { valence: opts.valence ?? 0 });
@@ -69,6 +73,17 @@ describe('fadeFor — MOTION_FADE_* by source (§5.5)', () => {
 });
 
 describe('Arbiter — interruption matrix (§5.1)', () => {
+  it('starts and stops a parameter-level interaction with its body lease', () => {
+    const h = harness();
+    expect(h.arb.behaviour({
+      id: 'eat_snack', motion: null, expression: null, expressionWeight: 0.55,
+      gaze: 'down', overlay: 'none', durationMs: 400, interaction: 'eat',
+    }, 0)).toBe(true);
+    expect(h.calls).toContain('interaction:start:eat');
+    h.advance(400);
+    expect(h.calls).toContain('interaction:stop:eat');
+  });
+
   it('drag pre-empts anything on the body lane immediately', () => {
     const h = harness();
     h.behaviour();

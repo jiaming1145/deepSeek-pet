@@ -62,7 +62,7 @@ export class BehaviourRunner {
     const b = sel.behavior;
     const granted = this.deps.arbiter.behaviour({
       id: b.id, motion: b.motion, expression: b.expression, expressionWeight: b.expressionWeight,
-      gaze: b.gaze, overlay: b.overlay, durationMs: sel.durationMs,
+      gaze: b.gaze, overlay: b.overlay, durationMs: sel.durationMs, interaction: b.interaction,
     }, now);
     if (!granted) return;                                                // §5.1: refused under llm/touch
     this.currentId = b.id;

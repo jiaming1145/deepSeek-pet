@@ -9,3 +9,6 @@ export * from './stage';
 export * from './overlay';
 export * from './picker';
 export * from './picker-gpu';
+export * from './interaction-rig';
+export * from './interaction-updater';
+export * from './facial-expression';
