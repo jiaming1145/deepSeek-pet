@@ -45,6 +45,10 @@ Needs [Node 24+](https://nodejs.org/) and [pnpm 10](https://pnpm.io/installation
 Windows 10/11 is where she is developed and verified; she is Electron and three.js, so macOS and Linux should
 work but are untested (reports welcome).
 
+**On a Mac**, start her with `pnpm pet:mac` instead of `pnpm pet`. It runs the same pet and adds what macOS
+needs: no Dock icon (she lives in the menu-bar tray icon), Cmd+C / Cmd+V / Cmd+A / Cmd+Z in the chat box, and
+she stays with you on every Space and over full-screen apps. It has not been verified on a real Mac yet.
+
 | You | Her |
 |---|---|
 | Hover | She looks at the cursor, and turns around if you stay behind her |

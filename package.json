@@ -10,6 +10,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
     "pet": "pnpm --filter @ds/desktop exec electron ../../spikes/side_rig/main.js --pet",
+    "pet:mac": "pnpm --filter @ds/desktop exec electron ../../spikes/side_rig/mac.js --pet",
     "pet:test": "node spikes/side_rig/mind.test.mjs && node spikes/side_rig/voice.test.mjs && node spikes/side_rig/perform.test.mjs && node spikes/side_rig/brain.test.cjs",
     "fetch-sdk": "node scripts/fetch-sdk.mjs",
     "test": "vitest run",

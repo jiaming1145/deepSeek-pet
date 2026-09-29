@@ -41,6 +41,10 @@ pnpm pet
 需要 [Node 24+](https://nodejs.org/) 和 [pnpm 10](https://pnpm.io/installation)（`npm i -g pnpm@10`）。
 她在 Windows 10/11 上开发和验证；底层是 Electron 和 three.js，macOS 和 Linux 理论上可以跑，但没测过（欢迎反馈）。
 
+**在 Mac 上**，用 `pnpm pet:mac` 代替 `pnpm pet` 启动。还是同一个她，只是补上了 macOS 需要的东西：不占程序坞图标
+（她住在菜单栏的托盘图标里），聊天框里可以用 Cmd+C / Cmd+V / Cmd+A / Cmd+Z，并且她会跟着你出现在每个桌面空间和全屏
+应用之上。还没有在真正的 Mac 上验证过。
+
 | 你 | 她 |
 |---|---|
 | 悬停 | 看向光标；你绕到背后，她会转过身 |
